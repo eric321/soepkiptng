@@ -196,6 +196,10 @@ EOF
 sub table_entry($$;$$$$) {
 	my ($req, $q, $col1, $title_href, $ids, $extra) = @_;
 
+	my $furl = $q->{filename};
+	$furl =~ s|.*/||;
+	$furl = $req->{self} . "/" . encurl($furl);
+	$furl =~ s|//+|/|g;
 	return sprintf <<EOF,
  <tr>
   <td %s>&nbsp;%s&nbsp;</td>
@@ -205,7 +209,7 @@ sub table_entry($$;$$$$) {
   <td %s>&nbsp;%s%s%s&nbsp;</td>
   <td %s>&nbsp;%s&nbsp;</td>
   <td %s>&nbsp;%s&nbsp;</td>
-  <td %s> %s %s</td>
+  <td %s> %s %s %s</td>
   %s
  </tr>
 EOF
@@ -229,6 +233,9 @@ EOF
 EOF
 		$ids? sprintf(<<EOF, $req->{self}, $q->{id}, $ids, $conf{edit_target} || 'bframe') : "",
 <a id=a href="%s?cmd=lyrics&id=%d&ids=%s" title="Edit" target=%s>L</a>
+EOF
+		$ids? sprintf(<<EOF, $furl, $q->{id}) : "",
+<a id=a href="%s?cmd=download&id=%d" title="Download">D</a>
 EOF
 		$extra;
 }
@@ -280,7 +287,8 @@ sub print_playlist_table($) {
 
 	my $query =  "SELECT title,artist.name as artist,album.name as album," .
 		"song.id as id, track, length, encoding, queue.user as user," .
-		"song.artist_id as arid, song.album_id as alid, left(filename,1) as f" .
+		"song.artist_id as arid, song.album_id as alid, filename," .
+		"left(filename,1) as f" .
 		" FROM song,queue,artist,album WHERE present" .
 		" AND song.artist_id=artist.id AND song.album_id=album.id" .
 		" AND song.id = queue.song_id ORDER BY queue.song_order";
@@ -533,9 +541,11 @@ EOF
 
 	print "<table border=0 cellspacing=0>\n";
 
+	my $ids;
 	if(@ids) {
-		$addall = sprintf <<EOF, ids_encode(@ids);
-<a id=a href="$req->{self}?cmd=add&ids=%s" target=tframe>$conf{addalltext}</a>
+		$ids = ids_encode(@ids);
+		$addall = <<EOF;
+<a id=a href="$req->{self}?cmd=add&ids=$ids" target=tframe>$conf{addalltext}</a>
 EOF
 	}
 
@@ -568,6 +578,14 @@ EOF
  <tr><td colspan=7></td></tr>
 $output
 <tr><td colspan=7>$res search results$limitstr, total time: $totaltime</td></tr>
+EOF
+	(my $f = $caption) =~ s/^\w+:\s*//;
+	$f =~ s~(/|\\|:|;)+~_~g;
+	($f = "$req->{self}/$f.zip") =~ s|//+|/|g;
+	print <<EOF if $ids;
+<tr><td colspan=7><a href="$f?cmd=downloadset&ids=$ids">download all as .zip</a></td></tr>
+EOF
+	print <<EOF;
 </table>
 EOF
 }
@@ -1564,7 +1582,7 @@ EOF
 		printhtmlhdr;
 		printhdr($conf{allstyle});
 		my $qs = "SELECT artist.name as artist,album.name as album,song.*," .
-			 "song.artist_id as arid, song.album_id as alid";
+			 "song.artist_id as arid, song.album_id as alid, filename";
 		my $qf = "FROM song,artist,album";
 		my $qw = "WHERE present";
 		my @qargs;
@@ -1688,7 +1706,7 @@ EOF
 			} else {
 				print_alllist_table($req, \%session, "User SQL-query",
 					"SELECT artist.name as artist,album.name as album,song.*," .
-					"song.artist_id as arid, song.album_id as alid " .
+					"song.artist_id as arid, song.album_id as alid, filename " .
 					"FROM song " .
 					"LEFT JOIN artist ON artist.id=song.artist_id " .
 					"LEFT JOIN album ON album.id=song.album_id " .
@@ -1709,7 +1727,7 @@ EOF
 		print_alllist_table($req, \%session,
 			"Most recent $n songs" . ($args{np}? " (never played yet)":""),
 			"SELECT artist.name as artist,album.name as album,song.*," .
-			"song.artist_id as arid, song.album_id as alid" .
+			"song.artist_id as arid, song.album_id as alid, filename" .
 			" FROM song,artist,album WHERE present AND filename LIKE '/%'" .
 			" AND song.artist_id=artist.id AND song.album_id=album.id" .
 			" AND unix_timestamp(now()) - unix_timestamp(time_added) < $maxage" .
@@ -1765,6 +1783,25 @@ EOF
 
 		open F, $file or die "$file: $!\n";
 		print $req->{cgiquery}->header(-type=>'application/octet-stream', -Content_length=>(-s F));
+		while(read F, $_, 4096) { print; }
+		close F;
+	}
+	elsif($cmd eq 'downloadset') {
+		my @ids = ids_decode($args{ids});
+		my @filenames;
+		local *F;
+
+		foreach(@ids) {
+			my ($file) = $req->{dbh}->selectrow_array("SELECT filename FROM song WHERE id=$_")
+				or die "id $id not found in database\n";
+			push @filenames, $file;
+		}
+		print $req->{cgiquery}->header(-type=>'application/octet-stream');
+		if(open(F, "-|") == 0) {
+			setpriority 0, 0, 10;
+			exec "zip", "-j", "-", @filenames;
+			die "zip - " . join(" ", @filenames);
+		}
 		while(read F, $_, 4096) { print; }
 		close F;
 	}
