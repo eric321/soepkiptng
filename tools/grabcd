@@ -1,0 +1,373 @@
+#!/usr/bin/perl
+# $Id$
+
+use Getopt::Std;
+require 'syscall.ph';
+require '/usr/local/bin/latin.pl';
+use integer;
+use Cwd;
+use POSIX qw(strftime);
+
+sub df($);
+sub simplify($);
+sub delsymlinks();
+
+$| = 1;
+
+getopts('d:hnsweoWXYZ');
+$dev = $opt_d || "/dev/cdrom";
+$fake = $opt_n;
+$waitdf = $opt_w;
+$eject = !$opt_e;
+$omitalbum = $opt_o;
+$W = "-W" if $opt_W;
+$X = "-X" if $opt_X;
+$Y = "-Y" if $opt_Y;
+$Z = "-Z" if $opt_Z;
+
+$output = "-w";
+$output_ext = "wav";
+$cdparanoia = "cdparanoia";
+
+$opt_h and die <<'EOF';
+Usage: mwgrab [-nqsw] [-d dev] file
+
+	-d	: use 'dev' instead of /dev/cdrom
+	-n	: only write albums info
+	-w	: wait for enough disk space
+	-e	: do not eject disc afterwards
+	-o	: do not write album info
+
+1st line:    artist[-title]
+other lines: songtitle
+             :artist
+             -tracknr
+             +offset
+             $temp.extension
+             'year
+             /filename        (implies -o)
+             >dirname
+             ~cddb-id
+
+You can use comments after a #.
+Enter a literal # with ##.
+EOF
+
+($range_min, $range_max) = (0, 100);
+if(@ARGV) {
+	if($ARGV[1] =~ /-/) {
+		($range_min, $range_max) = split "-", $ARGV[1];
+		$range_min = 1 unless $range_min;
+		$range_max = 100 unless $range_max;
+	} elsif(@ARGV[1]) {
+		$range_min = $range_max = $ARGV[1];
+	}
+
+	if($ARGV[0] eq "-") {
+		open F, "<&STDIN" or die "stdin: $!\n";
+	} else {
+		open F,$ARGV[0] or die "$ARGV[0]: $!\n";
+	}
+} else {
+	$id = `cd-discid $dev 2>/dev/null`;
+	$id =~ s/^\s*(\w+).*/\1/s;
+	if($id) {
+		if(! -s "$ENV{'HOME'}/.grabids/$id") {
+			open F, ">$ENV{'HOME'}/.grabids/$id"
+				or die "$ENV{'HOME'}/.grabids/$id: $!\n";
+
+			use FreeDB::FreeDB;
+			use Cwd;
+			
+			my $cddb = new FreeDB;
+			$cddb->cdrom_device($dev);
+			my $success = 0;
+			
+			if($cddb->fetch) {
+				printf F "%s-%s\n", $cddb->artist, $cddb->title or die;
+				printf F "~%s\n", $cddb->discid or die;
+
+				while ($cddb->next_track) {
+					print F $cddb->current_track_info . "\n" or die;
+				}
+				close F or die;
+			} else {
+				warn "no info found for cddbid $id\n";
+				select undef, undef, undef, 0.5;
+			}
+		}
+
+		system $ENV{'EDITOR'} || 'joe', "$ENV{'HOME'}/.grabids/$id";
+
+		open F, "$ENV{'HOME'}/.grabids/$id"
+			or die "$ENV{'HOME'}/.grabids/$id: $!\n";
+	} else {
+		die "no cddbid found on disc\n";
+	}
+}
+
+$nr = 1;
+
+while(<F>) {
+	chomp;
+	s/^\s+//;
+	s/(^|[^#])#([^#].*|$)/\1/;
+	s/##/#/g;
+	s/\s+$//;
+	$_ or next;
+	/^\/([-\w+]+)\s*$/ and do {
+		$file{$nr++} = $1;
+		$omitalbum = 1;
+		next;
+	};
+	/^-(\d+)$/ and do {
+		$nr = $1;
+		next;
+	};
+	/^>(.*)/ and do {
+		$dirname = $1;
+		next;
+	};
+	/^\$(.*)/ and do {
+		$ext = "-$1";
+		($lext = $ext) =~ s/./-/g;
+		($sext = $ext) =~ s/./ /g;
+		next;
+	};
+	/^\+([-\d]\d*)$/ and do {
+		$offset = $1;
+		next;
+	};
+	s/^:// || $. == 1 and do {
+#		s/(^|\s|\(|-|")(.)/\1\U\2/g;
+		($artist = $_) =~ s/\s*-\s*(.*)//  and
+			($title, $origtitle) = simplify($1);
+		($artist, $origartist) = simplify($artist);
+		$origartist{$nr} = $origartist if $origartist =~ /[^a-z0-9 ]/i;
+		$origcdartist = $origartist unless $origcdartist;
+		if(!$dirname) {
+			$dirname = $artist;
+			$dirname .= "-$title" if $title;
+		}
+		next;
+	};
+	s/^'// and do {
+		$year = $_;
+		next;
+	};
+	s/^~// and do {
+		$cddbid = $_;
+		next;
+	};
+	if($nr >= $range_min && $nr <= $range_max) {
+		$orig = /[^\s\w]/;
+		($_, $origname{$nr}) = simplify($_);
+		$origname{$nr} = "\t\t$origname{$nr}";
+		while(3 + length($artist) + 1 + length($_) + 4 > 62) {
+			s/_*[a-z0-9]_*(-|$)/_\1/;
+			$orig = 1;
+		}
+		undef $origname{$nr} unless $orig;
+		$file{$nr} = sprintf "%02d-$artist-$_", $nr + $offset;
+		$ext{$nr} = $ext;
+	}
+	$nr++;
+}
+
+$nr > 1 or die "no tracks to grab\n";
+
+if($cddbid) {
+	$id = `cd-discid $dev 2>/dev/null`;
+	$id =~ s/^\s*(\w+).*/\1/s;
+	if($id =~ /(\d+)/) {
+		$id == $cddbid or die "CDDB-ID doesn't match! (file: $cddbid; disc: $id)\n";
+	}	
+}
+
+if(!$fake) {
+	open CD,"$cdparanoia -Q -d $dev 2>&1 |" or die;
+	while (<CD>) {
+		/^\s*(\d+)\.\s+(\d+)/ or next;
+		$len{$1} = $2 / 75;
+		$cd = 1 if $2;
+		$last = $1;
+	}
+	close CD;
+}
+
+@nrs = sort { $a <=> $b } keys %file;
+
+printf <<EOF,$last;
++----------------------------------------------------------------------------------$lext+
+| Recording list: (total tracks on cd: %2d)                                         $sext|
++----+-----+-------+---------------------------------------------------------------$lext+
+EOF
+foreach(@nrs) {
+	printf "| %2d |%3dMb| %2d:%02d | %-62s$sext|\n",
+		$_, ($len{$_} * 176400 + 1048575) / 1048576,
+		$len{$_} / 60, $len{$_} % 60,
+		"$file{$_}$ext{$_}.$output_ext";
+	$totlen += $len{$_};
+}
+printf <<EOF, ($totlen * 176400 + 1048575) / 1048576, $totlen / 60, $totlen % 60, $last; 
++----+-----+-------+---------------------------------------------------------------$lext+
+|    |%3dMb|%3d:%02d | [%2d] [dev=$dev]
++----+-----+-------+
+EOF
+
+if(!$omitalbum) {
+	if(open ALBUMS,"/home/eric/albums/albums") {
+		while(<ALBUMS>) {
+			/^track\s+(\S+)\.mp3/ or next;
+			$track{$1} = 1;
+		}
+		close ALBUMS;
+	}
+
+	foreach(@nrs) {
+		print "Warning: $file{$_}.mp3 already in albums database\n" if $track{$file{$_}};
+	}
+}
+
+$df_req = $totlen * 176400 / 1024 + 30720;  # 30M marge
+printf "\nApprox. %8d kbytes required\n", $df_req;
+
+$df = df(".");
+printf "        %8d kbytes available\n",$df;
+printf "\n!!! FREE %d KBYTES DISK SPACE !!!\n", $df_req - $df if $df < $df_req;
+
+print "\n*** NOT GRABBING ALL TRACKS!! ***\n\n"
+	if $nrs[$#nrs] != $last && $range_min == 0 && $range_max == 100;
+	
+
+if($waitdf && $df < $df_req) {
+	print "Waiting for $df_req Kb disk space";
+	do {
+		sleep 300;
+		$newdf = df(".");
+		printf "\n%8d kbytes available", $newdf if $newdf > $df;
+		$df = $newdf;
+		print ".";
+	} while $df < $df_req;
+	print "\n";
+}
+
+if(!$fake) {
+	$cd or die "No CD in drive!\n";
+
+	for($i = 5; $i; $i--) {
+		print "Starting in $i seconds...\r";
+		sleep 1;
+	}
+}
+
+if(!$omitalbum) {
+	my $f = "/home/eric/albums/albums.new";
+	open ALBUMS,">>$f" or die "$f: $!\n";
+	printf ALBUMS <<EOF,
+
+artist %s
+title %s
+year %s
+dirname %s
+dirsize ?
+ripdate
+EOF
+		$origcdartist, $origtitle, $year, $dirname,
+		strftime("%Y-%m-%d", localtime)
+			or die "$f: $!\n";
+	foreach(@nrs) {
+		if($origartist{$_}) { print ALBUMS "## $origartist{$_}\n"; }
+		print ALBUMS "track $file{$_}.mp3$origname{$_}\n" or die "$f: $!\n";
+	}
+	close ALBUMS or die "$f: $!\n";
+}
+
+if($fake) { exit; }
+
+#if((stat $dev)[6] >> 8 == 11) {
+#	print "Removing sg module...";
+#	system qw/sudo modprobe -r sg/;
+#	print " inserting sg module...";
+#	system qw/sudo modprobe sg/;
+#	print " done\n";
+#}
+
+if(open TL, ">>/home/eric/albums/tracklengths") {
+	foreach(@nrs) {
+		printf TL "%6d $file{$_}\n", $len{$_};
+	}
+	close TL;
+}
+
+if(open RN, ">>/home/eric/mp3/.renamemp3s") {
+	print RN join(" ", $dirname, map { "$file{$_}$ext{$_}.mp3" } @nrs) . "\n";
+	close RN;
+}
+
+$dirname or die "no dirname?!?\n";
+$realdir = cwd . "/$dirname";
+mkdir $realdir, 0777;
+-d $realdir or die "$realdir: $!\n";
+
+-d "/tmp/cdparanoia.$$"
+	or mkdir "/tmp/cdparanoia.$$", 0777
+	or die "mkdir /tmp/cdparanoia.$$: $!\n";
+chdir "/tmp/cdparanoia.$$"
+	or die "chdir /tmp/cdparanoia.$$: $!\n";
+delsymlinks;
+foreach(@nrs) {
+	symlink "$realdir/$file{$_}$ext{$_}.$output_ext", sprintf("track%02d.cdparanoia.$output_ext", $_) or die;
+}
+$cmd = "$cdparanoia $W $X $Y $Z -v $output -d $dev -B $nrs[0]-$nrs[$#nrs] cdparanoia.$output_ext";
+print "$cmd\n";
+system $cmd;
+$eject = 0 if $?;
+delsymlinks();
+chdir "/";
+rmdir "/tmp/cdparanoia.$$";
+
+system 'eject', $dev if $eject;
+
+
+##############################################################################################
+
+
+
+sub df($) {
+        my $struct_statfs = "x" x 100;  # reserve space for return value of system call
+	my ($dir) = @_;
+
+        if(syscall(&SYS_statfs, $dir, $struct_statfs) < 0) { return undef; }
+        my ($dummy, $bsize, $dummy, $dummy, $bfree) = unpack('lllll', $struct_statfs);
+	return int($bfree / 1024 * $bsize);
+}
+
+sub simplify($) {
+	my ($s) = @_;
+	my $c = $s;
+
+	$s =~ s/([\200-\377])/$latin1toascii{ord($1)}/eg;
+	$s =~ s/<[^>]*(>|$)//g;
+	$s =~ s/[^\w(]+$//;
+	$s =~ s/^\W+//;
+	$s =~ s/\s+&\s+/ and /g;
+	$s =~ s/-/_/g;
+	$s =~ s/\W*\([_\W]*/-/g;
+	$s =~ s/\s*(:|\/)\s*/__/g;
+	$s =~ s/[^-\w]+/_/g;
+
+	$c =~ s|\S.*//||;
+	$c =~ s|[<>]||g;
+	$c =~ s/(^|\s|\(|"|-)(\w)/\1\U\2/g;
+
+	(lc($s), $c);
+}
+
+sub delsymlinks() {
+	opendir DIR, "." or die;
+	foreach(readdir DIR) {
+		unlink $_ if /^track\d\d.cdparanoia.$output_ext$/;
+	}
+	closedir DIR;
+}
