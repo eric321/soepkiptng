@@ -80,6 +80,7 @@ sub do_dir($$) {
 	my $newname = "";
 	$newname .= string_to_filename($artist) . "-" if $artist;
 	$newname .= string_to_filename($album);
+	$newname =~ s/--+/-/;
 	$f =~ m|^(.*)/|;
 	$newname = "$1/$newname";
 
@@ -168,6 +169,7 @@ sub do_file($$) {
 		$newname .= sprintf "%02d-", $tr if $tr;
 		$newname .= string_to_filename($ar) . "-" if $ar;
 		$newname .= string_to_filename($ti);
+		$newname =~ s/--+/-/;
 		if($opt_l && length("$newname.$ext") > $opt_l) {
 			$newname = substr($newname, 0, $opt_l - length(".$ext") - 1);
 			$newname =~ s/_?$/_/;
