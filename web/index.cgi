@@ -459,9 +459,9 @@ elsif($cmd eq 'songlist') {
 	printhdr($slstyle);
 	print "<base target=playlist>\n";
 	if($args{'a'} || $args{'s'} || $args{'t'}) {
-		$args{'a'} =~ s/[^-^ _0-9a-z]+/.*/ig;
-		$args{'s'} =~ s/[^-^ _0-9a-z]+/.*/ig;
-		$args{'t'} =~ s/[^-^ _0-9a-z]+/.*/ig;
+		$args{'a'} =~ s/[^-^\$ _0-9a-z]+/.*/ig;
+		$args{'s'} =~ s/[^-^\$ _0-9a-z]+/.*/ig;
+		$args{'t'} =~ s/[^-^\$ _0-9a-z]+/.*/ig;
 		print_songlist_table($dbh, 
 			"SELECT artist,title,id,track,length,encoding" .
 			" FROM songs" .
