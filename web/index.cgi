@@ -650,7 +650,7 @@ tie %session, 'Apache::Session::MySQL', $cookie, {
 	LockHandle => $dbh
 };
 $r->header_out("Set-Cookie" => "SESSION_ID=$session{_session_id};");
-
+$r->no_cache(1);
 
 my $cmd = $args{'cmd'};
 
