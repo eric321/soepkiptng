@@ -21,11 +21,10 @@
 
 # CONFIG
 
-
 $configfile = "/etc/soepkiptng.conf";
 
-
 use DBI;
+use Socket;
 
 open F, $configfile or die "$configfile: $!\n";
 while(<F>) {

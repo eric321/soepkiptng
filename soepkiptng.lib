@@ -94,8 +94,6 @@ sub kill_song() {
 
 	$host && $port or return undef;
 
-	use Socket;
-
 	socket(F, PF_INET, SOCK_STREAM, getprotobyname('tcp'))
 		or die "socket: $!\n";
 	connect(F, sockaddr_in($port, inet_aton($host)))

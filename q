@@ -26,6 +26,7 @@ $configfile = "/etc/soepkiptng.conf";
 use integer;
 use Term::ReadKey;
 use DBI;
+use Socket;
 
 open F, $configfile or die "$configfile: $!\n";
 while(<F>) {
