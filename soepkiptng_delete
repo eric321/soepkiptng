@@ -58,7 +58,9 @@ $dbh = DBI->connect("DBI:$conf{db_type}:$conf{db_name}:$conf{db_host}",
 	$conf{db_user}, $conf{db_pass}) or die "can't connect to database";
 
 $sth = $dbh->prepare("SELECT filename FROM song WHERE present AND filename like ?");
-$sth->execute(($ARGV[0]? abs_path($ARGV[0]) : "/") . "/%");
+$filename = ($ARGV[0]? abs_path($ARGV[0]) : "/") . "/%";
+$filename =~ s/\\/\\\\/g;
+$sth->execute($filename);
 
 while(($filename) = $sth->fetchrow_array) {
 	if(!$opt_f) { -s $filename and next; }
