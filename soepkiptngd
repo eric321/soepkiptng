@@ -297,6 +297,8 @@ sub start_play($) {
 			exec "mp3toraw", $filename;
 		} elsif($ext eq "ogg") {
 			exec "ogg2raw", $filename;
+		} elsif($ext =~ /^(mid|rcp|r36|g18|g36|mod)$/) {
+			exec "midi2raw", $filename;
 		} elsif($ext eq "wav") {
 			exec "wav2raw", $filename;
 		} elsif($ext eq "pac") {

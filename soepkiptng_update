@@ -55,6 +55,7 @@ use vars qw/$opt_c $opt_d $opt_e $opt_f $opt_r $opt_q $opt_v/;
 sub get_wav_params($\%;$);
 sub getinfo_mp3($\%);
 sub getinfo_ogg($\%);
+sub getinfo_mid($\%);
 sub getinfo_wav($\%);
 sub getinfo_pac($\%);
 sub getinfo_flac($\%);
@@ -63,10 +64,25 @@ sub read_eric_files();
 sub extract_artist_title($\%);
 sub is_nfs($);
 
-getopts('cfredqv');
+getopts('cfredqvh');
 $force = 1 if $opt_f;
 $| = 1;
 $do_delete = !$opt_d && !$opt_r;
+
+$opt_h and die <<EOF;
+usage: soepkiptng_update [-cfredqhv] [dir]
+
+options:
+  -c  : don't fix artist/title/album upper/lowercase
+  -f  : force updating of info even if song is already in database
+  -r  : don't recurse subdirectories
+  -e  : don't read "ericfiles"
+  -d  : turn on debugging
+  -q  : be quiet
+  -h  : get this help
+  -v  : be verbose
+EOF
+
 
 # for the web interface (stupid browsers/users)
 $SIG{'PIPE'} = 'IGNORE';
@@ -133,6 +149,7 @@ while(<FILES>) {
 	$/ = "\n";
 	getinfo_mp3($_, %info) ||
 	getinfo_ogg($_, %info) ||
+	getinfo_mid($_, %info) ||
 	getinfo_wav($_, %info) ||
 	getinfo_pac($_, %info) ||
 	getinfo_flac($_, %info) ||
@@ -387,6 +404,16 @@ sub getinfo_wav($\%) {
 
 	get_wav_params($file, %$info) or return undef;
 	$info->{encoding} = "WAV";
+	return 1;
+}
+
+sub getinfo_mid($\%) {
+	my ($file, $info) = @_;
+
+	$file =~ /\.(mid|rcp|r36|g18|g36|mod)$/i
+		or return undef;
+
+	$info->{encoding} = "Midi";
 	return 1;
 }
 
