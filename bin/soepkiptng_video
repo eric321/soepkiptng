@@ -52,10 +52,14 @@ open STDERR, ">/dev/null";
 if(fork == 0) {
 	setpgrp; # protect us from kills
 	while(getppid != 1) { select undef, undef, undef, 0.1 };
-	pause(0);
+	pause("resume");
 	exit 0;
 }
 
-pause(1);
-exec "mp", @ARGV;
-die "mp @ARGV: $!\n";
+pause("pause0");
+# wait until pause is in effect
+open F, ">/dev/dsp";
+close F;
+
+exec "mp", "-m", @ARGV;
+die "mp -m @ARGV: $!\n";
