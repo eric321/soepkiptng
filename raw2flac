@@ -50,7 +50,7 @@ read_configfile(\%conf, $opt_c);
 $ENV{PATH} = "$progdir/bin:$ENV{PATH}";
 $cwd = cwd;
 
-@flac_stdin = qw'flac -8 --endian=little --channels=2 --bps=16
+@flac_stdin = qw'flac -s -8 --endian=little --channels=2 --bps=16
 	--sample-rate=44100 --sign=signed --force-raw-format';
 $flacd_stdin = 'flac -sdc --endian=little --sign=signed --force-raw-format -';
 
@@ -77,13 +77,6 @@ foreach (@ARGV) {
 	} else {
 		convert_raw($_);
 	}
-}
-
-sub latin1_to_utf($) {
-	my ($s) = @_;
-
-	$s =~ s/(.)/pack("U", ord $1)/ge;
-	return $s;
 }
 
 
@@ -133,16 +126,11 @@ sub convert_raw($) {
 			warn "$rawfile: not found in dbase\n";
 		};
 	};
-	my @flacargs = ();
-	if($ti) { $ti = latin1_to_utf($ti); push @flacargs, "-Ttitle=$ti"; print "title=$ti\n"; }
-	if($ar) { $ar = latin1_to_utf($ar); push @flacargs, "-Tartist=$ar"; print "artist=$ar\n";  }
-	if($al) { $al = latin1_to_utf($al); push @flacargs, "-Talbum=$al"; print "album=$al\n"; }
-	if($tr) { push @flacargs, "-Ttracknumber=$tr"; print "track=$tr\n"; }
 
 	@t = times;
 	$t = $t[0] + $t[1] + $t[2] + $t[3];
 
-	print "Packing file $rawfile\n" if $opt_v;
+	print "\nPacking file $rawfile\n" if $opt_v;
 	my $flacfile = $rawfile;
 	$flacfile =~ s/raw$/flac/i;
 	
@@ -151,6 +139,12 @@ sub convert_raw($) {
 		return;
 	}
 	$tmpfile = "$flacfile.tmp";
+
+	my @flacargs = ();
+	if($ti) { push @flacargs, "-Ttitle=$ti"; print "* title=$ti\n" if $opt_v; }
+	if($ar) { push @flacargs, "-Tartist=$ar"; print "* artist=$ar\n" if $opt_v; }
+	if($al) { push @flacargs, "-Talbum=$al"; print "* album=$al\n" if $opt_v; }
+	if($tr) { push @flacargs, "-Ttracknumber=$tr"; print "* track=$tr\n" if $opt_v; }
 
 	open IN, $rawfile or do {
 		warn "$rawfile: $!\n";
