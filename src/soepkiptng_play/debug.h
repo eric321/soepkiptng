@@ -7,15 +7,15 @@
 extern int debug;
 
 #define DEBUG(fmtargs...) do { \
-		if(debug >= 1) printf(fmtargs); \
+		if(debug >= 1) printf(fmtargs); fflush(stdout); \
 	} while(0)
 
 #define DDEBUG(fmtargs...) do { \
-		if(debug >= 2) printf(fmtargs); \
+		if(debug >= 2) printf(fmtargs); fflush(stdout); \
 	} while(0)
 
 #define DDDEBUG(fmtargs...) do { \
-		if(debug >= 3) printf(fmtargs); \
+		if(debug >= 3) printf(fmtargs); fflush(stdout); \
 	} while(0)
 
 #endif /*_DEBUG_H*/

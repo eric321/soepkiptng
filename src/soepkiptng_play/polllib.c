@@ -52,23 +52,28 @@ int register_fd(int fd,
 	return 0;
 }
 
+int reorder_fds()
+{
+	int i;
+
+	for(i = 0; i < fd_num; i++) {
+		if(pollfds[i].fd == -1) {
+			// move last entry to this one
+			pollfds[i] = pollfds[fd_num - 1];
+			fd_infos[i] = fd_infos[fd_num - 1];
+			fd_num--;
+		}
+	}
+	return -1;
+}
+
 int unregister_fd(int fd)
 {
 	int i;
 
 	for(i = 0; i < fd_num; i++) {
 		if(pollfds[i].fd == fd) {
-			if(i != fd_num - 1) {
-				// not the last entry; move last entry to this one
-				pollfds[i] = pollfds[fd_num - 1];
-				fd_infos[i] = fd_infos[fd_num - 1];
-			}
-			fd_num--;
-
-			// just in case we're in a pre/post for loop
-			pollfds[fd_num].events = 0;
-			pollfds[fd_num].revents = 0;
-
+			pollfds[i].fd = -1;
 			return 0;
 		}
 	}
@@ -124,7 +129,7 @@ int mainloop()
 				fd_infos[i].callback_pre(pollfds[i].fd, fd_infos[i].cookie);
 			}
 		}
-		
+		reorder_fds();
 		num = poll(pollfds, fd_num, 1000);
 		if(num == 0) DEBUG("poll: 0\n");
 

@@ -68,6 +68,15 @@ static void handle_cmd(int fd, struct socket_t *p, char *s)
 		}
 	}
 
+	else if(strcasecmp(cmd, "pause0") == 0) {
+		if(output_oss_running()) {
+			sockprintf(p, "+OK\n");
+			output_oss_stop0();
+		} else {
+			sockprintf(p, "-Not running\n");
+		}
+	}
+
 	else if(strcasecmp(cmd, "resume") == 0) {
 		if(output_oss_running()) {
 			sockprintf(p, "-Already running\n");
