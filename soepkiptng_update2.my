@@ -1,8 +1,8 @@
 
 use soepkiptng;
-drop table seealso;
+drop table if exists seealsoxxx;
 
-CREATE TABLE seealso (
+CREATE TABLE seealsoxxx (
   id1 int NOT NULL,
-  id2 int NOT NULL,
+  id2 int NOT NULL
 );
