@@ -48,9 +48,10 @@ use lib "$conf{'progdir'}/lib";
 
 use Getopt::Std;
 use integer;
-use Cwd;
+use Cwd 'abs_path';
 use DBI;
 use MP3::Tag;
+#use Data::Dumper;
 
 use vars qw/$opt_r $opt_h $opt_q/;
 
@@ -71,7 +72,7 @@ sub simplify($) {
 	my ($a) = @_;
 
 	$a =~ s/-/_/g;
-	$a =~ s/\((.*)/-\1/;
+	$a =~ s/[\[(](.*)/-\1/;
 	$a =~ s/[ _]?&[_ ]?/_and_/;
 	$a =~ s/([\xc0-\xff])/lc($latin1_to_ascii{ord($1)}) || $1/ge;
 	$a =~ s/[^-A-Za-z0-9]+/_/g;
@@ -80,47 +81,76 @@ sub simplify($) {
 	return lc($a);
 };
 
-getopts('rhq');
+sub do_dir($$) {
+	my ($dbh, $f) = @_;
 
-($prog = $0) =~ s|.*/||;
-if($opt_h || !@ARGV) {
-	print <<EOF;
-Usage: $prog [-r] mp3files...
+	$f = abs_path($f);
+	my $q = "SELECT filename,artist.name as artist,album.name as album" .
+		" FROM song,artist,album" .
+		" WHERE song.artist_id=artist.id AND song.album_id=album.id" .
+		" AND present AND filename LIKE ?";
+	my $sth = $dbh->prepare($q);
+	$sth->execute("$f/%")
+		or die "can't do sql command: " . $dbh->errstr;
 
-$prog reads Artist/Title/Album/Track info from the SoepkipTNG
-database and writes it to the specified files using ID3v2 (unless the files
-already have ID3v2 tags containing the exact same info). All ID3v1 tags are
-removed.
+	my $album;
+	my $artist;
+	my @files;
+	while($_ = $sth->fetchrow_hashref) {
+		(my $dir = $_->{filename}) =~ s|^(.*)/[^/]+$|\1|;
+		next unless $dir eq $f;		# skip files in subdirs
+		if($artist && $artist ne $_->{artist}) {
+			warn "$f: No common artist name found.\n";
+			return;
+		}
+		$artist = $_->{artist};
+		if($album && $album ne $_->{album}) {
+			warn "$f: No common album name found.\n";
+			return;
+		}
+		$album = $_->{album};
+		push @files, $_->{filename};
+	}
+	$sth->finish;
+	my $newname = "";
+	$newname .= simplify($artist) . "-" if $artist;
+	$newname .= simplify($album);
+	$f =~ m|^(.*)/|;
+	$newname = "$1/$newname";
 
-If the -r switch is used, the files are renamed to a standard format:
-track-artist-title.mp3 (if there is a track number) or artist-title.mp3
-(if there is no track number).
-* track consists of two or more digits.
-* artist may contain only alphanumeric characters and underscores.
-* title may contain only alphanumeric characters, underscores and dashes.
-
-EOF
-	exit;
+	warn "renaming $f -> $newname\n";
+	if(-e $newname) {
+		warn "$f: $newname exists, skipping\n";
+	} else {
+		if(rename $f, $newname) {
+			foreach(@files) {
+				(my $fnew = $_) =~ s|.*/|$newname/|;
+				
+				$dbh->do("DELETE FROM song WHERE filename=?",
+					undef, $fnew)
+					or die "can't do sql command: " . $dbh->errstr;
+				$dbh->do("UPDATE song SET filename=? WHERE filename=?",
+					undef, $fnew, $_)
+					or die "can't do sql command: " . $dbh->errstr;
+			}
+		} else {
+			warn "rename $f -> $newname: $!\n";
+		}
+	}
 }
 
-$cwd = cwd;
+sub do_mp3($$) {
+	my ($dbh, $f) = @_;
 
-$| = 1;
-
-$dbh = DBI->connect("DBI:$conf{'db_type'}:$conf{'db_name'}:$conf{'db_host'}",
-	$conf{'db_user'}, $conf{'db_pass'})
-	or die "can't connect to database";
-
-foreach $f (@ARGV) {
-	next if -d $f || ! -s $f;
 	if($f !~ /\.mp[123]$/i) {
 		warn "$f: not an MP3 file, skipping.\n";
-		next;
+		return undef;
 	}
 	$f =~ s|^\./+||;
 
 	my $fullf = $f;
-	$f =~ m|^/| or $fullf = "$cwd/$f";
+	$fullf =~ m|/| or $fullf = "./$f";
+	$fullf =~ s|(.*)/|abs_path($1) . "/"|e;
 
 	$q = "SELECT song.id,title,artist.name,album.name,track,length" .
 	     " FROM song,artist,album" .
@@ -144,14 +174,15 @@ foreach $f (@ARGV) {
 	
 		($id, $ti, $ar, $al, $tr, $len) = $sth->fetchrow_array or do {
 			warn "$f: not found in dbase\n" unless $opt_q;
-			next;
+			return 1;
 		};
 		warn "$f: partial filename match on $shortf\n" unless $opt_q;
 	};
+	$sth->finish;
 
 	open F, "+<$f" or do {
 		warn "$f: $!\n";
-		next;
+		return 1;
 	};
 	for(;;) {
 		seek F, -128, 2;
@@ -206,5 +237,59 @@ foreach $f (@ARGV) {
 			}
 		}
 	}
+	return 1;
 }
 
+sub do_ogg($$) {
+	my ($dbh, $f) = @_;
+
+	if($f !~ /\.ogg$/i) {
+		warn "$f: not an Ogg-Vorbis file, skipping.\n";
+		return undef;
+	}
+
+	#TODO
+
+	return 1;
+}
+
+
+getopts('rhq');
+
+($prog = $0) =~ s|.*/||;
+if($opt_h || !@ARGV) {
+	print <<EOF;
+Usage: $prog [-r] mp3files...
+
+$prog reads Artist/Title/Album/Track info from the SoepkipTNG
+database and writes it to the specified files using ID3v2 (unless the files
+already have ID3v2 tags containing the exact same info). All ID3v1 tags are
+removed.
+
+If the -r switch is used, the files are renamed to a standard format:
+track-artist-title.mp3 (if there is a track number) or artist-title.mp3
+(if there is no track number).
+* track consists of two or more digits.
+* artist may contain only alphanumeric characters and underscores.
+* title may contain only alphanumeric characters, underscores and dashes.
+
+EOF
+	exit;
+}
+
+$| = 1;
+
+my $dbh = DBI->connect("DBI:$conf{'db_type'}:$conf{'db_name'}:$conf{'db_host'}",
+	$conf{'db_user'}, $conf{'db_pass'})
+	or die "can't connect to database";
+
+foreach $f (@ARGV) {
+	if(-d $f) {
+		do_dir($dbh, $f);
+	} elsif(-s _) {
+		do_mp3($dbh, $f) ||
+		do_ogg($dbh, $f) or warn "Filetype of $f unknown.\n";
+	}
+}
+
+$dbh->disconnect();
