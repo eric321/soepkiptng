@@ -256,7 +256,8 @@ sub update_preload() {
 
 	$sth->execute() or return;
 	open PRELOAD, ">$conf{preloadfile}" or return;
-	while(my @s = $sth->fetchrow_array) {
+	my (@s);
+	while(@s = $sth->fetchrow_array) {
 		printf PRELOAD "%s\n", join("\t", @s);
 		warn "add to preload: $s[1]\n";
 	}
@@ -382,7 +383,7 @@ sub start_play($) {
 		#exec_prog ["flac", "-d", "-fl", $filename, "-"];
 	} elsif($ext eq "shn") {
 		exec_prog [qw/shntool cat -nr -nh/, $filename];
-	} elsif($ext =~ /^(mpe?g|m2v|avi|asx|asf|vob|wmv|rm)$/) {
+	} elsif($ext =~ /^(mpe?g|m2v|avi|asx|asf|vob|wmv|ra?m|ra|mov)$/) {
 		exec_prog ["soepkiptng_video", $filename], 1;
 	} elsif($ext eq "ac3") {
 		exec_prog ["a52dec", "-o", "oss6", $filename], 1;
@@ -520,12 +521,19 @@ for(;;) {
 
 	if($dbh) {
 		$song = get_song_jingle() || get_song_queued() || get_song_random_recent() or do {
-			while(!$randsong || !validate_song_random($randsong)) {
+			while(!$randsong || !($randsong = validate_song_random($randsong))) {
 				$randsong = select_song_random();
 			}
 			$song = $randsong;
 			$randsong = undef;
 		};
+
+		# random lookup can take a few sec; maybe a jingle/queued song
+		# has been added in the meantime (these lookups are very fast)
+		if($song->{type} =~ /r/i) {
+			my $s = get_song_jingle() || get_song_queued();
+			$song = $s if $s;
+		}
 
 		if($song->{id}) {
 			# update database

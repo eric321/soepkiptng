@@ -249,6 +249,21 @@ sub move_song_to_top($@) {
 	$db->do("UNLOCK TABLES");
 }
 
+sub move_song_to_bottom($@) {
+	my ($db, @ids) = @_;
+	my %ids;
+
+	foreach(@ids) { $ids{$_} = 1; };
+	$db->do("LOCK TABLES queue WRITE");
+	my @q = get_queue_ids($db, "ORDER BY song_order");
+	my (@q1, @q2);
+	foreach(@q) {
+		if($ids{$_}) { push @q2, $_; } else { push @q1, $_; }
+	}
+	reorder_queue($db, 1, @q1, @q2);
+	$db->do("UNLOCK TABLES");
+}
+
 sub shuffle_queue($) {
 	my ($db) = @_;
 
