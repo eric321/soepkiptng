@@ -1,6 +1,30 @@
 
 # $Id$
 
+sub del_song($$) {
+	my $sth = $_[0]->prepare("DELETE FROM queue WHERE song_id=?");
+	$sth->execute($_[1]);
+}
+
+sub add_song($$) {
+	$_[0]->do("LOCK TABLES queue WRITE");
+	del_song($_[0], $_[1]);
+	my ($max) = $_[0]->selectrow_array("SELECT MAX(song_order) FROM queue");
+	my $sth = $_[0]->prepare("INSERT INTO queue (song_order,song_id) VALUES (?,?)");
+	$sth->execute($max + 1, $_[1]);
+	$_[0]->do("UNLOCK TABLES");
+}
+
+sub move_song_to_top($$) {
+	$_[0]->do("LOCK TABLES queue WRITE");
+	del_song($_[0], $_[1]);
+	$_[0]->do("UPDATE queue SET song_order = song_order + 1");
+	my $sth = $_[0]->prepare("INSERT INTO queue (song_order,song_id) VALUES (0,?)");
+	$sth->execute($_[1]);
+	$_[0]->do("UNLOCK TABLES");
+}
+
+
 sub kill_song() {
 	local *F;
 

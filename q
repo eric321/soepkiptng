@@ -134,17 +134,16 @@ if(@ARGV) {
 		$i++;
 	}
 	exit if $i == 1;
-	$sth = $dbh->prepare("INSERT INTO queue (song_id) VALUES (?)");
 	print STDERR "\nAdd (a=all): ";
 	$_ = <STDIN>;
 	exit unless /\S/;
 	if(/^a/i) {
 		for($n = 1; $n < $i; $n++) {
-			$sth->execute($id[$n]);
+			add_song($dbh, $id[$n]);
 		}
 	} else {
 		foreach(splitrange($_, $i)) {
-			$sth->execute($id[$_]) if $id[$_];
+			add_song($dbh, $id[$_]) if $id[$_];
 		}
 	}
 }
@@ -172,7 +171,7 @@ if(open F, $statusfile) {
 }
 
 $query =  "SELECT songs.title,songs.artist,songs.album,songs.id,songs.track FROM songs,queue" .
-	" WHERE songs.id = queue.song_id ORDER BY queue.id";
+	" WHERE songs.id = queue.song_id ORDER BY queue.song_order";
 $sth = $dbh->prepare($query);
 $rv = $sth->execute;
 while(@q = $sth->fetchrow_array) {
@@ -191,10 +190,9 @@ if(/^a/i) {
 	$sth->execute();
 	kill_song();
 } else {
-	$sth = $dbh->prepare("DELETE FROM queue WHERE song_id=?");
 	foreach(splitrange($_, $i)) {
 		if($_ == 1) { kill_song(); }
-		else { $sth->execute($delid[$_]) if $delid[$_]; }
+		else { del_song($dbh, $delid[$_]) if $delid[$_]; }
 	}
 }
 

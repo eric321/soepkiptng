@@ -94,18 +94,26 @@ for(;;) {
 	my ($qid, $song_id, $filename);
 
 	# get queued song
-	($qid, $song_id, $filename) = $dbh->selectrow_array(
-		"SELECT queue.id,queue.song_id,songs.filename" .
+	$dbh->do("LOCK TABLES queue WRITE, songs READ");
+	($qid, $song_id, $song_order, $filename) = $dbh->selectrow_array(
+		"SELECT queue.id,queue.song_id,queue.song_order,songs.filename" .
 		" FROM queue,songs" .
 		" WHERE queue.song_id=songs.id" .
-		" ORDER BY queue.id" .
+		" ORDER BY queue.song_order" .
 		" LIMIT 1"
 	);
 
-	#  if nothing in queue, get random song
 	if($qid) {
 		warn "playing queued $filename\n" if $debug;
-	} else {
+
+		# delete it from the queue
+		$dbh->do("DELETE FROM queue WHERE id = $qid");
+		$dbh->do("UPDATE queue SET song_order = song_order - $song_order - 1");
+	}
+	$dbh->do("UNLOCK TABLES");
+
+	#  if nothing in queue, get random song
+	if(!$qid) {
 		($song_id, $filename) = $dbh->selectrow_array(
 			"SELECT id,filename FROM songs " .
 			"ORDER BY rand() LIMIT 1"
@@ -194,12 +202,6 @@ EOF
 		($a, $b, $c, $d) = times;
 		$childtime = $c + $d - $childtime;
 		warn "song finished, time=$childtime\n" if $debug;
-	}
-
-	# if it was a queued song, delete it from the queue
-	if($qid) {
-		$dbh->do("DELETE FROM queue WHERE id = $qid");
-		$dbh->do("UPDATE queue SET id = id - 1");
 	}
 
 	# if it took less than 1 second to play it, pause for 1 second

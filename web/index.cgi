@@ -126,23 +126,23 @@ EOF
 }
 
 
-sub get_playlist_table_entry($$$) {
-	my $ar = $_[2]->{artist};
+sub get_playlist_table_entry($$$$$) {
+	my $ar = $_[4]->{artist};
 #	$ar =~ s/\W+/.*/g;
 	$ar = encode("^$ar\$");
 
-	my $al = $_[2]->{album};
+	my $al = $_[4]->{album};
 #	$al =~ s/\W+/.*/g;
 	$al = encode("^$al\$");
 
-	my $l = sprintf "%d:%02d", $_[2]->{length} / 60, $_[2]->{length} % 60;
-	my $e = $_[2]->{encoding};
+	my $l = sprintf "%d:%02d", $_[4]->{length} / 60, $_[4]->{length} % 60;
+	my $e = $_[4]->{encoding};
 	$e =~ s/ /&nbsp;/g;
-	my $tr = $_[2]->{track} || "";
+	my $tr = $_[4]->{track} || "";
 	$tr .= "." if $tr;
-	return sprintf <<EOF, $_[0], $_[1], $ar, $_[2]->{artist}, $al, $_[2]->{album}, $tr, $_[2]->{title}, $l, $e;
+	return sprintf <<EOF, $_[0], $_[1], $_[2], $_[3], $ar, $_[4]->{artist}, $al, $_[4]->{album}, $tr, $_[4]->{title}, $l, $e;
  <tr>
-  <td><a id=a href="%s" target=playlist>%s</a></td>
+  <td><a id=a href="%s" target=playlist>%s</a> <a id=a href="%s" target=playlist>%s</a></td>
   <td><a href="$self?cmd=albumlist&a=%s&t=$t" target=albumlist>%s</a></td>
   <td><a href="$self?cmd=songlist&s=%s&t=$t" target=songlist>%s</a></td>
   <td>%s&nbsp;</td>
@@ -170,20 +170,24 @@ sub print_playlist_table($) {
 		my $sth = $dbh->prepare($query);
 		my $rv = $sth->execute;
 		if($_ = $sth->fetchrow_hashref) {
-			$output .= get_playlist_table_entry "$self?cmd=kill&t=$t", $killtext, $_;
+			$output .= get_playlist_table_entry
+				"$self?cmd=kill&t=$t", $killtext, "", "", $_;
 		}
 	}
 
 	$query =  "SELECT songs.title,songs.artist,songs.album,songs.id,songs.track,songs.length,songs.encoding" .
 		" FROM songs,queue" .
-		" WHERE songs.id = queue.song_id ORDER BY queue.id";
+		" WHERE songs.id = queue.song_id ORDER BY queue.song_order";
 	$sth = $dbh->prepare($query);
 	$rv = $sth->execute;
 	my @ids;
 	while($_ = $sth->fetchrow_hashref) {
 		next if $_->{id} == $nowplaying;
 		push @ids, $_->{id};
-		$output .= get_playlist_table_entry "$self?cmd=del&id=$_->{id}&t=$t", $deltext, $_;
+		$output .= get_playlist_table_entry
+			"$self?cmd=del&id=$_->{id}&t=$t", $deltext,
+			"$self?cmd=up&id=$_->{id}&t=$t", $uptext,
+			$_;
 	}
 	if(@ids) {
 		$delall = sprintf <<EOF, join(",", @ids);
@@ -325,17 +329,6 @@ $output
 EOF
 }
 
-sub del_song($$) {
-	my $sth = $_[0]->prepare("DELETE FROM queue WHERE song_id=?");
-	$sth->execute($_[1]);
-}
-
-sub add_song($$) {
-	del_song($_[0], $_[1]);
-	my $sth = $_[0]->prepare("INSERT INTO queue (song_id) VALUES (?)");
-	$sth->execute($_[1]);
-}
-
 sub printhtmlhdr() {
 	my $r = Apache->request;
 	$r->content_type("text/html");
@@ -390,12 +383,18 @@ elsif($cmd eq "del") {
 	foreach(split /,/, $args{'id'}) { del_song($dbh, $_); }
 	$cmd = "playlist";
 }
+elsif($cmd eq "up") {
+	foreach(reverse split /,/, $args{'id'}) { move_song_to_top($dbh, $_); }
+	$cmd = "playlist";
+}
 elsif($cmd eq "kill") {
 	kill_song;
 	$cmd = "playlist";
-#not need anymore because the cgi waits until the status file has been updated
+#not needed anymore because the cgi waits until the status file has been updated
 #	$r = $refreshtime_kill;
 }
+
+
 
 if($cmd eq "") {
 	printhtmlhdr;

@@ -199,10 +199,10 @@ while(<FILES>) {
 			exec "ogg2raw", "$_.$ext", 1;
 			die;
 		}
-		my ($sfreq, $chan, $sec) = split(/,/, <F>);
+		my ($sfreq, $chan, $sec, $br) = split(/,/, <F>);
 		$length = $sec;
 		close F;
-		$encoding = "Ogg-Vorbis";
+		$encoding = sprintf "Ogg-Vorbis (~%dkb/s)", ($br +500) / 1000;
 		if($sfreq != 44100) {
 			my $s = sprintf "%f", $sfreq / 1000;
 			$s =~ s/\.?0+$//;
