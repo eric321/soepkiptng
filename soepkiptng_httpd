@@ -1477,7 +1477,22 @@ sub run_instance() {
 ############################################################################
 # MAIN
 
-getopts('dp:i:l:c:');
+getopts('dhp:i:l:c:');
+
+$opt_h and die <<EOF;
+
+Usage: soepkiptng_httpd [-dh] [-p port] [-i servers] [-l maxrequests]
+
+Options:
+ -d             : don't daemonize, log to stdout/stderr.
+ -h             : get this help
+ -p port        : port to listen on
+ -i servers     : number of child processes the parent process will spawn
+ -l maxrequests : the number of requests each child process is allowed to
+                  process before it dies (to avoid problems like memory leaks
+                  after prolonged use)
+
+EOF
 
 read_configfile(\%conf, $opt_c);
 
