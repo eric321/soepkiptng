@@ -56,6 +56,8 @@ while(<F>) {
 }
 close F;
 
+$ENV{'PATH'} = "$progdir/bin:$ENV{'PATH'}";
+
 if(open ST, $statusfile) {
 	my ($s, $f, $pid) = <ST>;
 	close ST;

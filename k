@@ -43,6 +43,7 @@ while(<F>) {
 }
 close F;
 
+$ENV{'PATH'} = "$progdir/bin:$ENV{'PATH'}";
 require "$progdir/soepkiptng.lib";
 
 $dbh = DBI->connect("DBI:$db_type:$db_name:$db_host", $db_user, $db_pass)
