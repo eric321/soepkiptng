@@ -15,6 +15,7 @@ if(@ARGV) {
 	my @prog = qw/cdparanoia -qr/;
 	if(defined($opt_d)) { push @prog, "-d$opt_d"; }
 	exec @prog, @ARGV, "-";
+	die "$prog[0]: $!\n";
 }
 
 use FreeDB::FreeDB;
@@ -30,7 +31,7 @@ if(defined($opt_C)) {
 	if($opt_C eq "") { $cddb->ignore_cache(1); }
 	else { $cddb->cache_directory($opt_C); }
 }
-			
+
 if($cddb->fetch) {
 	push @out, $cddb->artist;
 	push @out, $cddb->title;
@@ -48,5 +49,6 @@ if($cddb->fetch) {
 			$cddb->current_track_time_in_seconds, $tr;
 	}
 }
+unshift @out, join(" ", $cddb->discid, $cddb->total_tracks, $cddb->offsets, $cddb->disc_length);
 
 print map { s/\s+/ /g; "$_\n"; } @out;
