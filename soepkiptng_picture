@@ -50,7 +50,12 @@ $SIG{'HUP'} = sub {
 for(;;) {
 	my $newmtime = (stat $conf{statusfile})[9];
 
-	if($newmtime == $mtime) { sleep 1; next; }
+	if(!$pic || -e $pic) {
+		if($newmtime == $mtime) {
+			sleep 1;
+			next;
+		}
+	}
 
 	open F, $conf{statusfile} or next;
 	$mtime = $newmtime;
@@ -73,7 +78,7 @@ for(;;) {
 	$filename =~ s|/*[^/]+$||;
 	$filename =~ s|.*/|$conf{progdir}/pictures/|;
 
-	my $pic = "";
+	$pic = undef;
 	foreach(qw/gif jpg jpeg/) {
 		if(-e "$filename.$_") {
 			$pic = "$filename.$_";
@@ -85,6 +90,11 @@ for(;;) {
 		system qw/xloadimage -onroot -fullscreen -border black/, $pic;
 	} else {
 		warn "$filename not found\n";
-		system "xsetroot -solid black";
+		if($conf{picture_bg}) {
+			system qw/xloadimage -onroot -fullscreen -border black/,
+				$conf{picture_bg};
+		} else {
+			system "xsetroot -solid black";
+		}
 	}
 }
