@@ -27,13 +27,16 @@
 
 $configfile = "/etc/soepkiptng.conf";
 $ENV{'PATH'} = "/usr/local/bin:/usr/bin:/bin";
-$debug = 1 if @ARGV[0] eq "-d";
 
 use DBI;
 use MPEG::MP3Info;
 use Socket;
 use POSIX ":sys_wait_h";
 use Sys::Hostname;
+use Getopt::Std;
+
+getopts('dr');
+$debug = 1 if $opt_d;
 
 open F, $configfile
 	or die "$configfile: $!\n";
@@ -66,7 +69,7 @@ $killhost = hostname;
 $dbh = DBI->connect("DBI:mysql:$db_name:$db_host", $db_user, $db_pass)
 	or die "Can't connect to database $db_name\@$db_host as user $db_user\n";
 
-unless($debug) {
+unless($debug || $opt_r) {
 	fork && exit;
 	chdir "/";
 	setpgrp();
@@ -85,6 +88,8 @@ $SIG{'CHLD'} = sub {
 			die "exiting because '$playercmd' died.\n";
 		} elsif($p == $pid) {
 			$pid = 0;
+			$pid_status = $? >> 8;
+			$pid_signal = $? & 0x7f;
 			warn "player finished ($p)\n" if $debug;
 		}
 	}
@@ -95,13 +100,29 @@ $SIG{'TERM'} = sub {
 	unlink $statusfile;
 };
 
-$cdrplaypid = open STDOUT, "|$playercmd";
-warn "cdrplaypid=$cdrplaypid\n" if $debug;
+$SIG{'USR1'} = sub {
+	$restart = 1;
+};
+
+unless($opt_r) {
+	$cdrplaypid = open STDOUT, "|$playercmd";
+	warn "cdrplaypid=$cdrplaypid\n" if $debug;
+}
 
 $SIG{'PIPE'} = 'IGNORE';
 
 for(;;) {
 	my ($song_id, $songtype, $filename);
+
+	if($restart) {
+		# close-on-exec apparently doesn't work
+		$dbh->disconnect;
+		close SOCK if $socket_open;
+		close KILLSOCK;
+
+		exec $0, '-r';
+		die "$0: $!\n";
+	}
 
 	# get queued song
 	$dbh->do("LOCK TABLES queue WRITE, songs READ");
@@ -220,6 +241,11 @@ EOF
 			logprintf("K %d", $song_id);
 		}
 	}
+	if($pid_status || $pid_signal) {
+		# write to log file
+		logprintf("E %d status=%d signal=%d", $song_id, $pid_status, $pid_signal);
+	}
+
 	if($debug) {
 		($a, $b, $c, $d) = times;
 		$childtime = $c + $d - $childtime;
