@@ -131,7 +131,7 @@ if(@ARGV) {
 		}
 		push @q, $q;
 	}
-	$q = "SELECT song.title,artist.name,album.name,song.track" .
+	$q = "SELECT song.title,artist.name,album.name,song.id,song.track" .
 	     " FROM song,artist,album" .
 	     " WHERE song.artist_id=artist.id AND song.album_id=album.id" .
 	     " AND present AND " . join(" AND ", @q) .
