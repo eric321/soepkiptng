@@ -364,7 +364,7 @@ sub print_edit_page($$) {
 	my $l = sprintf "%d:%02d", $_->{length} / 60, $_->{length} % 60;
 	my $t = $_->{track} || "";
 	my $size = sprintf("%dk", ((-s $_->{filename}) + 512) / 1024);
-	my $lp = $lp? localtime($_->{lp}) : "-";
+	my $lp = $_->{lp}? localtime($_->{lp}) : "-";
 	my $pr = $_->{present}? "Yes" : "No";
 
 	print <<EOF;
@@ -390,7 +390,7 @@ function verifydelete() {
   <tr><td>Track:</td> <td><input type=text size=3 name=track  value="$t" maxlength=2></td></tr>
   <tr><td>Time:</td>  <td>$l</td></tr>
   <tr><td>Encoding:</td>        <td>$_->{encoding}</td></tr>
-  <tr><td>Last played time:</td><td>$lp</td></tr>
+  <tr><td>Last played:</td><td>$lp</td></tr>
   <tr><td>Filename:</td>        <td>$_->{filename}</td></tr>
   <tr><td>Size:</td>            <td>$size</td></tr>
   <tr><td colspan=2><input type=submit value="Change"></td></tr>
