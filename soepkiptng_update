@@ -52,7 +52,9 @@ sub getinfo_wav($\%);
 sub getinfo_pac($\%);
 sub getinfo_flac($\%);
 sub getinfo_shorten($\%);
+sub getinfo_musepack($\%);
 sub getinfo_raw($\%);
+sub getinfo_aac($\%);
 sub getinfo_mplayer($\%);
 sub getinfo_ac3($\%);
 sub read_eric_files();
@@ -159,6 +161,8 @@ while(<FILES>) {
 	getinfo_pac($_, %info) ||
 	getinfo_flac($_, %info) ||
 	getinfo_shorten($_, %info) ||
+	getinfo_musepack($_, %info) ||
+	getinfo_aac($_, %info) ||
 	getinfo_mplayer($_, %info) ||
 	getinfo_ac3($_, %info) ||
 	getinfo_raw($_, %info);
@@ -536,6 +540,42 @@ sub getinfo_shorten($\%) {
 	return 1;
 }
 
+# TODO: read APETAGEX
+sub getinfo_musepack($\%) {
+	my ($file, $info) = @_;
+	my ($buf, $id3);
+	local *F;
+
+	$file =~ /\.mp[cp+]$/i
+		or return undef;
+	open F, $file or do {
+		warn "$file: $!\n";
+		return undef;
+	};
+	read F, $buf, 12;
+	seek F, -128, 2;
+	read F, $id3, 128;
+	close F;
+	$buf =~ /^MP\+/ or return undef;
+	my (undef, $frames, $flags) = unpack "VVV", $buf;
+
+	$info->{encoding} = "Musepack";
+	$info->{freq} = (44100, 48000, 37800, 32000)[($flags >> 16) & 3];
+	$info->{len} = $frames * 1152 / $info->{freq};
+	$info->{chan} = 2;
+
+	my ($magic, $ti, $ar, $al, $yr, $cm, $nl, $tr, $gn) =
+			unpack "a3a30a30a30a4a28aaa", $id3;
+	if($magic eq "ID3") {
+		$info->{info_origin} = "ID3";
+		$info->{artist} = $ar;
+		$info->{title} = $ti;
+		$info->{album} = $al;
+		$info->{track} = $tr if $nl eq "\0";
+	}
+	return 1;
+}
+
 sub getinfo_raw($\%) {
 	my ($file, $info) = @_;
 
@@ -598,6 +638,33 @@ sub getinfo_mplayer($\%) {
 	}
 	$info->{len} = $prop{length};
 	return 1;
+}
+
+sub getinfo_aac($\%) {
+	my ($file, $info) = @_;
+	my $l;
+	local *F;
+
+	$file =~ /\.(aac|m4a)$/i
+		or return undef;
+
+	if(open(F, "-|") == 0) {
+		open STDERR, ">&STDOUT";
+		exec "faad", "-i", $file;
+		die "faad";
+	}
+	while($l = <F>) {
+		if($l =~ /(\w+)\s+([.\d]+)\s+secs,\s+(\d+)\s+ch,\s+(\d+)\s+Hz/) {
+			$info->{encoding} = $1;
+			$info->{freq} = $4;
+			$info->{chan} = $3;
+			$info->{len} = int($2 + 0.5);
+			close F;
+			return 1;
+		}
+	}
+	close F;
+	return undef;
 }
 
 sub getinfo_ac3($\%) {

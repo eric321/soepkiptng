@@ -384,8 +384,12 @@ sub start_play($) {
 		exec_prog [qw/flac -sdc --endian=little --sign=signed/,
 			qw/--force-raw-format/, $filename];
 		#exec_prog ["flac", "-d", "-fl", $filename, "-"];
+	} elsif($ext =~ /^(aac|m4a)$/) {
+		exec_prog ["aac2raw", $filename];
 	} elsif($ext eq "shn") {
 		exec_prog [qw/shntool cat -nr -nh/, $filename];
+	} elsif($ext =~ /^mp[cp+]$/) {
+		exec_prog [qw/musepack2raw/, $filename];
 	} elsif($ext =~ /^(mpe?g|m2v|avi|asx|asf|vob|wmv|ra?m|ra|mov)$/) {
 		exec_prog ["soepkiptng_video", $filename], 1;
 	} elsif($ext eq "ac3") {
