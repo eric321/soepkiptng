@@ -267,7 +267,7 @@ sub get_id3($\%) {
 	$info->{info_origin} = $id3->{ID3v2}? "ID3v2" : "ID3";
 	$info->{artist} = $a;
 	$info->{title} = $t;
-	$info->{album} = $alb;
+	$info->{album} = $alb || "";
 	$info->{track} = $tr;
 	return 1;
 }
