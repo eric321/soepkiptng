@@ -236,6 +236,28 @@ sub albumlist_entry($) {
 		enchtml($1 || "?"), enchtml($2), $res->{c});
 }
 
+sub prune_albumlist($) {
+	my ($albumlist) = @_;
+
+	my $num_cut = 0;
+	my $al_len_tot = 0;
+	foreach(@$albumlist) {
+		$_->{al_len} = length($_->{album});
+		$al_len_tot += $_->{al_len};
+	}
+	if($conf{albumlist_length_threshold} > 0 &&
+	   $al_len_tot >= $conf{albumlist_length_threshold}) {
+		my $len_to_cut = $al_len_tot - $conf{albumlist_length_threshold};
+		foreach(sort { $a->{random_pref} <=> $b->{random_pref} || $b->{al_len} <=> $a->{al_len} } @$albumlist) {
+			$len_to_cut -= $_->{al_len};
+			$_->{al_len} = -1;
+			$num_cut++;
+			last if $len_to_cut < 0;
+		}
+	}
+	return $num_cut;
+}
+
 sub print_playlist_table($) {
 	my ($dbh) = @_;
 	my $killline;
@@ -323,12 +345,12 @@ sub print_artistlist_table($$$@) {
 	my $rv = $sth->execute(@val)
 		or die "can't do sql command: " . $dbh->errstr;
 	my %artistname;
-	my %al;
+	my %albumlist;
 	while($_ = $sth->fetchrow_hashref()) {
 		$artistname{$_->{arid}} = $_->{artist};
-		$al{$_->{arid}} .= albumlist_entry($_) . ",&nbsp;";
+#		$al{$_->{arid}} .= albumlist_entry($_) . ",&nbsp;";
+		push @{$albumlist{$_->{arid}}}, $_;
 	}
-
 
 	print "<center id=hdr>$caption</center>\n";
 	if(!%artistname) {
@@ -345,11 +367,22 @@ sub print_artistlist_table($$$@) {
 EOF
 	my $res = 0;
 	foreach(sort {lc($artistname{$a}) cmp lc($artistname{$b})} keys %artistname) {
-		$al{$_} =~ s/,&nbsp;$//;
-		printf <<EOF, encurl("Artist: $artistname{$_}"), $artistname{$_}, $al{$_};
+		my $more = prune_albumlist($albumlist{$_});
+		printf <<EOF,
 <tr>
  <td valign=top>&nbsp;<a id=a href="$self?cmd=alllist&artist_id=$_&cap=%s">%s</a>&nbsp;</td>
- <td valign=top>&nbsp;%s&nbsp;</td>
+ <td valign=top>&nbsp;%s
+EOF
+			encurl("Artist: $artistname{$_}"), $artistname{$_},
+			join(",&nbsp;", map { albumlist_entry($_) }
+				grep { $_->{al_len} != -1 } @{$albumlist{$_}});
+		if($more) {
+			printf <<EOF, $self, $_, encurl('^$'), $more;
+&nbsp; <a id=a href="%s?cmd=alllist&artist_id=%d&album=%s&expanded_albumlist=1">[%d more...].</a>
+EOF
+		}
+		printf <<EOF,
+&nbsp;</td>
 </tr>
 EOF
 		$res++;
@@ -360,8 +393,8 @@ EOF
 EOF
 }
 
-sub print_albums_row($$$$$) {
-	my ($dbh, $baseurl, $argsref, $caption, $artistid) = @_;
+sub print_seealso_row($$) {
+	my ($dbh, $artistid) = @_;
 
 	my $query = "SELECT seealso.id1 AS id1, seealso.id2 AS id2, ".
 		" artist.name AS artist FROM seealso,artist,song WHERE ".
@@ -371,7 +404,7 @@ sub print_albums_row($$$$$) {
 		"  seealso.id2=song.artist_id AND song.present) ".
 		" GROUP BY id1, id2, artist ORDER BY artist";
 	my $sth = $dbh->prepare($query);
-	my $rv = $sth->execute($artistid, $artistid);
+	$sth->execute($artistid, $artistid);
 	my %seealso;
 	my @ids;
 	while($_ = $sth->fetchrow_hashref()) {
@@ -393,50 +426,38 @@ sub print_albums_row($$$$$) {
 		}
 		print ".<br>\n";
 	}
+}
 
-	$query = "SELECT DISTINCT binary album.name as album," .
-		" binary artist.name as artist, song.random_pref as rp," .
+sub print_albums_row($$$$$) {
+	my ($dbh, $baseurl, $argsref, $artistid, $label) = @_;
+
+        my $query = "SELECT DISTINCT binary album.name as album," .
+		" binary artist.name as artist, song.random_pref," .
 		" count(*) as c, song.artist_id as arid, song.album_id as alid " .
 		" FROM song,artist,album WHERE present AND song.artist_id = ?".
 		" AND song.artist_id=artist.id AND song.album_id=album.id".
 		" AND filename LIKE '/%'".
 		" GROUP BY album ORDER BY album";
 	$sth = $dbh->prepare($query);
-	$rv = $sth->execute($artistid);
-	my %al;
-	my @alids;
-	my $al_len_tot = 0;
-	my %al_len;
-	my %al_rp;
-	while($_ = $sth->fetchrow_hashref()) {
-		push @alids, $_->{alid};
-		$al{$_->{alid}} = albumlist_entry($_);
-		$al_len_tot += $al_len{$_->{alid}} = length($_->{album});
-		$al_rp{$_->{alid}} = $_->{rp};
-	}
-	if(@alids == 0) {
+	$sth->execute($artistid);
+
+	my $albumlist = $sth->fetchall_arrayref({});
+	if(@$albumlist == 0) {
 		return undef;
 	}
-	if($conf{albumlist_length_threshold} == 0 ||
-	   $al_len_tot < $conf{albumlist_length_threshold} ||
-	   $argsref->{expanded_albumlist}) {
-		my $sep = "&nbsp; ";
-		if($argsref->{expanded_albumlist}) { $sep = "<br>\n"; }
-		printf "Albums:%s%s.\n", $sep, join(",$sep",
-			map { $al{$_} } @alids);
+
+	my $sep = "&nbsp; ";
+	my $more = 0;
+	if($argsref->{expanded_albumlist}) {
+		$sep = "<br>\n";
 	} else {
-		my $len_left = $conf{albumlist_length_threshold};
-		my %alids_shortlist;
-		foreach(sort { $al_rp{$b} <=> $al_rp{$a} || $al_len{$a} <=> $al_len{$b} } @alids) {
-			last if $al_len{$_} > $len_left;
-			$len_left -= $al_len{$_};
-			$alids_shortlist{$_} = 1;
-		}
-		my @alids2 = grep { $alids_shortlist{$_} } @alids;
-		printf "Albums: %s", join(",&nbsp;\n",
-			map { $al{$_} } @alids2);
-			
-		printf <<EOF, $baseurl, $argsref->{cmd}, $#alids - $#alids2;
+		$more = prune_albumlist($albumlist);
+	}
+	printf "$label$sep";
+	print join(",$sep", map { albumlist_entry($_) }
+		grep { $_->{al_len} != -1 } @$albumlist);
+	if($more) {
+		printf <<EOF, $baseurl, $argsref->{cmd}, $more;
 &nbsp; <a id=a href="%scmd=%s&expanded_albumlist=1">[%d more...].</a>
 EOF
 	}
@@ -466,7 +487,8 @@ EOF
 	}
 	if(!@ids) {
 		if($argsref->{artist_id}) {
-			print_albums_row($dbh, $baseurl, $argsref, $cap, $argsref->{artist_id})
+			print_seealso_row($dbh, $argsref->{artist_id});
+			print_albums_row($dbh, $baseurl, $argsref, $argsref->{artist_id}, "Albums:")
 				and return;
 		}
 		print "No search results.\n";
@@ -507,7 +529,8 @@ EOF
 	}
 
 	if(scalar keys %artistids == 1) {
-		print_albums_row($dbh, $baseurl, $argsref, $cap, (keys %artistids)[0]);
+		print_seealso_row($dbh, (keys %artistids)[0]);
+		print_albums_row($dbh, $baseurl, $argsref, (keys %artistids)[0], "Albums:");
 	}
 
 	print "<table border=0 cellspacing=0>\n";
@@ -1170,7 +1193,7 @@ EOF
 		my $s;
 		my $q = ("SELECT DISTINCT artist.name as artist, album.name as album," .
 			 " count(*) as c, song.artist_id as arid, song.album_id as alid," .
-			 " UCASE(album.name) as sort" .
+			 " UCASE(album.name) as sort, song.random_pref" .
 			 " FROM song,artist,album WHERE present AND filename LIKE '/%'");
 		my @qargs;
 
