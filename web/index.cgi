@@ -87,6 +87,7 @@ sub ids_encode(@) {
 		}
 		$prev = $_;
 	}
+	$out =~ s/(([a-z])\2{3,})/"_" . length($1) . $2/egi;
 	return $out;
 }
 
@@ -94,6 +95,7 @@ sub ids_decode($) {
 	my ($str) = @_;
 	my $val = 0;
 	my @out = ();
+	$str =~ s/_(\d+)([a-z])/$2x$1/egi;
 	while($str) {
 		if($str =~ s/^([a-z])//) {
 			$val -= ord($1) - (ord('a') - 1);
