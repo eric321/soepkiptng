@@ -194,7 +194,7 @@ while(<FILES>) {
 	$q = "REPLACE INTO song SET id=?, artist_id=?, title=?, album_id=?, track=?, present=1, " .
 		"filename=?, length=?, encoding=?, last_played=from_unixtime(?), time_added=NULL";
 	$dbh->do($q, undef, $filename{$_}, $artistid_cache{$artist},
-		$title, $albumid_cache{$album}, $track, $_, $len,
+		$title, $albumid_cache{$album}, $track || 0, $_, $len,
 		$desc, $last_played{$_} || 0)
                 or die "can't do sql command: " . $dbh->errstr . "\n";
 	delete $filename{$_};
