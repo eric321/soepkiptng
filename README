@@ -17,6 +17,7 @@ Direct (read-only) cvs access is also possible. Set your CVSROOT to
 Features:
 ---------
 * supports mp3 (+id3/id3v2), wav, lpac, flac & Ogg-Vorbis audio files.
+* supports playing Shoutcast streams.
 * player uses real-time scheduling and memory locking for uninterrupted music
   playback; zero silence period between two songs (very nice for consecutive
   songs of a live cd).
@@ -112,9 +113,11 @@ Installation:
 
 TODO:
 -----
+* clean up Shoutcast support
 * lirc support (IR remote)
 * play directly from urls
 * playlists/genres
+* ripping integration
 * multiple soepkiptng daemons
 * remote playing using esd (Enlightenment Sound Daemon) or similar program
 * message input that will be played using a text-to-speech program
