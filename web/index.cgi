@@ -498,7 +498,8 @@ EOF
 		if($albumlist_length_threshold == 0 ||
 		   $al_len_tot < $albumlist_length_threshold ||
 		   $$argsref{'expanded_albumlist'}) {
-			printf "Albums: %s.\n", join(",<br>\n",
+			printf "Albums: %s.\n", join($$argsref{'expanded_albumlist'}?
+				",<br>\n" : ",&nbsp; ",
 				map { $al{$_} } @alids);
 		} else {
 			my $len_left = $albumlist_length_threshold;
