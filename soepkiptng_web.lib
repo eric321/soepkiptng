@@ -581,9 +581,9 @@ $output
 EOF
 	(my $f = $caption) =~ s/^\w+:\s*//;
 	$f =~ s~(/|\\|:|;)+~_~g;
-	($f = "$req->{self}/$f.zip") =~ s|//+|/|g;
+	($f = "$req->{self}/$f.tar") =~ s|//+|/|g;
 	print <<EOF if $ids;
-<tr><td colspan=7><a href="$f?cmd=downloadset&ids=$ids">download all as .zip</a></td></tr>
+<tr><td colspan=7><a href="$f?cmd=downloadset&ids=$ids">download all as tar</a></td></tr>
 EOF
 	print <<EOF;
 </table>
@@ -1788,19 +1788,20 @@ EOF
 	}
 	elsif($cmd eq 'downloadset') {
 		my @ids = ids_decode($args{ids});
-		my @filenames;
+		my @tarargs;
 		local *F;
 
 		foreach(@ids) {
 			my ($file) = $req->{dbh}->selectrow_array("SELECT filename FROM song WHERE id=$_")
 				or die "id $id not found in database\n";
-			push @filenames, $file;
+			$file =~ s|(.*)/||;
+			push @tarargs, "-C", $1, $file;
 		}
 		print $req->{cgiquery}->header(-type=>'application/octet-stream');
 		if(open(F, "-|") == 0) {
 			setpriority 0, 0, 10;
-			exec "zip", "-j", "-", @filenames;
-			die "zip - " . join(" ", @filenames);
+			exec "tar", "cf", "-", "--numeric-owner", @tarargs;
+			die "tar";
 		}
 		while(read F, $_, 4096) { print; }
 		close F;
