@@ -214,6 +214,7 @@ sub update_preload() {
 	open PRELOAD, ">$conf{preloadfile}" or return;
 	while(my @s = $sth->fetchrow_array) {
 		printf PRELOAD "%s\n", join("\t", @s);
+		warn "add to preload: $s[1]\n";
 	}
 	close PRELOAD;
 
@@ -224,7 +225,10 @@ sub update_preload() {
 sub get_song_preload() {
 	my $s = undef;
 
-	@preload or return undef;
+	@preload or do {
+		warn "no preloads available\n";
+		return undef;
+	};
 
 	($s->{id}, $s->{filename}, $s->{artist}, $s->{album}, $s->{track},
 	 $s->{title}, $s->{length}, $s->{encoding}) = split /\t+/, shift @preload;
@@ -394,6 +398,7 @@ if($conf{preloadfile}) {
 	if(open PRELOAD, $conf{preloadfile}) {
 		chop(@preload = <PRELOAD>);
 		close PRELOAD;
+		warn "preload: added " . scalar @preload . " songs.\n";
 	} else {
 		warn "$conf{preloadfile}: $!\n";
 	}
