@@ -118,14 +118,23 @@ EOF
 	}
 	print <<EOF;
 </td>
-<td id=az nowrap>Artist:</td>
+<td id=az nowrap>&nbsp;&nbsp;Search:</td>
 <td id=az nowrap>
  <form id=search action="$self" method=get target=bframe>
-  <input type=hidden name=cmd value=$artistlistcmd>
-  <input type=hidden name=cap value="Artist search: %s">
-   <input type=text size=5 name=artist style="$searchformstyle">
+  <input type=hidden name=cmd value=search>
+  <input type=text size=5 name=sval style="$searchformstyle">
+</td>
+<td id=az nowrap>
+  <select name=stype style="$searchformstyle" onChange="form.submit()">
+   <option value=any>Any
+   <option value=artist>Artist
+   <option value=title>Title
+   <option value=album>Album
+  </select>
+  <noscript><input type=submit value="Go"></noscript>
  </form>
 </td>
+<!--
 <td id=az nowrap>Album:</td>
 <td id=az>
  <form id=search action="$self" method=get target=bframe>
@@ -142,6 +151,7 @@ EOF
    <input type=text size=5 name=title style="$searchformstyle">
  </form>
 </td>
+-->
 
 <!--
 <td id=az>Play:</td>
@@ -173,15 +183,16 @@ $editlistopts
 </td>
 -->
 
-<td id=az>&nbsp;&nbsp;
-<a id=a target=_blank href="$self?cmd=maint">Maintenance</a>
-</td>
-<td id=az>&nbsp;&nbsp;
-<a id=a href="$self?cmd=shuffle">Shuffle</a>
-</td>
-<td id=az>&nbsp;&nbsp;
-<a id=a href="$self?cmd=recent&days=7" target=bframe>Recent</a>
-</td>
+ <td id=az>&nbsp;&nbsp;
+   <a id=a href="$self?cmd=shuffle">Shuffle</a>
+ </td>
+ <td id=az>&nbsp;&nbsp;
+   <a id=a href="$self?cmd=recent&days=7" target=bframe>Recent</a>
+ </td>
+ <td id=az>&nbsp;&nbsp;
+   <a id=a target=_blank href="$self?cmd=maint">*</a>
+ </td>
+
 </tr></table>
 EOF
 }
@@ -291,8 +302,8 @@ EOF
 sub print_artistlist_table($$$$) {
 	my ($dbh, $session, $field, $val) = @_;
 
-	printf <<EOF, ucfirst($field) . ": $val";
-<center id=hdr>%s</center>
+	printf <<EOF, ucfirst($field), $val;
+<center id=hdr>Search %s: %s</center>
 <table border=0 cellspacing=0>
  <tr>
   <th>&nbsp;Artist&nbsp;</th>
@@ -609,7 +620,7 @@ sub printredirexit($$$) {
 # MAIN
 
 my $q = new CGI;
-$self = $q->url(-absolute=>1);
+$self = $q->script_name();
 my %args;
 foreach($q->param) { $args{$_} = $q->param($_); }
 
@@ -716,6 +727,14 @@ elsif($cmd eq 'changefile') {
  	printredirexit($q, 'edit', \%args);
 }
 
+if($cmd eq 'search') {
+	$args{$args{'stype'}} = $args{'sval'};
+	if($args{'stype'} eq 'artist') {
+		$cmd = 'artistlist';
+	} else {
+		$cmd = 'alllist';
+	}
+}
 
 
 if($cmd eq '') {
@@ -724,8 +743,9 @@ if($cmd eq '') {
 }
 elsif($cmd eq 'playlist') {
 	printhtmlhdr;
+	my $s = $q->url(-full=>1);
 	print <<EOF;
-<META HTTP-EQUIV="Refresh" CONTENT="$r;URL=$self?cmd=playlist&s=$args{'s'}">
+<META HTTP-EQUIV="Refresh" CONTENT="$r;URL=$s?cmd=playlist&s=$args{'s'}">
 EOF
 	printhdr($plstyle);
 	print $topwindow_title;
@@ -743,7 +763,6 @@ elsif($cmd eq 'artistlist') {
 elsif($cmd eq 'alllist') {
 	printhtmlhdr;
 	printhdr($allstyle);
-	$args{'f'} =~ /^\w*$/ or die;
 	my $q = "SELECT artist.name as artist,album.name as album,song.*," .
 		"song.artist_id as arid, song.album_id as alid" .
 		" FROM song,artist,album" .
@@ -752,33 +771,44 @@ elsif($cmd eq 'alllist') {
 	my $cap;
 	my $s = $args{'sort'};
 	$s =~ s/\W//g;
+	if($args{'any'}) {
+		$q .= " AND (artist.name REGEXP ? OR " .
+		            "title REGEXP ? OR " .
+		            "album.name REGEXP ?)";
+		$cap = "Search any: $args{'any'}";
+		$args{'any'} =~ s/[^-^\$_0-9a-z]+/.*/ig;
+		push @qa, $args{'any'};
+		push @qa, $args{'any'};
+		push @qa, $args{'any'};
+		$s = "artist.name" unless $s;
+	}
 	if($args{'artist'}) {
 		$q .= " AND artist.name REGEXP ?";
 		push @qa, $args{'artist'};
 		$qa[$#qa] =~ s/[^-^\$_0-9a-z]+/.*/ig;
 		$s = "artist.name" unless $s;
-		$cap = sprintf($args{'cap'}, $args{'artist'});
+		$cap = "Search Artist: $args{'artist'}";
 	}
 	if($args{'album'}) {
 		$q .= " AND album.name REGEXP ?";
 		push @qa, $args{'album'};
 		$qa[$#qa] =~ s/[^-^\$_0-9a-z]+/.*/ig;
 		$s = "album.name" unless $s;
-		$cap = sprintf($args{'cap'}, $args{'album'});
+		$cap = "Search Album: $args{'album'}";
 	}
 	if($args{'title'}) {
 		$q .= " AND title REGEXP ?";
 		push @qa, $args{'title'};
 		$qa[$#qa] =~ s/[^-^\$_0-9a-z]+/.*/ig;
 		$s = "title" unless $s;
-		$cap = sprintf($args{'cap'}, $args{'title'});
+		$cap = "Search Title: $args{'title'}";
 	}
 	if($args{'filename'}) {
 		$q .= " AND filename REGEXP ?";
 		push @qa, $args{'filename'};
 		$qa[$#qa] =~ s/[^-^\$_0-9a-z]+/.*/ig;
 		$s = "filename" unless $s;
-		$cap = sprintf($args{'cap'}, $args{'filename'});
+		$cap = "Search Filename: $args{'filename'}";
 	}
 
 	if($args{'artist_id'}) {
