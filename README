@@ -88,6 +88,7 @@ TODO:
 * synchronize update of statusfile with cdrplay
 * if currently playing song is missing from db, show "?" instead of nothing ->done
 * fix kill problem when player spawns children	   ->done
+* don't randomly select songs that were played less than min_random_time ago ->done
 
 $Id$
 

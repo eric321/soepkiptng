@@ -5,7 +5,7 @@
 # (c) copyright 2000 Eric Lammerts <eric@lammerts.org>
 #
 # loosely based on `mymusic' by "caffiend" <caffiend@atdot.org>
-# and `Soepkip' by Andre Pool <andre@scintilla.utwente.nl>
+# and `Radio Soepkip' by Andre Pool <andre@scintilla.utwente.nl>
 #
 # $Id$
 ############################################################################
@@ -183,6 +183,7 @@ for(;;) {
 		$songtype = 'R';
 		($song_id, $filename) = $dbh->selectrow_array(
 			"SELECT id,filename FROM songs " .
+			"WHERE unix_timestamp(now()) - unix_timestamp(last_played) > $min_random_time " .
 			"ORDER BY rand() LIMIT 1"
 		);
 		warn "playing random $filename\n";
@@ -193,6 +194,9 @@ for(;;) {
 		sleep 5;
 		next;
 	}
+
+	# update database
+	$dbh->do("UPDATE songs set last_played=NULL where id=$song_id");
 
 	# write to log file
 	logprintf("%s %6d %s", $songtype, $song_id, $filename);
