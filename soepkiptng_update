@@ -19,7 +19,30 @@
 # Boston, MA 02111-1307, USA.
 ############################################################################
 
-$configfile = "/etc/soepkiptng.conf";
+BEGIN {
+	$configfile = "/etc/soepkiptng.conf";
+
+	open F, $configfile or die "$configfile: $!\n";
+	while(<F>) {
+		/^#/ and next;
+		s/\s+$//;
+		/./ or next;
+		if(/^(\w+)\s*=\s*(.*?)\s*$/) {
+			$f = $1;
+			$conf{$f} = $2;
+		} elsif(/^\s+(.*?)\s*$/) {
+			# continuation line
+			$conf{$f} .= "\n$1";
+		} else {
+			die "$configfile line $.: invalid format\n";
+		}
+	}
+	close F;
+}
+
+$ENV{'PATH'} = "$conf{'progdir'}/bin:$ENV{'PATH'}";
+require "$conf{'progdir'}/soepkiptng.lib";
+use lib "$conf{'progdir'}/lib";
 
 use Cwd;
 use DBI;
@@ -41,7 +64,7 @@ if($@) {
 	$omitmp3info = 1;
 }
 
-use vars qw/$db_host $mp3dirs $db_name $opt_d $opt_e $opt_f $db_type $db_user $description_files $db_pass/;
+use vars qw/$opt_d $opt_e $opt_f $opt_r/;
 
 getopts('fred');
 $force = 1 if $opt_f;
@@ -51,29 +74,7 @@ $do_delete = !$opt_d && !$opt_r;
 # for the web interface (stupid browsers/users)
 $SIG{'PIPE'} = 'IGNORE';
 
-# read config file
-open F, $configfile
-	or die "$configfile: $!\n";
-while(<F>) {
-	/^#/ and next;
-	s/\s+$//;
-	/./ or next;
-	if(/^(\w+)\s*=\s*(.*?)\s*$/) {
-		$f = $1;
-		${$f} = $2;
-	} elsif(/^\s+(.*?)\s*$/) {
-		# continuation line
-		${$f} .= "\n$1";
-	} else {
-		die "$configfile line $.: invalid format\n";
-	}
-}
-close F;
-
-$ENV{'PATH'} = "$progdir/bin:$ENV{'PATH'}";
-require "$progdir/soepkiptng.lib";
-
-$dbh = DBI->connect("DBI:$db_type:$db_name:$db_host", $db_user, $db_pass)
+$dbh = DBI->connect("DBI:$conf{'db_type'}:$conf{'db_name'}:$conf{'db_host'}", $conf{'db_user'}, $conf{'db_pass'})
 	or die "can't connect to database";
 
 read_eric_files() unless $opt_e;
@@ -87,7 +88,7 @@ if($ARGV[0]) {
 } else {
 	$sth = $dbh->prepare("SELECT id,filename,unix_timestamp(last_played),unix_timestamp(time_added),present FROM song");
 	$sth->execute();
-	@paths = split /\s+/, $mp3dirs;
+	@paths = split /\s+/, $conf{'mp3dirs'};
 }
 while(($id, $f, $l, $t, $pres) = $sth->fetchrow_array) {
 	$filename{$f} = $id if $pres;
@@ -396,7 +397,7 @@ sub get_wav_params($;$) {
 
 
 sub read_eric_files() {
-	foreach $file (split /\s+/, $description_files) {
+	foreach $file (split /\s+/, $conf{'description_files'}) {
 		open ALB, $file or die "$file: $!\n";
 		while(<ALB>) {
 			/\S/ or do { $artist = $album = $dirname = ""; next; };

@@ -21,7 +21,30 @@
 
 # CONFIG
 
-$configfile = "/etc/soepkiptng.conf";
+BEGIN {
+	$configfile = "/etc/soepkiptng.conf";
+
+	open F, $configfile or die "$configfile: $!\n";
+	while(<F>) {
+		/^#/ and next;
+		s/\s+$//;
+		/./ or next;
+		if(/^(\w+)\s*=\s*(.*?)\s*$/) {
+			$f = $1;
+			$conf{$f} = $2;
+		} elsif(/^\s+(.*?)\s*$/) {
+			# continuation line
+			$conf{$f} .= "\n$1";
+		} else {
+			die "$configfile line $.: invalid format\n";
+		}
+	}
+	close F;
+}
+
+$ENV{'PATH'} = "$conf{'progdir'}/bin:$ENV{'PATH'}";
+require "$conf{'progdir'}/soepkiptng.lib";
+use lib "$conf{'progdir'}/lib";
 
 use Getopt::Std;
 use integer;
@@ -81,26 +104,6 @@ EOF
 }
 
 $cwd = cwd;
-
-open F, $configfile or die "$configfile: $!\n";
-while(<F>) {
-	/^#/ and next;
-	s/\s+$//;
-	/./ or next;
-	if(/^(\w+)\s*=\s*(.*?)\s*$/) {
-		$f = $1;
-		$conf{$f} = $2;
-	} elsif(/^\s+(.*?)\s*$/) {
-		# continuation line
-		$conf{$f} .= "\n$1";
-	} else {
-		die "$configfile line $.: invalid format\n";
-	}
-}
-close F;
-
-$ENV{'PATH'} = "$conf{'progdir'}/bin:$ENV{'PATH'}";
-require "$conf{'progdir'}/soepkiptng.lib";
 
 $| = 1;
 
