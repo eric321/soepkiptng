@@ -918,7 +918,7 @@ sub get_user($) {
 	}
 	if($host) {
 		$host =~ /^([-a-z0-9]*)/;
-		$user = ${"user_from_$1"} || ${"user_from_$host"} || $host;
+		$user = $conf{"user_from_$1"} || $conf{"user_from_$host"} || $host;
 	}
 	return $user;
 }
