@@ -1,4 +1,5 @@
 
+#include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -102,9 +103,18 @@ int readwavheader(FILE *fin, int *sfreq, int *channels, int *seconds)
 int main(int argc, char **argv)
 {
 	int fd[2], freq, chan, bytes, secs;
+	char c;
+	int info_only = 0;
 
-	if(argc < 2) {
-		fprintf(stderr, "usage: lpac2raw file [x]\n");
+	while((c = getopt(argc, argv, "i")) != EOF) {
+		switch(c) {
+			case 'i':
+				info_only = 1;
+				break;
+		}
+	}
+	if(optind != argc - 1) {
+		fprintf(stderr, "usage: lpac2raw [-i] file\n");
 		exit(1);
 	}
 
@@ -114,7 +124,7 @@ int main(int argc, char **argv)
 			dup2(fd[1], 1);
 			close(fd[0]);
 			close(fd[1]);
-			execlp("lpac", "lpac", "-x", argv[1], "/dev/fd/1", NULL);
+			execlp("lpac", "lpac", "-x", argv[optind], "/dev/fd/1", NULL);
 			perror("lpac");
 			exit(1);
 		case -1:
@@ -127,7 +137,7 @@ int main(int argc, char **argv)
 
 	bytes = readwavheader(stdin, &freq, &chan, &secs);
 	
-	if(argc > 2) {
+	if(info_only) {
 		printf("%d,%d,%d\n", freq, chan, secs);
 		exit(0);
 	}

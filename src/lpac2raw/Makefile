@@ -11,4 +11,5 @@ lpac2raw: lpac2raw.c
 install: lpac2raw
 	install lpac2raw /usr/local/bin
 
-
+clean:
+	-rm -rf lpac2raw *.o
