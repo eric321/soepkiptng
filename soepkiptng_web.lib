@@ -141,10 +141,10 @@ EOF
   <form id=search name=search action="$req->{self}" method=get target=bframe>
  <td id=az nowrap>&nbsp;&nbsp;Search:
 EOF
-	print <<EOF unless $req->{args}->{nofocus};
+	printf <<EOF, $req->{args}->{nofocus}? "":"document.search.sval.focus();";
   <script>
   <!--
-  function do_onload(){document.search.sval.focus();}
+  function do_onload(){%s}
   // -->
   </script>
 EOF
@@ -216,7 +216,7 @@ sub table_entry($$;$$$$) {
   <td %s>&nbsp;%s%s%s&nbsp;</td>
   <td %s>&nbsp;%s&nbsp;</td>
   <td %s>&nbsp;%s&nbsp;</td>
-  <td %s> %s %s</td>
+  <td %s nowrap> %s %s</td>
   %s
  </tr>
 EOF
@@ -309,7 +309,8 @@ sub print_playlist_table($) {
 		" AND song.artist_id=artist.id AND song.album_id=album.id" .
 		" AND song.id = queue.song_id ORDER BY queue.song_order";
 	my $sth = $req->{dbh}->prepare($query);
-	my $rv = $sth->execute;
+	my $rv = $sth->execute
+		or die "can't do sql command: " . $req->{dbh}->errstr;
 	my @ids;
 	my @records;
 	while($_ = $sth->fetchrow_hashref) {
@@ -439,7 +440,8 @@ sub print_seealso_row($$) {
 		"  seealso.id2=song.artist_id AND song.present) ".
 		" GROUP BY id1, id2, artist ORDER BY artist";
 	my $sth = $req->{dbh}->prepare($query);
-	$sth->execute($artistid, $artistid);
+	$sth->execute($artistid, $artistid)
+		or die "can't do sql command: " . $req->{dbh}->errstr;
 	my %seealso;
 	my @ids;
 	while($_ = $sth->fetchrow_hashref()) {
@@ -474,7 +476,8 @@ sub print_albums_row($$$$;$) {
 		" AND filename LIKE '/%'".
 		" GROUP BY album ORDER BY album";
 	$sth = $req->{dbh}->prepare($query);
-	$sth->execute($artistid);
+	$sth->execute($artistid)
+		or die "can't do sql command: " . $req->{dbh}->errstr;
 
 	my $albumlist = $sth->fetchall_arrayref({});
 	if(@$albumlist == 0) {
@@ -595,7 +598,7 @@ $output
 <tr><td colspan=7>$res search results$limitstr, total time: $totaltime</td></tr>
 EOF
 	(my $f = $caption) =~ s/^\w+:\s*//;
-	$f =~ s~(/|\\|:|;)+~_~g;
+	$f =~ s~(/|\\|:|;|")+~_~g;
 	($f = "$req->{self}/$f.tar") =~ s|//+|/|g;
 	print <<EOF if $ids;
 <tr><td colspan=7><a href="$f?cmd=downloadset&ids=$ids">download all as tar</a></td></tr>
@@ -634,7 +637,8 @@ sub print_edit_page($) {
 		" unix_timestamp(time_added) as ta" .
 		" FROM song,artist,album WHERE song.id=$req->{args}->{id}" .
 		" AND song.artist_id=artist.id AND song.album_id=album.id");
-	$sth->execute();
+	$sth->execute()
+		or die "can't do sql command: " . $req->{dbh}->errstr;
 	$_ = $sth->fetchrow_hashref()
 		or die sprintf <<EOF,
 id %d not found.<br>
@@ -968,7 +972,8 @@ sub print_lyrics_page($) {
 		"LEFT JOIN artist ON artist.id=song.artist_id " . 
 		"LEFT JOIN lyrics ON lyrics.id=song.id " .
 		"WHERE song.id=$req->{args}->{id}");
-	$sth->execute();
+	$sth->execute()
+		or die "can't do sql command: " . $req->{dbh}->errstr;
 	my $f = $sth->fetchrow_hashref() or die "id $req->{args}->{id} not found.\n";
 
 	my $downloaded;
@@ -1127,7 +1132,8 @@ EOF
 
 	my $sth = $req->{dbh}->prepare("SELECT id,filename,title FROM song WHERE " .
 		"filename LIKE 'http:%' ORDER BY title");
-	$sth->execute;
+	$sth->execute
+		or die "can't do sql command: " . $req->{dbh}->errstr;
 
 	my ($editurl, $editname);
 	while($_ = $sth->fetchrow_hashref) {
@@ -1214,7 +1220,8 @@ WHERE list.id AND (song.present OR song.present IS NULL)
 GROUP BY list.id
 ORDER BY list.name
 EOF
-	$sth->execute;
+	$sth->execute()
+		or die "can't do sql command: " . $req->{dbh}->errstr;
 	while(my $d = $sth->fetchrow_hashref) {
 		printf <<EOF,
  <tr>
