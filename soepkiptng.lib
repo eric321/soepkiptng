@@ -163,7 +163,7 @@ sub string_to_filename($) {
 	my ($a) = @_;
 
 	$a =~ s/-/_/g;
-	$a =~ s/[\[(](.*)/-\1/;
+	$a =~ s/[\[(](.*)/-$1/;
 	$a =~ s/[ _]?&[_ ]?/_and_/;
 	$a =~ s/([\x80-\xff])/lc($latin9_to_ascii{ord($1)}) || $1/ge;
 	$a =~ s/[^-A-Za-z0-9]+/_/g;
