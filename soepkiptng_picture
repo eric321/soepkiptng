@@ -1,0 +1,90 @@
+#!/usr/bin/perl
+############################################################################
+# soepkiptng (c) copyright 2000 Eric Lammerts <eric@lammerts.org>.
+# $Id$
+############################################################################
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License, version 2, as 
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# A copy of the GNU General Public License is available on the World Wide Web
+# at `http://www.gnu.org/copyleft/gpl.html'.  You can also obtain it by
+# writing to the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+# Boston, MA 02111-1307, USA.
+############################################################################
+
+# CONFIG
+
+$configfile = "/etc/soepkiptng.conf";
+
+open F, $configfile or die "$configfile: $!\n";
+while(<F>) {
+	/^#/ and next;
+	s/\s+$//;
+	/./ or next;
+	if(/^(\w+)\s*=\s*(.*?)\s*$/) {
+		$f = $1;
+		$conf{$f} = $2;
+	} elsif(/^\s+(.*?)\s*$/) {
+		# continuation line
+		$conf{$f} .= "\n$1";
+	} else {
+		die "$configfile line $.: invalid format\n";
+	}
+}
+close F;
+
+
+require "$conf{progdir}/soepkiptng.lib";
+
+$SIG{'HUP'} = sub {
+	exec $0;
+	die;
+};
+
+for(;;) {
+	my $newmtime = (stat $conf{statusfile})[9];
+
+	if($newmtime == $mtime) { sleep 1; next; }
+
+	open F, $conf{statusfile} or next;
+	$mtime = $newmtime;
+
+	my ($nowplaying, $filename);
+	chop($nowplaying = <F>);
+	chop($filename = <F>);
+	<F>;
+	$playerpid = 0 + <F>;
+	chop ((undef, undef, undef, undef,
+	    $now_playing->{artist},
+	    $now_playing->{title},
+	    $now_playing->{album},
+	    $now_playing->{track}) = <F>);
+	close F;
+
+	$nowplaying > 0 or next;
+
+	# get dir
+	$filename =~ s|/*[^/]+$||;
+	$filename =~ s|.*/|$conf{progdir}/pictures/|;
+
+	my $pic = "";
+	foreach(qw/gif jpg jpeg/) {
+		if(-e "$filename.$_") {
+			$pic = "$filename.$_";
+			last;
+		}
+	}
+
+	if($pic) {
+		system qw/xloadimage -onroot -fullscreen -border black/, $pic;
+	} else {
+		warn "$filename not found\n";
+		system "xsetroot -solid black";
+	}
+}
