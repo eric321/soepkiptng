@@ -463,7 +463,7 @@ elsif($cmd eq 'maint') {
 	printhdr($slstyle);
 	print <<EOF;
 <a href="$self?cmd=update">Quick update</a> (leave existing files alone).<br>
-<a href="$self?cmd=update&args=force">Full update</a> (re-enter info for existing files).<br>
+<a href="$self?cmd=update&args=-f">Full update</a> (re-enter info for existing files).<br>
 EOF
 	printftr;
 }

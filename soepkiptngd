@@ -205,14 +205,13 @@ EOF
 	if(($pid = fork) == 0) {
 		$SIG{'PIPE'} = 'DEFAULT';
 		if($ext eq "mp2" || $ext eq "mp3") {
-			exec "splay", "-d", "-", $filename;
+			exec "mp3toraw", $filename;
 		} elsif($ext eq "ogg") {
 			exec "ogg2raw", $filename;
 		} elsif($ext eq "wav") {
 			exec "splay", "-d", "-", $filename;
 		} elsif($ext eq "pac") {
-			open STDOUT, "|splay -d - -W";
-			exec "lpac", "-x", $filename, "/dev/fd/1";
+			exec "lpac2raw", $filename;
 		} else {
 			warn "no player for .$ext files.\n";
 		}

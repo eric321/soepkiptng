@@ -21,7 +21,9 @@
 
 $configfile = "/etc/soepkiptng.conf";
 
+use Cwd;
 use DBI;
+use Getopt::Std;
 
 # optional
 eval "use MPEG::MP3Info;";
@@ -30,7 +32,8 @@ if($@) {
 	$omitmp3info = 1;
 }
 
-$force = 1 if $ARGV[0] eq "force";
+getopts('f');
+$force = 1 if $opt_f;
 $| = 1;
 
 # for the web interface (stupid browsers/users)
@@ -63,15 +66,24 @@ $dbh = DBI->connect("DBI:$db_type:$db_name:$db_host", $db_user, $db_pass)
 read_eric_files();
 
 # get existing filenames in database
-$sth = $dbh->prepare("SELECT filename FROM songs");
-$sth->execute();
+if($ARGV[0]) {
+	$paths[0] = $ARGV[0];
+	$paths[0] =~ s|^([^/])|cwd . "/$1"|e;
+	$paths[0] =~ s|/\./*$||;
+	$sth = $dbh->prepare("SELECT filename FROM songs WHERE filename LIKE ?");
+	$sth->execute("$paths[0]/%");
+} else {
+	$sth = $dbh->prepare("SELECT filename FROM songs");
+	$sth->execute();
+	@paths = split /\s+/, $mp3dirs;
+}
 while(($_) = $sth->fetchrow_array) {
 	$filename{$_} = 1;
 }
 
 # scan mp3 directories
 if(open(FILES, "-|") == 0) {
-	exec 'find', split(/\s+/, $mp3dirs), '-type' , 'f', '-print0';
+	exec 'find', @paths, '-type' , 'f', '-print0';
 	die "find: $!\n";
 }
 $/ = "\0";
@@ -212,7 +224,13 @@ sub getinfo_wav($) {
 sub getinfo_pac($) {
 	$_[0] =~ /\.pac$/i
 		or return undef;
-	return ("LPAC", get_wav_params($_[0], 14));
+	if(open(F, "-|") == 0) {
+		exec "lpac2raw", $_[0], 1;
+		die;
+	}
+	my ($sfreq, $chan, $sec) = split(/,/, <F>);
+	close F;
+	return ("LPAC", 0 + $sec, $sfreq / 1000, 0 + $chan);
 }
 
 
