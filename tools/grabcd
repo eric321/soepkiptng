@@ -283,7 +283,7 @@ title %s
 year %s
 dirname %s
 dirsize ?
-ripdate
+ripdate %s
 EOF
 		$origcdartist, $origtitle, $year, $dirname,
 		strftime("%Y-%m-%d", localtime)
