@@ -85,6 +85,7 @@ CREATE TABLE sessions (
 
 CREATE TABLE lyrics (
   id int(11) NOT NULL,
+  language char(3),
   lyrics mediumblob,
   source blob,
   PRIMARY KEY (id)

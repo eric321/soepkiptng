@@ -863,8 +863,9 @@ sub print_lyrics_page($$) {
 		$argsref->{lyrics} = $argsref->{source} = "";
 	}
 	if($argsref->{update}) {
-		$dbh->do("REPLACE INTO lyrics SET id=?, source=?, lyrics=?",
-			undef, $argsref->{id}, $argsref->{source}, $argsref->{lyrics})
+		$dbh->do("REPLACE INTO lyrics SET id=?, source=?, language=?, lyrics=?",
+			undef, $argsref->{id}, $argsref->{source},
+			$argsref->{language}, $argsref->{lyrics})
 			or die;
 	}
 
@@ -877,34 +878,35 @@ sub print_lyrics_page($$) {
 	my $sth = $dbh->prepare(
 		"SELECT song.id, title, song.track, album.name as album, " .
 		"artist.name as artist, lyrics.lyrics as lyrics, " .
-		"lyrics.source as source FROM song " .
+		"lyrics.language as language, lyrics.source as source FROM song " .
 		"LEFT JOIN album ON album.id=song.album_id " .
 		"LEFT JOIN artist ON artist.id=song.artist_id " . 
 		"LEFT JOIN lyrics ON lyrics.id=song.id " .
 		"WHERE song.id=$argsref->{id}");
 	$sth->execute();
-	$_ = $sth->fetchrow_hashref() or die "id $argsref->{id} not found.\n";
+	my $f = $sth->fetchrow_hashref() or die "id $argsref->{id} not found.\n";
 
 	my $downloaded;
-	if($_->{lyrics} eq "" && !$argsref->{action_clear}) {
-		getlyrics($_);
-		if($_->{lyrics} eq "") { getlyrics($_, 2); }
-		if($_->{lyrics} eq "") { getlyrics($_, 3); }
+	if($f->{lyrics} eq "" && !$argsref->{action_clear}) {
+		getlyrics($f);
+		if($f->{lyrics} eq "") { getlyrics($f, 2); }
+		if($f->{lyrics} eq "") { getlyrics($f, 3); }
 
 		$downloaded = "<tr><td colspan=2><b>(";
-		if($_->{lyrics} eq "") {
+		if($f->{lyrics} eq "") {
 			$downloaded .= "No lyrics found";
 		} else {
 			$downloaded .= sprintf "Downloaded lyrics from <a href=\"%s\">%s</a>",
-				$_->{source}, enchtml($_->{source});
+				$f->{source}, enchtml($f->{source});
 		}
 		$downloaded .= ")</b></td></tr>";
+		$f->{language} = "eng";
 	}
 
 	my $i = 0;
 	my @ids = ids_decode($argsref->{ids});
 	foreach(@ids) {
-		last if $_ == $argsref->{id};
+		last if $f == $argsref->{id};
 		$i++;
 	}
 	my $prev = '&nbsp;&nbsp;&nbsp;&nbsp;';
@@ -921,11 +923,11 @@ sub print_lyrics_page($$) {
 		$next = "<input type=submit name=go_$ids[$#ids] value=Next disabled>";
 	}
 
-#	my $rows = 1 + $_->{lyrics} =~ tr/\n/\n/;
+#	my $rows = 1 + $f->{lyrics} =~ tr/\n/\n/;
 #	if($rows == 1) { $rows = 30; }
 	$rows = 30;
 
-	my $source = $_->{source};
+	my $source = $f->{source};
 	$source =~ s/\s.*//;
 	if($source =~ /^(ftp|http):/) {
 		$source = "<a href=\"$source\" target=_blank>Open page</a>";
@@ -950,6 +952,10 @@ sub print_lyrics_page($$) {
   <td>Source:</td>
   <td><input type=text name=source size=74 value="%s">%s</td>
  </tr>
+ <tr>
+  <td>Language:</td>
+  <td><select name=language>%s</select></td></tr>
+ </tr>
  <tr><td colspan=2><textarea name=lyrics cols=80 rows=%d>%s</textarea></td></tr>
  <tr>
   <td colspan=2>%s %s
@@ -966,10 +972,16 @@ sub print_lyrics_page($$) {
 </form>
 EOF
 		$self, $argsref->{id}, $argsref->{ids}, $downloaded,
-		enchtml($_->{artist}), enchtml($_->{title}),
-		enchtml($_->{album}), $_->{track}? $_->{track} : "",
-		enchtml($_->{source}), $source,
-		$rows, enchtml($_->{lyrics}),
+		enchtml($f->{artist}), enchtml($f->{title}),
+		enchtml($f->{album}), $f->{track}? $f->{track} : "",
+		enchtml($f->{source}), $source,
+		join("\n", map { sprintf "<option value=\"%s\"%s>%s</option>",
+				$_, $_ eq $f->{language}? " selected":"",
+				$_? "$iso_639_2{$_} ($_)" : "-------";
+			} (qw/eng dut ger fre esl ita/, '',
+				sort { lc($iso_639_2{$a}) cmp lc($iso_639_2{$b}) }
+				grep { ! /^(eng|dut|ger|fre|esl|ita)$/ } keys %iso_639_2)),
+		$rows, enchtml($f->{lyrics}),
 		$prev, $next;
 }
 
