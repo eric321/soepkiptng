@@ -146,25 +146,30 @@ EOF
 	# close accepted socket after statusfile was updated
 	if($closebla) { close BLA; }
 
-	# get player
+	# get file type
 	$filename =~ /([^.]*)$/;
-	$ext = $1;
-	$player = ${"player_$ext"} or do {
-		warn "no player for .$ext files found.\n";
-		next;
-	};
-	$player =~ s/%s/$filename/g;
+	$ext = lc($1);
 
 	# launch player
 	$starttime = time;
 	if($debug) {
 		($a, $b, $c, $d) = times;
 		$childtime = $c + $d;
-		warn "launching player: $player\n";
 	}
 	if(($pid = fork) == 0) {
-		exec $player;
-		die;
+		if($ext eq "mp2" || $ext eq "mp3") {
+			exec "splay", "-d", "-", $filename;
+		} elsif($ext eq "ogg") {
+			exec "ogg2raw", $filename;
+		} elsif($ext eq "wav") {
+			exec "splay", "-d", "-", $filename;
+		} elsif($ext eq "pac") {
+			open STDOUT, "|splay -d - -W";
+			exec "lpac", "-x", $filename, "/dev/fd/1";
+		} else {
+			warn "no player for .$ext files.\n";
+		}
+		die "exec failed";
 	}
 	warn "pid=$pid\n" if $debug;
 

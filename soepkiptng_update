@@ -185,7 +185,7 @@ while(<FILES>) {
 	$album or $album = "";
 
 	if($ext eq 'mp3') {
-		my $info = get_mp3info("$_.mp3");
+		my $info = get_mp3info("$_.$ext");
 		$length = $info->{MM} * 60 + $info->{SS};
 		$encoding = sprintf "MP3 %dkb/s", $info->{BITRATE};
 		if($info->{FREQUENCY}  < 44 || $info->{FREQUENCY} > 45) {
@@ -194,6 +194,21 @@ while(<FILES>) {
 			$encoding .= ", ${s}kHz";
 		}
 		$encoding .= " mono" if !$info->{STEREO};
+	} elsif($ext eq 'ogg') {
+		if(open(F, "-|") == 0) {
+			exec "ogg2raw", "$_.$ext", 1;
+			die;
+		}
+		my ($sfreq, $chan, $sec) = split(/,/, <F>);
+		$length = $sec;
+		close F;
+		$encoding = "Ogg-Vorbis";
+		if($sfreq != 44100) {
+			my $s = sprintf "%f", $sfreq / 1000;
+			$s =~ s/\.?0+$//;
+			$encoding .= ", ${s}kHz";
+		}		
+		$encoding .= " mono" if $chan == 1;
 	} elsif($ext eq 'wav') {
 		my ($sfreq, $chan, $sec) = get_wav_params("$_.$ext");
 		$length = $sec;
@@ -214,9 +229,6 @@ while(<FILES>) {
 			$encoding .= ", ${s}kHz";
 		}		
 		$encoding .= " mono" if $chan == 1;
-	} elsif($ext eq 'ogg') {
-		$length = 0;
-		$encoding = "Ogg-Vorbis";
 	} else {
 		$length = 0;
 		$encoding = "unknown";
