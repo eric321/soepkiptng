@@ -575,7 +575,7 @@ function verifydelete() {
    return confirm("Are you sure you want to delete this file?");
 }
 function verifyall() {
-   return confirm("Are you sure you want to apply this value to the entire list?");
+   return confirm("Are you sure you want to apply this value to the entire list (%d entries)?");
 }
 function closethis() {
    window.close(self);
@@ -655,7 +655,7 @@ EOF
 	$f =~ s|\\|_|g;
 	$f = encurl($f);
 	$_->{filename} =~ m|^(.*)/(.*?)$|;
-	printf $fmt, $self, $$argsref{'id'}, $$argsref{'ids'},
+	printf $fmt, $#ids + 1, $self, $$argsref{'id'}, $$argsref{'ids'},
 		$_->{present}? "Yes" : "No",
 		enchtml($_->{artist}),
 		enchtml($_->{title}),
