@@ -84,9 +84,9 @@ if(@ARGV) {
 	$id = `cd-discid $dev 2>/dev/null`;
 	$id =~ s/^\s*(\w+).*/\1/s;
 	if($id) {
-		if(! -s "$ENV{'HOME'}/.grabids/$id") {
-			open F, ">$ENV{'HOME'}/.grabids/$id"
-				or die "$ENV{'HOME'}/.grabids/$id: $!\n";
+		if(! -s "$ENV{HOME}/.grabids/$id") {
+			open F, ">$ENV{HOME}/.grabids/$id"
+				or die "$ENV{HOME}/.grabids/$id: $!\n";
 
 			use FreeDB::FreeDB;
 			use Cwd;
@@ -109,10 +109,10 @@ if(@ARGV) {
 			}
 		}
 
-		system $ENV{'EDITOR'} || 'joe', "$ENV{'HOME'}/.grabids/$id";
+		system $ENV{EDITOR} || 'joe', "$ENV{HOME}/.grabids/$id";
 
-		open F, "$ENV{'HOME'}/.grabids/$id"
-			or die "$ENV{'HOME'}/.grabids/$id: $!\n";
+		open F, "$ENV{HOME}/.grabids/$id"
+			or die "$ENV{HOME}/.grabids/$id: $!\n";
 	} else {
 		die "no cddbid found on disc\n";
 	}
