@@ -1,0 +1,36 @@
+#!/usr/bin/perl
+
+$^F = 1024;	# raise limit for non-close-on-exec fd's
+open F, $ARGV[0] or die "$ARGV[0]: $!\n";
+$^F = 2;
+
+for($i = 0; $i < 100; $i++) {
+	$tmpdir = "/tmp/mplayer.$$.audiodump.$i";
+	mkdir $tmpdir and last;
+}
+$i < 100 or die "$tmpdir: $!\n";
+
+chdir $tmpdir or die "chdir $tmpdir: $!\n";
+system "mkfifo", "audiodump.pcm";
+if($?) { die "mkfifo audiodump.pcm: $!\n"; }
+
+if(($pid = fork) == 0) {
+	# protect us from being killed -9 by soepkiptngd
+	# so we can clean up the tmpdir
+	setpgrp;
+	system "cat", "audiodump.pcm";
+	exit;
+}
+
+open STDIN, "/dev/null";
+open STDOUT, ">&STDERR";
+
+system qw"mplayer -ao pcm -nowaveheader -vc dummy -vo null", "/dev/fd/" . fileno(F);
+
+kill 9, -$pid;
+
+END {
+	unlink "audiodump.pcm";
+	chdir "/";
+	rmdir $tmpdir;
+}
