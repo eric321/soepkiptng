@@ -388,8 +388,8 @@ sub print_albums_row($$$$$) {
 		print "See Also: ";
 		foreach(@ids) {
 			print ",&nbsp; " unless $_ == $ids[0];
-			print qq|<a id=a href="$self?cmd=seealso&artist_id=$_&cap=|.
-				encurl("Artist: $seealso{$_}") . qq|">$seealso{$_}</a>|;
+			printf qq|<a id=a href="%s?cmd=alllist&artist_id=%s&album=%s&cap=%s">$seealso{$_}</a>|,
+				$self, $_, encurl('^$'), encurl("Artist: $seealso{$_}; Album: ^\$");
 		}
 		print ".<br>\n";
 	}
@@ -1259,20 +1259,6 @@ EOF
 			print "Error: No search terms specified.\n";
 		}
 	#	printf "[[%s]]\n", $bla;
-		printftr;
-	}
-	elsif($cmd eq 'seealso') {
-		printhtmlhdr;
-		printhdr($conf{allstyle});
-		print <<EOF;
-<center id=hdr>$args{cap}</center>
-EOF
-		my $baseurl = "$self?";
-		foreach(keys %args) {
-			next if $_ eq "cmd";
-			$baseurl .= "$_=" . encurl($args{$_}) . "&";
-		}
-		print_albums_row($dbh, $baseurl, \%args, $args{cap}, $args{artist_id});
 		printftr;
 	}
 	elsif($cmd eq 'sql') {
