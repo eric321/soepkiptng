@@ -343,7 +343,7 @@ EOF
 		$killline = table_entry($_,
 			sprintf(qq|<a id=a href="%s?cmd=kill&id=%s">%s</a>|,
 			$self, $_->{id}, $killtext), undef,
-			ids_encode(@ids), $nowuser? "<td>&nbsp;($nowuser)</td>":"");
+			ids_encode(@ids), ($show_user && $nowuser)? "<td>&nbsp;($nowuser)</td>":"");
 	}
 
 	my $ids = ids_encode(@ids);
@@ -362,7 +362,9 @@ EOF
 			qq|<a id=a href="%s?cmd=del&ids=%s">%s</a> | .
 			qq|<a id=a href="%s?cmd=up&id=%s">%s</a>|,
 			$self, $_->{id}, $deltext, $self, $_->{id}, $uptext),
-			undef, $ids, $_->{user}? "<td>&nbsp;(".$_->{user}.")</td>":"") } @records);
+			undef, $ids,
+			($show_user && $_->{user})? "<td>&nbsp;(".$_->{user}.")</td>":"")
+			} @records);
 }
 
 sub print_artistlist_table($$$@) {
