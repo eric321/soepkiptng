@@ -108,13 +108,15 @@ Installation:
   background. Debugging output is then sent to
   /var/local/soepkiptng/soepkiptng.err, which is automatically
   rotated if the size reaches 64Kbyte. Make sure file permissions
-  in /var/local/soepkiptngd are OK. If you sometimes run soepkiptngd as root
+  in /var/local/soepkiptng are OK. If you sometimes run soepkiptngd as root
   and sometimes as non-root you can expect problems.
  
 
 TODO:
 -----
-* clean up Shoutcast support
+* 'see also' feature for related artists
+* clean up Shoutcast support (separate table, multiple urls per name with
+  automatic fallback)
 * lirc support (IR remote)
 * play directly from urls
 * playlists/genres
@@ -124,15 +126,13 @@ TODO:
 * message input that will be played using a text-to-speech program
 * user-level access control (limit access to database editing / song requests)
 * improve docs
-* put support programs (the ones marked with (*)) in soepkiptng tree
 * make music format more modular; maybe support xmms plugins
 * silence before random songs
 * fade-out/fade-in in pause/resume
 * release of /dev/dsp during pause
 * cleanup Xing VBR info detection (it's a quick hack now)
 * scan VBR mp3s without Xing VBR header for length
-* soepkiptng_write_id3v2: put length in id3 info for VBR mp3s
-* ogg-vorbis embedded songinfo support (reading/writing)
+* Ogg-Vorbis embedded songinfo support (reading/writing)
 * cleanup resampling & mono->stereo conversion
 * smooth transition between 2 songs (interpolation)
 * id3/id3v2 support for flac
