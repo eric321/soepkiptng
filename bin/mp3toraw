@@ -1,24 +1,3 @@
-#!/usr/bin/perl
+#!/bin/sh
 
-use MPEG::MP3Info;
-use Data::Dumper;
-
-$_ = get_mp3info($ARGV[0]);
-#warn Dumper($_);
-
-open STDERR, ">/dev/null";
-
-if(abs($_->{FREQUENCY} - 44.1) > 0.1) {
-	$sfreq_from = int($_->{FREQUENCY} * 1000 + 0.5);
-	if($sfreq_from) {
-		open STDOUT, "|resample $sfreq_from 44100";
-	}
-}
-
-@opts = ('-SQoraw:-');
-
-# check if the --ignore-crc option is supported
-# madplay versions prior to 0.14.2b don't have it
-push @opts, "--ignore-crc" if `madplay -h 2>&1 |grep -- --ignore-crc`;
-
-exec 'madplay', @opts, $ARGV[0];
+madplay -SQoraw:- -R44100 "$1" 2>/dev/null

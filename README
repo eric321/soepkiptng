@@ -67,7 +67,7 @@ Requirements:
   - FreeDB (optional)
 * programs for decoding the various sound formats:
   - mp3: requires madplay (http://www.mars.org/home/rob/proj/mpeg/
-    version >= 0.14.2b recommended)
+    version >= 0.15.0 required)
   - wav: requires sox (http://sox.sourceforge.net/)
   - lpac:
     LPAC is a non-free lossless compression algorithm. You can get a linux
@@ -99,7 +99,7 @@ Package list:
 - flac                    (optional; for flac support; >= 1.04 required)
 - libcompress-zlib-perl
 - libdbd-mysql-perl
-- libmpeg-mp3info-perl
+- libmpeg-mp3info-perl or libmp3-info-perl
 - libterm-readkey-perl    (optional)
 - libvorbis-dev           (for Ogg-Vorbis support)
 - madplay                 (for mp3 support)
