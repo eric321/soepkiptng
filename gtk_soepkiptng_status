@@ -97,7 +97,7 @@ my $label2 = new Gtk::Label("");
 $button_pause = Gtk::Widget->new("GtkButton",
  -label   => "Pause",
  -border_width => 1,
- -clicked => sub { pause(); },
+ -clicked => sub { player_cmd("pausetoggle"); },
  -visible=>1,
 );
 
