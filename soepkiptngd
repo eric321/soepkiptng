@@ -223,7 +223,7 @@ for(;;) {
 			"unix_timestamp(now()) - unix_timestamp(last_played) > $min_random_time " .
 			"ORDER BY rand() LIMIT 1"
 		);
-		warn "get recent song: song_id='$song_id'\n";
+		warn "playing recent $filename\n";
 	}
 
 	#  if no recent song found, get normal random song
