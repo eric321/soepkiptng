@@ -51,33 +51,6 @@ BEGIN {
 ############################################################################
 # SUBROUTINES
 
-sub encurl($) {
-	my ($a) = @_;
-
-	$a =~ s|([^-./\w])|sprintf "%%%02x", ord($1)|ge;
-#	$a =~ s| |+|g;
-	$a;
-}
-
-sub decode($) {
-	my ($a) = @_;
-
-	$a =~ s|\+| |g;
-	$a =~ s|%([0-9a-f][0-9a-f])|chr(hex($1))|ge;
-	$a;
-}
-
-sub enchtml($;$) {
-	my ($a, $nbsp) = @_;
-
-	$a =~ s|&|&amp;|g;
-	$a =~ s|"|&quot;|g;
-	$a =~ s|<|&lt;|g;
-	$a =~ s|>|&gt;|g;
-	$a =~ s| |&nbsp;|g if $nbsp;
-	$a;
-}
-
 sub can_delete($) {
 	my ($file) = @_;
 
@@ -116,16 +89,14 @@ sub print_az_table($$) {
 			$_->{id} == $$session{'editlist'}? " selected":"", $_->{name});
 	}
 
-
-	print <<EOF;
+	printf <<EOF, $self, $self, $artistlistcmd, encurl("^[^a-zA-Z]");
 <table cellpadding=0 cellspacing=0><tr><td id=az nowrap>
-<a id=a href="$self?cmd=playlist">Refresh</a>&nbsp;&nbsp;
+<a id=a href="%s?cmd=playlist">Refresh</a>&nbsp;&nbsp;
+<a id=a href="%s?cmd=%s&artist=%s" target=bframe>0-9</a>&nbsp;
 EOF
-	$_ = encurl("^[^a-zA-Z]");
-	print qq|<a id=a href="$self?cmd=$artistlistcmd&artist=$_" target=bframe>0-9</a>&nbsp;|;
 	foreach('A'..'Z') {
-		my $e = encurl("^$_");
-		print qq|<a id=a href="$self?cmd=$artistlistcmd&artist=$e" target=bframe>$_</a>&nbsp;|;
+		printf qq|<a id=a href="%s?cmd=%s&artist=%s" target=bframe>%s</a>&nbsp;|,
+			$self, $artistlistcmd, encurl("^$_"), $_;
 	}
 	my $sz = $searchformsize || 10;
 	print <<EOF;
@@ -210,30 +181,29 @@ $editlistopts
 EOF
 }
 
-
-sub get_playlist_table_entry($$$$$) {
-	my $l = sprintf "%d:%02d", $_[4]->{length} / 60, $_[4]->{length} % 60;
-	my $e = $_[4]->{encoding};
-	$e =~ s/ /&nbsp;/g;
-	my $tr = $_[4]->{track} || "";
-	$tr .= "." if $tr;
-	my $edittarget = $edit_target || 'bframe';
+sub table_entry($;$$) {
+	my ($q, $col1, $title_href) = @_;
 	my $fmt = <<EOF;
  <tr>
-  <td $td_left>&nbsp;<a id=a href="%s">%s</a> <a id=a href="%s">%s</a>&nbsp;</td>
-  <td $td_artist>&nbsp;<a href="$self?cmd=alllist&artist_id=$_[4]->{arid}&cap=%s" target=bframe>%s</a>&nbsp;</td>
-  <td $td_album>&nbsp;<a href="$self?cmd=alllist&album_id=$_[4]->{alid}&cap=%s" target=bframe>%s</a>&nbsp;</td>
-  <td $td_track>&nbsp;%s&nbsp;</td>
-  <td $td_song>&nbsp;%s&nbsp;</td>
-  <td $td_time>&nbsp;%s&nbsp;</td>
-  <td $td_enc>&nbsp;%s&nbsp;</td>
-  <td $td_edit>&nbsp;<a id=a href="$self?cmd=edit&id=%d" target=$edittarget>*</a></td>
+  <td %s>&nbsp;%s&nbsp;</td>
+  <td %s>&nbsp;<a id=a href="%s?cmd=alllist&artist_id=%s&cap=%s" target=bframe>%s</a>&nbsp;</td>
+  <td %s>&nbsp;<a id=a href="%s?cmd=alllist&album_id=%s&cap=%s" target=bframe>%s</a>&nbsp;</td>
+  <td %s>&nbsp;%s&nbsp;</td>
+  <td %s>&nbsp;%s%s%s&nbsp;</td>
+  <td %s>&nbsp;%d:%02d&nbsp;</td>
+  <td %s>&nbsp;%s&nbsp;</td>
+  <td %s> <a id=a href="%s?cmd=edit&id=%d" title="Edit" target=%s>*</a>%s</td>
  </tr>
 EOF
-	return sprintf $fmt, $_[0], $_[1], $_[2], $_[3],
-		encurl("Artist: $_[4]->{artist}"), $_[4]->{artist},
-		encurl("Album: $_[4]->{album}"), $_[4]->{album},
-		$tr, $_[4]->{title}, $l, $e, $_[4]->{id};
+	return sprintf $fmt, 
+		$td_left, $col1,
+		$td_artist, $self, $q->{arid}, encurl("Artist: $q->{artist}"), enchtml($q->{artist}),
+		$td_album, $self, $q->{alid}, encurl("Artist: $q->{album}"), enchtml($q->{album}),
+		$td_track, $q->{track}? "$q->{track}." : "",
+		$td_song, $title_href, enchtml($q->{title}), $title_href? "</a>":"",
+		$td_time, $q->{length} / 60, $q->{length} % 60,
+		$td_enc, enchtml($q->{encoding}, 1),
+		$td_edit, $self, $q->{id}, $edit_target || 'bframe', $listch;
 }
 
 sub print_playlist_table($$) {
@@ -269,8 +239,9 @@ sub print_playlist_table($$) {
 			$_->{length} = 0;
 			$_->{encoding} = '?';
 		};
-		$output .= get_playlist_table_entry
-			"$self?cmd=kill", $killtext, "", "", $_;
+		my $col1 = sprintf(qq|<a id=a href="%s?cmd=kill&id=%s">%s</a>|,
+			$self, $_->{id}, $killtext);
+		$output .= table_entry($_, $col1);
 	}
 
 	$query =  "SELECT title,artist.name as artist,album.name as album,song.id as id,track,length,encoding," .
@@ -284,14 +255,15 @@ sub print_playlist_table($$) {
 	while($_ = $sth->fetchrow_hashref) {
 #		next if $_->{id} == $nowplaying;
 		push @ids, $_->{id};
-		$output .= get_playlist_table_entry
-			"$self?cmd=del&id=$_->{id}", $deltext,
-			"$self?cmd=up&id=$_->{id}", $uptext,
-			$_;
+		my $col1 = sprintf(
+			qq|<a id=a href="%s?cmd=del&id=%s">%s</a> | .
+			qq|<a id=a href="%s?cmd=up&id=%s">%s</a>|,
+			$self, $_->{id}, $deltext, $self, $_->{id}, $uptext);
+		$output .= table_entry($_, $col1);
 	}
 	if(@ids) {
-		$delall = sprintf <<EOF, join(",", @ids);
-<a id=a href="$self?cmd=del&id=%s">$delalltext</a>
+		$delall = sprintf <<EOF, $self, join(",", @ids);
+<a id=a href="%s?cmd=del&id=%s">$delalltext</a>
 EOF
 	}
 	print <<EOF;
@@ -317,15 +289,14 @@ sub print_artistlist_table($$$@) {
 
 	my $sth = $dbh->prepare($query);
 	my $rv = $sth->execute(@val)
-		or die "can't do sql command: " . $dbh->errstr . "\n";
+		or die "can't do sql command: " . $dbh->errstr;
 	my ($ar, $al, $c, $arid, $alid);
 	my %artistname;
 	my %al;
 	while(($ar, $al, $c, $arid, $alid) = $sth->fetchrow_array) {
 		$artistname{$arid} = $ar;
-		if($al) {
-			$al =~ /(.?)(.*)/;
-			$al{$arid} .= sprintf(<<EOF, encurl("Album: $al"), $1, $2, $c);
+		if($al =~ /^(.)(.*)/) {
+			$al{$arid} .= sprintf(<<EOF, encurl("Album: $al"), enchtml($1), enchtml($2), $c);
 <a id=a href="$self?cmd=alllist&album_id=$alid&cap=%s"><b>%s</b>%s</a> (%d)&nbsp;&nbsp;
 EOF
 		} else {
@@ -364,7 +335,7 @@ sub print_alllist_table($$$$@) {
 
 	my $sth = $dbh->prepare($query);
 	my $rv = $sth->execute(@val)
-		or die "can't do sql command: " . $dbh->errstr . "\n";
+		or die "can't do sql command: " . $dbh->errstr;
 	my @ids;
 	my %artistids;
 	my $numresults = 0;
@@ -396,27 +367,9 @@ EOF
 			}
 		}
 
-		my $fmt = <<EOF;
- <tr>
-  <td %s>&nbsp;<a id=a href="%s?cmd=add&id=%d" target=tframe>%s</a>&nbsp;</td>
-  <td %s>&nbsp;<a id=a href="%s?cmd=alllist&artist_id=%s->{arid}&cap=%s">%s</a>&nbsp;</td>
-  <td %s>&nbsp;<a id=a href="%s?cmd=alllist&album_id=%s->{alid}&cap=%s">%s</a>&nbsp;</td>
-  <td %s>&nbsp;%s&nbsp;</td>
-  <td %s>&nbsp;<a id=a href="%s?cmd=add&id=%d" target=tframe>%s</a>&nbsp;</td>
-  <td %s>&nbsp;%d:%02d&nbsp;</td>
-  <td %s>&nbsp;%s&nbsp;</td>
-  <td %s> <a id=a href="%s?cmd=edit&id=%d" title="Edit" target=%s>*</a>%s</td>
- </tr>
-EOF
-		$output .= sprintf $fmt, 
-			$td_left, $self, $_->{id}, $addtext,
-			$td_artist, $self, $_->{arid}, encurl("Artist: $_->{artist}"), enchtml($_->{artist}),
-			$td_album, $self, $_->{alid}, encurl("Artist: $_->{album}"), enchtml($_->{album}),
-			$td_track, $_->{track}? "$_->{track}." : "",
-			$td_song, $self, $_->{id}, enchtml($_->{title}),
-			$td_time, $_->{length} / 60, $_->{length} % 60,
-			$td_enc, enchtml($_->{encoding}, 1),
-			$td_edit, $self, $_->{id}, $edit_target || 'bframe', $listch;
+		my $thref = sprintf(qq|<a id=a href="%s?cmd=add&id=%d" target=tframe>|,
+			$self, $_->{id});
+		$output .= table_entry($_, "$thref$addtext</a>", $thref);
 	}
 	print <<EOF;
 <center id=hdr>$caption</center>
@@ -431,15 +384,15 @@ EOF
 		my $rv = $sth->execute(keys %artistids);
 		my ($al, $a, $c, $arid, $alid, @al);
 		while(($al, $a, $c, $arid, $alid) = $sth->fetchrow_array) {
-			if($al) {
-				$al =~ /(.?)(.*)/;
-				push @al, sprintf(<<EOF, encurl("Album: $al"), $1, $2, $c);
-<a id=a href="$self?cmd=alllist&album_id=$alid&cap=%s"><b>%s</b>%s</a> (%d)
-EOF
+			if($al =~ /^(.)(.*)/) {
+				push @al, sprintf(qq|<a id=a href="%s?cmd=alllist| .
+					qq|&album_id=$alid&cap=%s"><b>%s</b>%s</a> (%d)|,
+					$self, encurl("Album: $al"), enchtml($1), enchtml($2), $c);
 			} else {
-				push @al, sprintf(<<EOF, encurl("Artist: $a; Album: ?"), $c);
-<a id=a href="$self?cmd=alllist&artist_id=$arid&album_id=$alid&cap=%s"><b>?</b></a> (%d)
-EOF
+				push @al, sprintf(qq|<a id=a href="%s?cmd=alllist| .
+					qq|&artist_id=$arid&album_id=$alid&cap=%s">| .
+					qq|<b>?</b></a> (%d)|,
+					$self, encurl("Artist: $a; Album: ?"), $c);
 			}
 		}
 		printf "Albums: %s.\n", join(",&nbsp; ", @al);
@@ -766,7 +719,7 @@ elsif($cmd eq 'changefile') {
 
 	$dbh->do("UPDATE song SET artist_id=?, title=?, album_id=?, track=? WHERE id=?",
 		undef, $arid, $args{'title'}, $alid, $args{'track'}, $args{'id'})
-		or die "can't do sql command: " . $dbh->errstr . "\n";
+		or die "can't do sql command: " . $dbh->errstr;
  	printredirexit($q, 'edit', \%args);
 }
 
@@ -867,10 +820,14 @@ elsif($cmd eq 'alllist') {
 		$cap = sprintf($args{'cap'}, $args{'album_id'});
 	}
 
-	$s =~ s/^r_(.*)/\1 DESC/;
-	$q[0] .= " AND song.artist_id=artist.id AND song.album_id=album.id ".
-	      " ORDER BY $s,album.name,track,artist.name,title";
-	print_alllist_table($dbh, \%args, \%session, $cap, @q);
+	if($s) {
+		$s =~ s/^r_(.*)/\1 DESC/;
+		$q[0] .= " AND song.artist_id=artist.id AND song.album_id=album.id ".
+		      " ORDER BY $s,album.name,track,artist.name,title";
+		print_alllist_table($dbh, \%args, \%session, $cap, @q);
+	} else {
+		print "Error: No search terms specified.\n";
+	}
 	printftr;
 }
 elsif($cmd eq 'recent') {
