@@ -51,6 +51,8 @@ Installation:
 -------------
 * create the database:
   sudo mysql -u root < soepkiptng_create.my
+* reload the grant tables:
+  sudo mysqladmin reload
 * cp soepkiptng.conf /etc
   (or edit all scripts if you want a different location)
 * edit /etc/soepkiptng.conf

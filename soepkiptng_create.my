@@ -4,6 +4,9 @@ create database soepkiptng;
 grant select,insert,update,delete,create,drop
 	on soepkiptng.*
 	to soepkiptng identified by 'soepkiptng';
+grant select,insert,update,delete,create,drop
+	on soepkiptng.*
+	to soepkiptng@localhost identified by 'soepkiptng';
 use soepkiptng;
 
 CREATE TABLE song (
