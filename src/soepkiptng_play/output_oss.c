@@ -11,7 +11,6 @@
 #include "debug.h"
 #include "buffer.h"
 #include "polllib.h"
-#include "realtime.h"
 #include "output_oss.h"
 
 #define SAMPLEFREQ 44100
@@ -21,7 +20,6 @@
 static char *oss_dev;
 static int oss_fd;
 static int oss_do_init;
-static int oss_pause0;
 
 static int ischardev(int fd)
 {
@@ -35,12 +33,6 @@ static void output_oss_pre(int fd, long cookie)
 {
 	DDEBUG("output_oss_pre: length=%d oss_do_init=%d\n", buffer_length, oss_do_init);
 
-	if(oss_pause0 && buffer_length == 0) {
-		DEBUG("output_oss_pre: stopping on pause0\n");
-		oss_pause0 = 0;
-		output_oss_stop();
-		return;
-	}
 	if(buffer_length < (oss_do_init? BUFFER_MIN : 1)) {
 		set_fd_mask(fd, 0);
 		return;
@@ -51,8 +43,6 @@ static void output_oss_pre(int fd, long cookie)
 
 		DEBUG("oss_do_init\n");
 		
-		realtime(1);
-
 		memset(buf, 0, sizeof(buf));
 		write(fd, buf, sizeof(buf));
 
@@ -116,7 +106,6 @@ int output_oss_start()
 	
 	if(oss_fd != -1) {
 		/* already started */
-		oss_pause0 = 0;
 		return 0;
 	}
 
@@ -161,12 +150,6 @@ void output_oss_stop()
 
 	unregister_fd(oss_fd);
 	oss_fd = -1;
-}
-
-void output_oss_stop0()
-{
-	oss_pause0 = 1;
-	DEBUG("output_oss_stop0\n");
 }
 
 int output_oss_running()
