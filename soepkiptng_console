@@ -96,9 +96,22 @@ sub songinfo()
 
 sub opensocket()
 {
-	$s = IO::Socket::INET->new('localhost:2222') or do {
-		warn "localhost:2222: $!\n";
-		return undef;
+	my $sleeptime = 1000;
+	local *F;
+
+	for(;;) {
+		open F, $conf{statusfile} or do {
+			warn "$conf{statusfile}: $!\n";
+			return undef;
+		};
+		<F>; <F>; <F>; <F>;
+		chop(my $host = <F>);
+		close F;
+
+		$s = IO::Socket::INET->new("$host:2222") and last;
+		warn "$host:2222: $!\n";
+		sleep $sleeptime / 1000;
+		$sleeptime = $sleeptime * 11 / 10 unless $sleeptime > 60000;
 	};
 	$s->autoflush(1);
 	$response = <$s>;	#discard greeting
