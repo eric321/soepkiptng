@@ -180,7 +180,7 @@ $editlistopts
 <a id=a href="$self?cmd=shuffle">Shuffle</a>
 </td>
 <td id=az>&nbsp;&nbsp;
-<a id=a href="$self?cmd=recent&num=100" target=bframe>Recent</a>
+<a id=a href="$self?cmd=recent&days=7" target=bframe>Recent</a>
 </td>
 </tr></table>
 EOF
@@ -792,7 +792,7 @@ elsif($cmd eq 'alllist') {
 elsif($cmd eq 'recent') {
 	printhtmlhdr;
 	printhdr($allstyle);
-	my $n = (0 + $args{'num'}) || 40;
+	my $maxage = $args{'days'} * 86400;
 	my $s = $args{'sort'} || "r_time_added";
 	$s =~ s/\W//g;
 	$s =~ s/^r_(.*)/\1 DESC/;
@@ -801,7 +801,8 @@ elsif($cmd eq 'recent') {
 		"song.artist_id as arid, song.album_id as alid" .
 		" FROM song,artist,album WHERE present " .
 		" AND song.artist_id=artist.id AND song.album_id=album.id" .
-		" ORDER BY $s LIMIT $n");
+		" AND unix_timestamp(now()) - unix_timestamp(time_added) < $maxage" .
+		" ORDER BY $s LIMIT 500");
 	printftr;
 }
 elsif($cmd eq 'maint') {
