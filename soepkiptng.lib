@@ -119,6 +119,18 @@ sub kill_song_internal() {
 	return @status;
 }
 
+sub get_player_pid() {
+	local *F;
+	my $pid;
+
+	open F, $statusfile
+		or die "$statusfile: $!\n";
+	<F>; <F>; <F>;
+	$pid = 0 + <F>;
+	close F;
+	return $pid;
+}
+
 sub get_id($$$) {
 	my ($db, $table, $value) = @_;
 
