@@ -53,8 +53,13 @@ static void handle_cmd(int fd, struct socket_t *p, char *s)
 	char *cmd;
 	
 	cmd = strtok(s, " \t");
-   p->outoff = 0;
+	p->outoff = 0;
 	
+	if(cmd == NULL) {
+		sockprintf(p, "-No command\n");
+		return;
+	}
+
 	if(strcasecmp(cmd, "quit") == 0) {
 		closesock(fd, p);
 	}
