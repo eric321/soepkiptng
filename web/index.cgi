@@ -173,37 +173,38 @@ EOF
   <noscript><input type=submit value="Go"></noscript>
  </form>
 </td>
+EOF
 
-<!--
-<td id=az>Play:</td>
-<td id=az>
-  <form id=search action="$self" method=get target=tframe>
-  <select name=list onChange="">
-   <option value="">All
-$playlistopts
-  </select>
-  <input type=hidden name=cmd value=setplaylist>
-  <input type=submit value="Ok">
-  </form>
-</td>
-
-<td id=az>Edit:</td>
-<td id=az>
-  <form id=search action="$self" method=get target=tframe>
-  <select name=list onChange="">
-   <option value="">
-$editlistopts
-  </select>
-  <input type=hidden name=cmd value=seteditlist>
-  <input type=submit value="Ok">
-  </form>
-</td>
-
-<td id=az>&nbsp;&nbsp;
-<a id=a target=bframe href="$self?cmd=lists">Playlists</a>
-</td>
--->
-
+#<!--
+#<td id=az>Play:</td>
+#<td id=az>
+#  <form id=search action="$self" method=get target=tframe>
+#  <select name=list onChange="">
+#   <option value="">All
+#$playlistopts
+#  </select>
+#  <input type=hidden name=cmd value=setplaylist>
+#  <input type=submit value="Ok">
+#  </form>
+#</td>
+#
+#<td id=az>Edit:</td>
+#<td id=az>
+#  <form id=search action="$self" method=get target=tframe>
+#  <select name=list onChange="">
+#   <option value="">
+#$editlistopts
+#  </select>
+#  <input type=hidden name=cmd value=seteditlist>
+#  <input type=submit value="Ok">
+#  </form>
+#</td>
+#
+#<td id=az>&nbsp;&nbsp;
+#<a id=a target=bframe href="$self?cmd=lists">Playlists</a>
+#</td>
+#-->
+print <<EOF;
  <td id=az>&nbsp;&nbsp;<a id=az href="$self?cmd=shuffle">Shuffle</a></td>
  <td id=az>&nbsp;&nbsp;<a id=az href="$self?cmd=recent&days=7" target=bframe>Recent</a><a id=az href="$self?cmd=recent&days=7&np=1" target=bframe>*</a></td>
  <td id=az>&nbsp;&nbsp;<a id=az href="$self?cmd=alllist&rand=50" target=bframe>Random</a></td>
@@ -287,10 +288,12 @@ sub print_playlist_table($) {
 		if($_->{id} > 0) { unshift @ids, $_->{id}; }
 
 		$killline = table_entry($_,
-			sprintf(qq|<a id=a href="%s?cmd=kill&id=%s">%s</a>|,
-			$self, $_->{id}, $conf{killtext}), undef,
+			sprintf(qq|<a id=a href="%s?cmd=kill&id=%s">%s</a>&nbsp;<a id=a href="%s?cmd=addnext&id=%s">next</a>|,
+				$self, $_->{id}, $conf{killtext}, $self, $_->{id}),
+			undef,
 			($_->{filename} =~ m|^/|)? ids_encode(@ids) : "",
-			($conf{show_user} && $_->{user})? "<td>&nbsp;($_->{user})</td>":"");
+			"<td>&nbsp;" . (($conf{show_user} && $_->{user})? "($_->{user})":"") . "</td>"
+		);
 
 		if($conf{title_song}) {
 			my $alb = $_->{album};
@@ -999,6 +1002,10 @@ elsif($cmd eq 'up') {
 elsif($cmd eq 'kill') {
 	kill_song(get_user($r));
  	printredirexit($query, $self, 'playlist', undef);
+}
+elsif($cmd eq 'addnext') {
+	add_song_next($dbh, $args{id}, get_user($r));
+	printredirexit($query, $self, 'playlist', undef);
 }
 elsif($cmd eq 'setplaylist') {
 	$session{playlist} = $args{list};
