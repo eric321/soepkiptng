@@ -18,39 +18,31 @@
 # Boston, MA 02111-1307, USA.
 ############################################################################
 
+my $progdir;
 BEGIN {
-	$configfile = "/etc/soepkiptng.conf";
+	use Cwd qw'abs_path cwd';
 
-	open F, $configfile or die "$configfile: $!\n";
-	while(<F>) {
-		/^#/ and next;
-		s/\s+$//;
-		/./ or next;
-		if(/^(\w+)\s*=\s*(.*?)\s*$/) {
-			$f = $1;
-			$conf{$f} = $2;
-		} elsif(/^\s+(.*?)\s*$/) {
-			# continuation line
-			$conf{$f} .= "\n$1";
-		} else {
-			die "$configfile line $.: invalid format\n";
-		}
+	# find program directory
+	$_ = $0;
+	while(-l) {
+		my $l = readlink or die "readlink $_: $!\n";
+		if($l =~ m|^/|) { $_ = $l; } else { s|[^/]*$|/$l|; }
 	}
-	close F;
+	m|(.*)/|;
+	$progdir = abs_path($1);
+
+	unshift @INC, "$progdir/lib";
 }
+require "$progdir/soepkiptng.lib";
+$ENV{PATH} = "$progdir/bin:$ENV{PATH}";
 
-$ENV{'PATH'} = "$conf{'progdir'}/bin:$ENV{'PATH'}";
-require "$conf{'progdir'}/soepkiptng.lib";
-use lib "$conf{'progdir'}/lib";
-
-use Cwd;
 use DBI;
 use Getopt::Std;
 use MP3::Tag;
 use MP3::Info;
 #use Data::Dumper;
 
-use vars qw/$opt_c $opt_d $opt_e $opt_f $opt_r $opt_q $opt_v/;
+use vars qw/$opt_C $opt_d $opt_e $opt_f $opt_r $opt_q $opt_v $opt_c/;
 
 sub get_wav_params($\%;$);
 sub getinfo_mp3($\%);
@@ -66,7 +58,7 @@ sub read_eric_files();
 sub extract_artist_title($\%);
 sub is_nfs($);
 
-getopts('cfredqvh');
+getopts('Cfredqvhc:');
 $force = 1 if $opt_f;
 $| = 1;
 $do_delete = !$opt_d && !$opt_r;
@@ -75,7 +67,7 @@ $opt_h and die <<EOF;
 usage: soepkiptng_update [-cfredqhv] [dir]
 
 options:
-  -c  : don't fix artist/title/album upper/lowercase
+  -C  : don't fix artist/title/album upper/lowercase
   -f  : force updating of info even if song is already in database
   -r  : don't recurse subdirectories
   -e  : don't read "ericfiles"
@@ -84,6 +76,8 @@ options:
   -h  : get this help
   -v  : be verbose
 EOF
+
+read_configfile(\%conf, $opt_c);
 
 
 # for the web interface (stupid browsers/users)
@@ -307,11 +301,11 @@ sub get_id3($\%) {
 	my ($t, $tr, $a, $alb) = $id3->autoinfo();
 
 	$a =~ s/_/ /g;
-	$a =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g unless $a =~ /[A-Z]/ || $opt_c;
+	$a =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g unless $a =~ /[A-Z]/ || $opt_C;
 	$t =~ s/_/ /g;
-	$t =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g unless $t =~ /[A-Z]/ || $opt_c;
+	$t =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g unless $t =~ /[A-Z]/ || $opt_C;
 	$alb =~ s/_/ /g;
-	$alb =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g unless $alb =~ /[A-Z]/ || $opt_c;
+	$alb =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g unless $alb =~ /[A-Z]/ || $opt_C;
 
 	$a && $t or return undef;
 

@@ -21,29 +21,18 @@
 ############################################################################
 # CONFIG
 
+
 BEGIN {
-	$configfile = "/etc/soepkiptng.conf";
-	my $f;
-
-	local *F;
-	open F, $configfile or die "$configfile: $!\n";
-	while(<F>) {
-		/^#/ and next;
-		s/\s+$//;
-		/./ or next;
-		if(/^(\w+)\s*=\s*(.*?)\s*$/) {
-			$f = $1;
-			$conf{$f} = $2;
-		} elsif(/^\s+(.*?)\s*$/) {
-			# continuation line
-			$conf{$f} .= "\n$1";
-		} else {
-			die "$configfile line $.: invalid format\n";
-		}
+	# find program directory
+	$_ = $0;
+	while(-l) {
+		my $l = readlink or die "readlink $_: $!\n";
+		if($l =~ m|^/|) { $_ = $l; } else { s|[^/]*$|/$l|; }
 	}
-	close F;
+	m|(.*)/|;
+	(my $progdir = abs_path($1)) =~ s|/+[^/]+$||;
 
-	require "$conf{progdir}/soepkiptng.lib";
+	require "$progdir/soepkiptng.lib";
 }
 
 

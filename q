@@ -18,16 +18,26 @@
 # Boston, MA 02111-1307, USA.
 ############################################################################
 
-# CONFIG
-
-$configfile = "/etc/soepkiptng.conf";
-
 use integer;
+use Cwd 'abs_path';
 use DBI;
 use Socket;
 use Getopt::Std;
 
-getopts('vn');
+# find program directory
+$_ = $0;
+while(-l) {
+	my $l = readlink or die "readlink $_: $!\n";
+	if($l =~ m|^/|) { $_ = $l; } else { s|[^/]*$|/$l|; }
+}
+m|(.*)/|;
+my $progdir = abs_path($1);
+
+require "$progdir/soepkiptng.lib";
+
+getopts('vnc:');
+
+read_configfile(\%conf, $opt_c);
 
 eval "use Term::ReadKey;";
 if($@) {
@@ -36,25 +46,6 @@ if($@) {
 } else {
 	($screen_width) = GetTerminalSize();
 }
-
-open F, $configfile or die "$configfile: $!\n";
-while(<F>) {
-	/^#/ and next;
-	s/\s+$//;
-	/./ or next;
-	if(/^(\w+)\s*=\s*(.*?)\s*$/) {
-		$f = $1;
-		$conf{$f} = $2;
-	} elsif(/^\s+(.*?)\s*$/) {
-		# continuation line
-		$conf{$f} .= "\n$1";
-	} else {
-		die "$configfile line $.: invalid format\n";
-	}
-}
-close F;
-
-require "$conf{progdir}/soepkiptng.lib";
 
 sub albumtrack($$) {
 	my ($album, $track) = @_;

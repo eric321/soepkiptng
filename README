@@ -84,9 +84,12 @@ Installation:
   sudo mysql -u root < soepkiptng_create.my
 * reload the grant tables:
   sudo mysqladmin reload
-* cp soepkiptng.conf /etc
-  (or edit all scripts if you want a different location)
-* edit /etc/soepkiptng.conf
+* copy soepkiptng.conf.example to either:
+  - /etc/soepkiptng.conf
+  - ~/.soepkiptng.conf
+  - any file named in $SOEPKIPTNG_CONFIGFILE
+  (or edit soepkiptng.lib if you want a different location)
+* edit the config file to taste
 * make the directory /var/local/soepkiptng and make sure
   it's writable for the user that will run soepkiptngd
 * Add something like the following to /etc/apache/httpd.conf:

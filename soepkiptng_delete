@@ -18,35 +18,26 @@
 # Boston, MA 02111-1307, USA.
 ############################################################################
 
-$configfile = "/etc/soepkiptng.conf";
-
 use Cwd 'abs_path';
 use DBI;
 use Getopt::Std;
 
-getopts('fqhc');
-
-# read config file
-open F, $configfile
-	or die "$configfile: $!\n";
-while(<F>) {
-	/^#/ and next;
-	s/\s+$//;
-	/./ or next;
-	if(/^(\w+)\s*=\s*(.*?)\s*$/) {
-		$f = $1;
-		$conf{$f} = $2;
-	} elsif(/^\s+(.*?)\s*$/) {
-		# continuation line
-		$conf{$f} .= "\n$1";
-	} else {
-		die "$configfile line $.: invalid format\n";
-	}
+# find program directory
+$_ = $0;
+while(-l) {
+	my $l = readlink or die "readlink $_: $!\n";
+	if($l =~ m|^/|) { $_ = $l; } else { s|[^/]*$|/$l|; }
 }
-close F;
+m|(.*)/|;
+my $progdir = abs_path($1);
 
-$ENV{'PATH'} = "$conf{progdir}/bin:$ENV{'PATH'}";
-require "$conf{progdir}/soepkiptng.lib";
+require "$progdir/soepkiptng.lib";
+
+getopts('fqhxc:');
+
+read_configfile(\%conf, $opt_c);
+
+$ENV{PATH} = "$progdir/bin:$ENV{PATH}";
 
 if($opt_h) {
 	print <<EOF;
@@ -57,7 +48,7 @@ anymore.
 
     -f : delete entries even if they still exist
     -q : quiet
-    -c : permanently delete entries that are not present
+    -x : permanently delete entries that are not present
 
 EOF
 	exit;
@@ -72,7 +63,7 @@ $sth->execute(($ARGV[0]? abs_path($ARGV[0]) : "/") . "/%");
 while(($filename) = $sth->fetchrow_array) {
 	if(!$opt_f) { -s $filename and next; }
 	warn "Deleting $filename from database.\n" unless $opt_q;
-	if($opt_c) {
+	if($opt_x) {
 		$dbh->do("DELETE FROM song WHERE filename=?", undef, $filename);
 	} else {
 		$dbh->do("UPDATE song SET present=0 WHERE filename=?", undef, $filename);

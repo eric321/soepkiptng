@@ -2,7 +2,6 @@
 
 ####### general ##############################################################
 
-progdir=/usr/local/soepkiptng
 statusfile=/var/local/soepkiptng/soepkiptng.status
 logfile=/var/local/soepkiptng/soepkiptng.log
 errfile=/var/local/soepkiptng/soepkiptng.err

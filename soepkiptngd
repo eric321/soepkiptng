@@ -24,8 +24,7 @@
 # Boston, MA 02111-1307, USA.
 ############################################################################
 
-my $configfile = "/etc/soepkiptng.conf";
-
+use Cwd 'abs_path';
 use DBI;
 use Getopt::Std;
 use IO::Handle;
@@ -35,8 +34,19 @@ use Sys::Hostname;
 
 use integer;
 use strict;
-use vars qw(%conf $dbh $restart $opt_d $opt_r $opt_s $cdrplaypid
+use vars qw(%conf $dbh $restart $opt_d $opt_r $opt_s $opt_c $cdrplaypid
 	$pid_status $pid_signal $pid @preload);
+
+# find program directory
+$_ = $0;
+while(-l) {
+	my $l = readlink or die "readlink $_: $!\n";
+	if($l =~ m|^/|) { $_ = $l; } else { s|[^/]*$|/$l|; }
+}
+m|(.*)/|;
+my $progdir = abs_path($1);
+
+require "$progdir/soepkiptng.lib";
 
 
 sub rotatelog(;$) {
@@ -171,26 +181,24 @@ sub get_song_random() {
 
 	my $min = $conf{min_random_time};
 	my $where = "present AND filename LIKE '/%' AND " .
-	            "unix_timestamp(now()) - unix_timestamp(last_played) > $min";
-
-	my ($sum_pref) = $dbh->selectrow_array("SELECT sum(random_pref) FROM song WHERE $where");
+	            "unix_timestamp(now()) - unix_timestamp(last_played) > ?";
 
 	my $sth = $dbh->prepare(
 		"SELECT artist.name as artist, album.name as album,song.* " .
 		"FROM song,artist,album " .
 		"WHERE $where AND artist.id=song.artist_id AND album.id=song.album_id " .
-		"ORDER BY rand()*pow(random_pref/$sum_pref,10000/$sum_pref) DESC LIMIT 1");
+		"ORDER BY rand()*pow(random_pref/?,10000/?) DESC LIMIT 1");
 
-	for(;;) {
-		$sth->execute() or return undef;
-		$s = $sth->fetchrow_hashref and last;
-
-		# no song at all
-		if($min == 0) { return undef; }
-
-		$min >>= 1;
-		warn "no random song found, retrying with min_random_time=$min\n";
+	for(; $min > 0; $min >>= 1, warn "no random song found, retrying with min_random_time=$min\n") {
+		my ($sum_pref) = $dbh->selectrow_array(
+			"SELECT sum(random_pref) FROM song WHERE $where", undef, $min)
+			or next;
+		$sth->execute($min, $sum_pref, $sum_pref)
+			or next;
+		$s = $sth->fetchrow_hashref
+			and last;
 	}
+	$s or return undef;
 
 	warn "playing random $s->{filename} (pref $s->{random_pref})\n";
 	$s->{type} = 'R';
@@ -335,29 +343,12 @@ sub perish {
 	exit;
 };
 
-getopts('dr:s:');
+getopts('dr:s:c:');
 my $debug = 1 if $opt_d;
 
-my $field;
-open F, $configfile
-	or die "$configfile: $!\n";
-while(<F>) {
-	/^#/ and next;
-	s/\s+$//;
-	/./ or next;
-	if(/^(\w+)\s*=\s*(.*?)\s*$/) {
-		$field = $1;
-		$conf{$field} = $2;
-	} elsif(/^\s+(.*?)\s*$/) {
-		# continuation line
-		$conf{$field} .= "\n$1";
-	} else {
-		die "$configfile line $.: invalid format\n";
-	}
-}
-close F;
+read_configfile(\%conf, $opt_c);
 
-$ENV{'PATH'} = "$conf{progdir}/bin:$ENV{'PATH'}";
+$ENV{PATH} = "$progdir/bin:$ENV{PATH}";
 
 if(open ST, $conf{statusfile}) {
 	my ($s, $f, $pid) = <ST>;
@@ -448,8 +439,8 @@ for(;;) {
 		unlink $conf{statusfile};
 
 		warn "execing myself\n";
-		exec "$conf{progdir}/soepkiptngd", '-r', $cdrplaypid;
-		die "$conf{progdir}/soepkiptngd: $!\n";
+		exec "$progdir/soepkiptngd", '-r', $cdrplaypid;
+		die "$progdir/soepkiptngd: $!\n";
 	}
 
 	if($num_errors > 1) {

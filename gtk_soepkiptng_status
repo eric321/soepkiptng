@@ -18,35 +18,29 @@
 # Boston, MA 02111-1307, USA.
 ############################################################################
 
-# CONFIG
-
-$configfile = "/etc/soepkiptng.conf";
-
+use Cwd 'abs_path';
 use DBI;
+use Getopt::Std;
 use Gnome;
+
+# find program directory
+$_ = $0;
+while(-l) {
+	my $l = readlink or die "readlink $_: $!\n";
+	if($l =~ m|^/|) { $_ = $l; } else { s|[^/]*$|/$l|; }
+}
+m|(.*)/|;
+my $progdir = abs_path($1);
+
+require "$progdir/soepkiptng.lib";
+
+getopts('c:');
+
+read_configfile(\%conf, $opt_c);
+
 init Gnome "soepkiptng.pl";
 
 #init Gnome::Panel::AppletWidget 'soepkiptng.pl';
-
-open F, $configfile or die "$configfile: $!\n";
-while(<F>) {
-	/^#/ and next;
-	s/\s+$//;
-	/./ or next;
-	if(/^(\w+)\s*=\s*(.*?)\s*$/) {
-		$f = $1;
-		$conf{$f} = $2;
-	} elsif(/^\s+(.*?)\s*$/) {
-		# continuation line
-		$conf{$f} .= "\n$1";
-	} else {
-		die "$configfile line $.: invalid format\n";
-	}
-}
-close F;
-
-
-require "$conf{progdir}/soepkiptng.lib";
 
 $SIG{'HUP'} = sub {
 	exec $0;

@@ -18,32 +18,26 @@
 # Boston, MA 02111-1307, USA.
 ############################################################################
 
-# CONFIG
-
-$configfile = "/etc/soepkiptng.conf";
-
+use Cwd 'abs_path';
 use DBI;
+use Getopt::Std; 
 use Socket;
 
-open F, $configfile or die "$configfile: $!\n";
-while(<F>) {
-	/^#/ and next;
-	s/\s+$//;
-	/./ or next;
-	if(/^(\w+)\s*=\s*(.*?)\s*$/) {
-		$f = $1;
-		$conf{$f} = $2;
-	} elsif(/^\s+(.*?)\s*$/) {
-		# continuation line
-		$conf{$f} .= "\n$1";
-	} else {
-		die "$configfile line $.: invalid format\n";
-	}
+# find program directory
+$_ = $0;
+while(-l) {
+	my $l = readlink or die "readlink $_: $!\n";
+	if($l =~ m|^/|) { $_ = $l; } else { s|[^/]*$|/$l|; }
 }
-close F;
+m|(.*)/|;
+my $progdir = abs_path($1);
 
-$ENV{'PATH'} = "$conf{progdir}/bin:$ENV{'PATH'}";
-require "$conf{progdir}/soepkiptng.lib";
+require "$progdir/soepkiptng.lib";
+
+getopts('c:');
+read_configfile(\%conf, $opt_c);
+
+$ENV{PATH} = "$progdir/bin:$ENV{PATH}";
 
 $dbh = DBI->connect("DBI:$conf{db_type}:$conf{db_name}:$conf{db_host}",
 	$conf{db_user}, $conf{db_pass}) or die "can't connect to database";
