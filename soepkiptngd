@@ -263,7 +263,11 @@ sub playshoutcast($) {
 
 	for(;;) {
 		$starttime = time;
-		system qw/mpg123 -s -y -pnone -r44100 --stereo/, $file;
+		if($file =~ /\.ogg$/i) {
+			system qw/ogg123 -q -d raw -f -/, $file;
+		} else {
+			system qw/mpg123 -s -y -pnone -r44100 --stereo/, $file;
+		}
 		if(time - $starttime < 60) {
 			$errors++;
 		} else {
@@ -273,7 +277,7 @@ sub playshoutcast($) {
 			die "Too many errors, giving up on $file.\n";
 		}
 		sleep 1;
-		warn "restarting mpg123 [$file]\n";
+		warn "restarting mpg123/ogg123 [$file]\n";
 	}
 }
 
