@@ -51,7 +51,7 @@ BEGIN {
 ############################################################################
 # SUBROUTINES
 
-sub encode($) {
+sub encurl($) {
 	my ($a) = @_;
 
 	$a =~ s|([^-./\w])|sprintf "%%%02x", ord($1)|ge;
@@ -67,13 +67,14 @@ sub decode($) {
 	$a;
 }
 
-sub encode_form($) {
-	my ($a) = @_;
+sub enchtml($;$) {
+	my ($a, $nbsp) = @_;
 
 	$a =~ s|&|&amp;|g;
 	$a =~ s|"|&quot;|g;
 	$a =~ s|<|&lt;|g;
 	$a =~ s|>|&gt;|g;
+	$a =~ s| |&nbsp;|g if $nbsp;
 	$a;
 }
 
@@ -120,10 +121,10 @@ sub print_az_table($$) {
 <table cellpadding=0 cellspacing=0><tr><td id=az nowrap>
 <a id=a href="$self?cmd=playlist">Refresh</a>&nbsp;&nbsp;
 EOF
-	$_ = encode("^[^a-zA-Z]");
+	$_ = encurl("^[^a-zA-Z]");
 	print qq|<a id=a href="$self?cmd=$artistlistcmd&artist=$_" target=bframe>0-9</a>&nbsp;|;
 	foreach('A'..'Z') {
-		my $e = encode("^$_");
+		my $e = encurl("^$_");
 		print qq|<a id=a href="$self?cmd=$artistlistcmd&artist=$e" target=bframe>$_</a>&nbsp;|;
 	}
 	my $sz = $searchformsize || 10;
@@ -230,8 +231,8 @@ sub get_playlist_table_entry($$$$$) {
  </tr>
 EOF
 	return sprintf $fmt, $_[0], $_[1], $_[2], $_[3],
-		encode("Artist: $_[4]->{artist}"), $_[4]->{artist},
-		encode("Album: $_[4]->{album}"), $_[4]->{album},
+		encurl("Artist: $_[4]->{artist}"), $_[4]->{artist},
+		encurl("Album: $_[4]->{album}"), $_[4]->{album},
 		$tr, $_[4]->{title}, $l, $e, $_[4]->{id};
 }
 
@@ -324,11 +325,11 @@ sub print_artistlist_table($$$@) {
 		$artistname{$arid} = $ar;
 		if($al) {
 			$al =~ /(.?)(.*)/;
-			$al{$arid} .= sprintf(<<EOF, encode("Album: $al"), $1, $2, $c);
+			$al{$arid} .= sprintf(<<EOF, encurl("Album: $al"), $1, $2, $c);
 <a id=a href="$self?cmd=alllist&album_id=$alid&cap=%s"><b>%s</b>%s</a> (%d)&nbsp;&nbsp;
 EOF
 		} else {
-			$al{$arid} .= sprintf(<<EOF, encode("Artist: $a; Album: ?"), $c);
+			$al{$arid} .= sprintf(<<EOF, encurl("Artist: $a; Album: ?"), $c);
 <a id=a href="$self?cmd=alllist&artist_id=$arid&album_id=$alid&cap=%s"><b>?</b></a> (%d)&nbsp;&nbsp;
 EOF
 		}
@@ -345,7 +346,7 @@ EOF
 EOF
 	foreach(sort {lc($artistname{$a}) cmp lc($artistname{$b})} keys %artistname) {
 		$al{$_} =~ s/, $//;
-		printf <<EOF, encode("Artist: $artistname{$_}"), $artistname{$_}, $al{$_};
+		printf <<EOF, encurl("Artist: $artistname{$_}"), $artistname{$_}, $al{$_};
 <tr>
  <td>&nbsp;<a id=a href="$self?cmd=alllist&artist_id=$_&cap=%s">%s</a>&nbsp;</td>
  <td>&nbsp;%s&nbsp;</td>
@@ -366,29 +367,11 @@ sub print_alllist_table($$$$@) {
 		or die "can't do sql command: " . $dbh->errstr . "\n";
 	my @ids;
 	my %artistids;
-	my $numresults = 1;
+	my $numresults = 0;
 	while($_ = $sth->fetchrow_hashref) {
 		$numresults++;
 		push @ids, $_->{id};
 		$artistids{$_->{arid}}++;
-		my $l = sprintf "%d:%02d", $_->{length} / 60, $_->{length} % 60;
-		my $e = $_->{encoding};
-		$e =~ s/ /&nbsp;/g;
-		my $tr = $_->{track} || "";
-		$tr .= "." if $tr;
-		my $edittarget = $edit_target || 'bframe';
-		my $fmt = <<EOF;
- <tr>
-  <td $td_left>&nbsp;<a id=a href="$self?cmd=add&id=%d" target=tframe>$addtext</a>&nbsp;</td>
-  <td $td_artist>&nbsp;<a id=a href="$self?cmd=alllist&artist_id=$_->{arid}&cap=%s">%s</a>&nbsp;</td>
-  <td $td_album>&nbsp;<a id=a href="$self?cmd=alllist&album_id=$_->{alid}&cap=%s">%s</a>&nbsp;</td>
-  <td $td_track>&nbsp;%s&nbsp;</td>
-  <td $td_song>&nbsp;<a id=a href="$self?cmd=add&id=%d" target=tframe>%s</a>&nbsp;</td>
-  <td $td_time>&nbsp;%s&nbsp;</td>
-  <td $td_enc>&nbsp;%s&nbsp;</td>
-  <td $td_edit> <a id=a href="$self?cmd=edit&id=%d" title="Edit" target=$edittarget>*</a>%s</td>
- </tr>
-EOF
 		my $el = $$session{'editlist'};
 		my $listch;
 		if($el) {
@@ -405,17 +388,35 @@ EOF
 				foreach(keys %$argsref) {
 					next if $_ eq "cmd";
 					next if /^add_/;
-					$baseurl .= "$_=" . encode($$argsref{$_}) . "&";
+					$baseurl .= "$_=" . encurl($$argsref{$_}) . "&";
 				}
 				$listch = <<EOF;
 &nbsp;<a href="${baseurl}cmd=addtolist&add_list=$el&add_type=song&add_id=$_->{id}" target=bframe>+</a>
 EOF
 			}
 		}
-		$output .= sprintf $fmt, $_->{id},
-			encode("Artist: $_->{artist}"), $_->{artist},
-			encode("Album: $_->{album}"), $_->{album},
-			$tr, $_->{id}, $_->{title}, $l, $e, $_->{id}, $listch;
+
+		my $fmt = <<EOF;
+ <tr>
+  <td %s>&nbsp;<a id=a href="%s?cmd=add&id=%d" target=tframe>%s</a>&nbsp;</td>
+  <td %s>&nbsp;<a id=a href="%s?cmd=alllist&artist_id=%s->{arid}&cap=%s">%s</a>&nbsp;</td>
+  <td %s>&nbsp;<a id=a href="%s?cmd=alllist&album_id=%s->{alid}&cap=%s">%s</a>&nbsp;</td>
+  <td %s>&nbsp;%s&nbsp;</td>
+  <td %s>&nbsp;<a id=a href="%s?cmd=add&id=%d" target=tframe>%s</a>&nbsp;</td>
+  <td %s>&nbsp;%d:%02d&nbsp;</td>
+  <td %s>&nbsp;%s&nbsp;</td>
+  <td %s> <a id=a href="%s?cmd=edit&id=%d" title="Edit" target=%s>*</a>%s</td>
+ </tr>
+EOF
+		$output .= sprintf $fmt, 
+			$td_left, $self, $_->{id}, $addtext,
+			$td_artist, $self, $_->{arid}, encurl("Artist: $_->{artist}"), enchtml($_->{artist}),
+			$td_album, $self, $_->{alid}, encurl("Artist: $_->{album}"), enchtml($_->{album}),
+			$td_track, $_->{track}? "$_->{track}." : "",
+			$td_song, $self, $_->{id}, enchtml($_->{title}),
+			$td_time, $_->{length} / 60, $_->{length} % 60,
+			$td_enc, enchtml($_->{encoding}, 1),
+			$td_edit, $self, $_->{id}, $edit_target || 'bframe', $listch;
 	}
 	print <<EOF;
 <center id=hdr>$caption</center>
@@ -432,11 +433,11 @@ EOF
 		while(($al, $a, $c, $arid, $alid) = $sth->fetchrow_array) {
 			if($al) {
 				$al =~ /(.?)(.*)/;
-				push @al, sprintf(<<EOF, encode("Album: $al"), $1, $2, $c);
+				push @al, sprintf(<<EOF, encurl("Album: $al"), $1, $2, $c);
 <a id=a href="$self?cmd=alllist&album_id=$alid&cap=%s"><b>%s</b>%s</a> (%d)
 EOF
 			} else {
-				push @al, sprintf(<<EOF, encode("Artist: $a; Album: ?"), $c);
+				push @al, sprintf(<<EOF, encurl("Artist: $a; Album: ?"), $c);
 <a id=a href="$self?cmd=alllist&artist_id=$arid&album_id=$alid&cap=%s"><b>?</b></a> (%d)
 EOF
 			}
@@ -458,7 +459,7 @@ EOF
 	delete $$argsref{'sort'};
 	my $baseurl = "$self?";
 	foreach(keys %$argsref) {
-		$baseurl .= "$_=" . encode($$argsref{$_}) . "&";
+		$baseurl .= "$_=" . encurl($$argsref{$_}) . "&";
 	}
 
 	print <<EOF;
@@ -526,9 +527,9 @@ function closethis() {
 EOF
 	$_->{filename} =~ m|^(.*)/(.*?)$|;
 	printf $fmt, $self, $id, $_->{present}? "Yes" : "No",
-		encode_form($_->{artist}),
-		encode_form($_->{title}),
-		encode_form($_->{album}),
+		enchtml($_->{artist}),
+		enchtml($_->{title}),
+		enchtml($_->{album}),
 		$_->{track} || "",
 		$_->{length} / 60, $_->{length} % 60,
 		$_->{encoding},
