@@ -623,7 +623,7 @@ function closethis() {
   <tr><td colspan=2>Time:</td>  <td>%d:%02d</td></tr>
   <tr><td colspan=2>Encoding:</td>        <td>%s</td></tr>
   <tr><td colspan=2 nowrap>Time Added:</td><td>%s</td></tr>
-  <tr><td colspan=2 nowrap>Last played time:</td><td>%s%s</td></tr>
+  <tr><td colspan=2 nowrap>Last played:</td><td>%s%s</td></tr>
   <tr><td colspan=2>Directory:</td>       <td><a href="%s">%s</a></td></tr>
   <tr><td colspan=2>Filename:</td>        <td><a href="%s">%s</a></td></tr>
   <tr><td colspan=2>Size:</td>            <td>%dk</td></tr>
@@ -653,7 +653,8 @@ EOF
 		$_->{encoding},
 		$_->{ta}? scalar localtime($_->{ta}) : "-",
 		$_->{lp}? scalar localtime($_->{lp}) : "-",
-		$_->{lp}? " <font size=-1><input type=submit name=action_clearlp value=Reset></font>":"",
+		$_->{lp}? " <font size=-1><input type=submit name=action_clearlp value=Reset> " .
+			"<input type=submit name=action_clearlpall value=\"Reset Entire List\"></font>":"",
 		"$self?cmd=alllist&sort=artist&filename=" . encurl($dir_), $dir,
 		"$self/$f?cmd=download&id=$argsref->{id}", $file,
 		((-s $_->{filename}) + 512) / 1024,
@@ -988,6 +989,13 @@ elsif($cmd eq 'changefile') {
 		$dbh->do("UPDATE song SET last_played=from_unixtime(0) WHERE id=?",
 			undef, $args{id})
 			or die "can't do sql command: " . $dbh->errstr;
+	}
+	if($args{action_clearlpall}) {
+		foreach(ids_decode($args{ids})) {
+			$dbh->do("UPDATE song SET last_played=from_unixtime(0) WHERE id=?",
+				undef, $_)
+				or die "can't do sql command: " . $dbh->errstr;
+		}
 	}
 	elsif($args{action_clear_artist})   { $args{artist} = '' }
 	elsif($args{action_clear_title}) { $args{title} = '' }
