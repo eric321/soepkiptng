@@ -692,9 +692,9 @@ sub read_eric_files() {
 						$track{"$dirname/$filename"} = $_;
 #print STDERR "{$dirname/$filename} = $_\n";
 	#print qq~\$track{"$dirname/$filename"} = $_;\n~ if /magic/i;
+						$album{"$dirname/$filename"} = $album;
 	#print STDERR "$dirname/$filename $album\n";
 					}
-					$album{"$dirname/$filename"} = $album;
 					last unless /\S/;
 				}
 			}
