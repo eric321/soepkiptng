@@ -453,13 +453,19 @@ EOF
 	my @ids;
 	my %records;
 	my $totaltime;
+	my %artistids;
 	while($_ = $sth->fetchrow_hashref) {
 		$records{$_->{id}} = $_;
 		push @ids, $_->{id};
 		$totaltime += $_->{length};
+		$artistids{$_->{arid}}++;
 	}
 	if(!@ids) {
-		print "No search results.\n";
+		if($argsref->{artist_id}) {
+			print_albums_row($dbh, $baseurl, $argsref, $cap, $argsref->{artist_id});
+		} else {
+			print "No search results.\n";
+		}
 		return;
 	}
 	my $ids = ids_encode(@ids);
@@ -471,10 +477,8 @@ EOF
 		$baseurl .= "$_=" . encurl($argsref->{$_}) . "&";
 	}
 
-	my %artistids;
 	foreach $id (@ids) {
 		$_ = $records{$id};
-		$artistids{$_->{arid}}++;
 		my $el = $session->{editlist};
 		my $listch;
 		if($el) {
