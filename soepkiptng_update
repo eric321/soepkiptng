@@ -106,6 +106,7 @@ while(<FILES>) {
 	$desc or ($desc, $len, $freq, $chan) = getinfo_ogg($_);
 	$desc or ($desc, $len, $freq, $chan) = getinfo_wav($_);
 	$desc or ($desc, $len, $freq, $chan) = getinfo_pac($_);
+	$len = 0 + $len;
 	$desc or do {
 		warn "Filetype of $_ unknown\n";
 		next;
@@ -171,7 +172,7 @@ while(<FILES>) {
 	}
 	$dbh->do($q, undef, $filename{$_}, $artist, $title, $album, $track, $_, $len,
 		$desc, $last_played{$_} || 0)
-                or die "can't do sql command: $dbh->errstr";
+                or die "can't do sql command: " . $dbh->errstr . "\n";
 	delete $filename{$_};
 }
 
