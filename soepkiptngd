@@ -198,7 +198,12 @@ sub start_play($) {
 			# append trailing slash if necessary
 			# (mpg123 gets confused if it's missing)
 			$filename =~ m|http:/+[^/]+/| or $filename .= "/";
-			exec "shoutcast2raw", $filename;
+
+			for(;;) {
+				system qw/mpg123 -s -y -pnone -q -r44100 --stereo/, $filename;
+				sleep 1;
+				warn "restarting mpg123 [$filename]\n";
+			}
 		} elsif($ext eq "mp2" || $ext eq "mp3") {
 			exec "mp3toraw", $filename;
 		} elsif($ext eq "ogg") {
