@@ -36,11 +36,19 @@ description_files=/home/eric/albums/albums /home/eric/albums/albums.new
 
 ####### web interface #######################################################
 
+httpd_errfile=/var/local/soepkiptng/soepkiptng_httpd.err
+httpd_port=8888
+httpd_instances=5
+httpd_lifetime=100
+
 artistlistcmd=artistlist
 #artistlistcmd=alllist
 
 # show which user requested which song
 show_user=1
+
+# use greyed-out buttons (doesn't work with old netscape)
+disabled_buttons=1
 
 # if the albumlist above a songlist exceeds this #chars,
 # the longest entries are cut off and something like "[10 more...]" is shown
@@ -52,8 +60,20 @@ alllist_limit=500
 # show song info in browser's title bar (IE/Opera only)
 title_song=1
 
-# use _blank for new window
+# use _blank for new window (comment out for bottom frame)
 edit_target=_blank
+
+# global enable/disable of "Delete Song" button
+allow_delete=0
+
+# perl func that determines if write access to database should be allowed
+# FIXME
+#write_access_func=
+#	my $r = Apache->request;
+#	my $c = $r->connection;
+#	my $ip = $c->remote_ip;
+#	$ip eq "127.0.0.1";
+
 
 topwindow_title=
 #topwindow_title=
