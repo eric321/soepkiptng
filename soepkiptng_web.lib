@@ -225,18 +225,7 @@ EOF
 		$extra;
 }
 
-sub albumlist_entry($) {
-	my ($res) = @_; 
-
-	$res->{album} =~ /^(.?)(.*)/;
-	return sprintf(qq|<a id=a href="%s?cmd=alllist| .
-		qq|&artist_id=%d&album_id=%d&cap=%s"><b>%s</b>%s</a> (%d)|,
-		$self, $res->{arid}, $res->{alid},
-		encurl("Artist: $res->{artist}; Album: $res->{album}"),
-		enchtml($1 || "?"), enchtml($2), $res->{c});
-}
-
-sub albumlist($$$) {
+sub print_albumlist($$$) {
 	my ($albumlist, $sep, $prune) = @_;
 
 	my $more = 0;
@@ -257,16 +246,23 @@ sub albumlist($$$) {
 			}
 		}
 	}
-	my $out = join($sep, map { albumlist_entry($_) }
-		grep { $_->{al_len} != -1 } @$albumlist);
+	foreach(@$albumlist) {
+		next if $_->{al_len} == -1;
+		print $sep if $_ != $albumlist->[0];
+		$_->{album} =~ /^(.?)(.*)/;
+		printf(qq|<a id=a href="%s?cmd=alllist| .
+			qq|&artist_id=%d&album_id=%d&cap=%s"><b>%s</b>%s</a> (%d)|,
+			$self, $_->{arid}, $_->{alid},
+			encurl("Artist: $_->{artist}; Album: $_->{album}"),
+			enchtml($1 || "?"), enchtml($2), $_->{c});
+	}
 	if($more) {
-		$out .= sprintf <<EOF,
+		printf <<EOF,
 &nbsp; <a id=a href="%s?cmd=albumlist&artist_id=%d&cap=%s">[%d more...].</a>
 EOF
 			$self, $albumlist->[0]->{arid},
 			encurl("Artist: $albumlist->[0]->{artist}"), $more;
 	}
-	return $out;
 }
 
 sub print_playlist_table($) {
@@ -380,11 +376,15 @@ EOF
 		printf <<EOF,
 <tr>
  <td valign=top>&nbsp;<a id=a href="%s?cmd=alllist&artist_id=%d&cap=%s">%s</a>&nbsp;</td>
- <td valign=top>&nbsp;%s&nbsp;</td>
-</tr>
+ <td valign=top>&nbsp;
 EOF
 			$self, $_->[0]->{arid}, encurl("Artist: $_->[0]->{artist}"),
-			$_->[0]->{artist}, albumlist($_, ",&nbsp; ", 1);
+			$_->[0]->{artist};
+		print_albumlist($_, ",&nbsp; ", 1);
+		printf <<EOF,
+&nbsp;</td>
+</tr>
+EOF
 		$res++;
 	}
 	print <<EOF;
@@ -446,7 +446,7 @@ sub print_albums_row($$$$;$) {
 		return undef;
 	}
 	printf "$label$sep";
-	print albumlist($albumlist, $expand? "<br>\n" : ",&nbsp; ", !$expand);
+	print_albumlist($albumlist, $expand? "<br>\n" : ",&nbsp; ", !$expand);
 	return 1;
 }
 
