@@ -53,6 +53,16 @@ use MPEG::MP3Info;
 
 use vars qw/$opt_d $opt_e $opt_f $opt_r/;
 
+sub get_wav_params($\%;$);
+sub getinfo_mp3($\%);
+sub getinfo_ogg($\%);
+sub getinfo_wav($\%);
+sub getinfo_pac($\%);
+sub getinfo_flac($\%);
+sub getinfo_raw($\%);
+sub read_eric_files();
+sub extract_artist_title;
+
 getopts('fred');
 $force = 1 if $opt_f;
 $| = 1;
@@ -93,6 +103,7 @@ if(open(FILES, "-|") == 0) {
 	exec 'find', @paths, @findargs, '-print0';
 	die "find: $!\n";
 }
+
 $/ = "\0";
 while(<FILES>) {
 	chop;
@@ -106,23 +117,27 @@ while(<FILES>) {
 #	if(++$num % 10 == 0) { print STDERR "."; }
 
 	# get file encoding; skip if unknown
-	my ($desc, $len, $freq, $chan) = getinfo_mp3($_);
-	$desc or ($desc, $len, $freq, $chan) = getinfo_ogg($_);
-	$desc or ($desc, $len, $freq, $chan) = getinfo_wav($_);
-	$desc or ($desc, $len, $freq, $chan) = getinfo_pac($_);
-	$desc or ($desc, $len, $freq, $chan) = getinfo_flac($_);
-	$desc or ($desc, $len, $freq, $chan) = getinfo_raw($_);
-	$len = 0 + $len;
-	$desc or do {
+	my %info;
+	$/ = "\n";
+	getinfo_mp3($_, %info) ||
+	getinfo_ogg($_, %info) ||
+	getinfo_wav($_, %info) ||
+	getinfo_pac($_, %info) ||
+	getinfo_flac($_, %info) ||
+	getinfo_raw($_, %info);
+	$/ = "\0";
+
+	$info{len} = 0 + $info{len};
+	$info{desc} or do {
 		warn "Filetype of $_ unknown\n";
 		next;
 	};
-	if($freq && ($freq < 44.09 || $freq > 44.11)) {
-		my $s = sprintf "%f", $freq;
+	if($info{freq} && ($info{freq} < 44090 || $info{freq} > 44110)) {
+		my $s = sprintf "%f", $info{freq} / 1000;
 		$s =~ s/\.?0+$//;
-		$desc .= ", ${s}kHz";
+		$info{desc} .= ", ${s}kHz";
 	}
-	$desc .= " mono" if $chan == 1;
+	$info{desc} .= " mono" if $info{chan} == 1;
 
 	# skip if already in database (unless "force" was given)
 	if($filename{$_}) {
@@ -145,7 +160,7 @@ while(<FILES>) {
 				or die "can't do sql command: " . $dbh->errstr . "\n";
 			$dbh->do("UPDATE song SET present=1, filename=?, " .
 				"length=?, encoding=? WHERE id=?", undef,
-				$_, $len, $desc, $longname_id{$1})
+				$_, $info{len}, $info{desc}, $longname_id{$1})
 				or die "can't do sql command: " . $dbh->errstr . "\n";
 			delete $filename{$oldname};
 			$num_moved++;
@@ -178,6 +193,13 @@ while(<FILES>) {
 			}
 		}
 		$title or do {
+			$artist = $info{artist};
+			$title = $info{title} and
+				print STDERR "-fileinfo->";
+			$album = $info{album};
+			$track = $info{track};
+		};
+		$title or do {
 			($artist, $title, $track, $album) = extract_artist_title($_);
 			print STDERR "-->";
 		};
@@ -186,7 +208,7 @@ while(<FILES>) {
 	$album or $album = $artist{$_};
 	$album or $album = "";
 
-#	warn "a=$artist, t=$title, al=$album, tr=$track, file=$_, len=$len, desc=$desc\n";
+#	warn "a=$artist, t=$title, al=$album, tr=$track, file=$_, len=$info{len}, desc=$info{desc}\n";
 
 	# insert song into database
 	if(!$artistid_cache{$artist}) {
@@ -199,8 +221,8 @@ while(<FILES>) {
 		"track=?, present=1, filename=?, length=?, encoding=?, " .
 		"last_played=from_unixtime(?), time_added=from_unixtime(?)";
 	$dbh->do($q, undef, $filename{$_}, $artistid_cache{$artist},
-		$title, $albumid_cache{$album}, $track || 0, $_, $len,
-		$desc, $last_played{$_} || 0, $time_added{$_} || time)
+		$title, $albumid_cache{$album}, $track || 0, $_, $info{len},
+		$info{desc}, $last_played{$_} || 0, $time_added{$_} || time)
                 or die "can't do sql command: " . $dbh->errstr . "\n";
 	delete $filename{$_};
 }
@@ -231,18 +253,18 @@ printf <<EOF, $num_added, $num_updated, $num_deleted, $num_moved, $num_skipped;
 EOF
 
 
-
 # getinfo_* returns (description, length[sec], sfreq[khz], channels
 # or undef if it isn't the correct type
 
-sub getinfo_mp3($) {
-	$_[0] =~ /\.mp[1-3]$/i
+sub getinfo_mp3($\%) {
+	my ($file, $info) = @_;
+
+	$file =~ /\.mp[1-3]$/i
 		or return undef;
 
 	# open file to check Xing VBR tag
-	my $xframes = 0;
-	open F, $_[0] or do {
-		warn "$_[0]: $!\n";
+	open F, $file or do {
+		warn "$file: $!\n";
 		return "?";
 	};
 
@@ -260,63 +282,88 @@ sub getinfo_mp3($) {
 	read F, $buf, 12;
 	close F;
 
-	my ($xtag, $xflags);
+	my ($xtag, $xflags, $xframes);
 	($xtag, $xflags, $xframes) = unpack("a4NN", $buf);
 	if($xtag ne "Xing") { $xframes = 0; }
 
-	my $info = get_mp3info($_[0]);
-	my $secs = 0 + $info->{MM} * 60 + $info->{SS};
-	my $bitrate = $info->{BITRATE};
+	my $mp3info = get_mp3info($file);
+	$info->{len} = $mp3info->{MM} * 60 + $mp3info->{SS};
+	$info->{freq} = $mp3info->{FREQUENCY} * 1000;
+	$info->{chan} = $mp3info->{STEREO}? 2 : 1;
+
+	my $bitrate = $mp3info->{BITRATE};
 	if($xframes) {
-		$secs = $xframes * ($info->{VERSION}? 1152 : 576) /
-			($info->{FREQUENCY} * 1000);
-		$bitrate = int(8 * (-s $_[0]) / $secs / 1000);
+		$info->{len} = $xframes * ($mp3info->{VERSION}? 1152 : 576) /
+			$info->{freq};
+		$bitrate = int(8 * (-s $file) / $info->{len} / 1000);
 	}
-	return (sprintf("MP3 %dkb/s%s", $bitrate, $xframes? " (VBR)":""),
-		$secs, 0 + $info->{FREQUENCY},
-		$info->{STEREO}? 2 : 1
-	);
+	$info->{desc} = sprintf "MP3 %dkb/s%s", $bitrate, $xframes? " (VBR)":"";
+	return 1;
 }
 
-sub getinfo_ogg($) {
-	$_[0] =~ /\.ogg$/i
+sub getinfo_ogg($\%) {
+	my ($file, $info) = @_;
+	local *F;
+
+	$file =~ /\.ogg$/i
 		or return undef;
+
 	if(open(F, "-|") == 0) {
-		exec "ogg2raw", "-i", $_[0];
+		exec "ogg2raw", "-i", $file;
 		die;
 	}
-	my ($sfreq, $chan, $sec, $br) = split(/,/, <F>);
+
+	my $br;
+	my $infoline = <F>;
+	($info->{freq}, $info->{chan}, $info->{len}, $br) = split(/,/, $infoline);
+
+	chop(($info->{artist}, $info->{title}, $info->{album},
+	 $info->{track}) = <F>);
 	close F;
-	return (sprintf("Ogg-Vorbis (~%dkb/s)", ($br + 500) / 1000),
-		0 + $sec, $sfreq / 1000, 0 + $chan
-	);
+
+	$info->{freq} or return undef;
+
+	$info->{desc} = sprintf "Ogg-Vorbis (~%dkb/s)", ($br + 500) / 1000;
+	return 1;
 }
 
-sub getinfo_wav($) {
-	$_[0] =~ /\.wav$/i
+sub getinfo_wav($\%) {
+	my ($file, $info) = @_;
+
+	$file =~ /\.wav$/i
 		or return undef;
-	return ("WAV", get_wav_params($_[0]));
+
+	get_wav_params($file, %$info) or return undef;
+	$info->{desc} = "WAV";
+	return 1;
 }
 
-sub getinfo_pac($) {
-	$_[0] =~ /\.pac$/i
+sub getinfo_pac($\%) {
+	my ($file, $info) = @_;
+
+	$file =~ /\.pac$/i
 		or return undef;
+
 	if(open(F, "-|") == 0) {
-		exec "lpac2raw", "-i", $_[0];
+		exec "lpac2raw", "-i", $file;
 		die;
 	}
-	my ($sfreq, $chan, $sec, $bytes) = split(/,/, <F>);
-	return undef unless $sfreq && $chan && $sec && $bytes;
-	my $percent = int((-s $_[0]) / ($bytes / 100));
-	
+	my $bytes;
+	($info->{freq}, $info->{chan}, $info->{len}, $bytes) = split(/,/, <F>);
 	close F;
-	return ("LPAC $percent%", 0 + $sec, $sfreq / 1000, 0 + $chan);
+	$bytes or return undef;
+
+	$info->{desc} = sprintf "LPAC %d%%", (-s $file) / ($bytes / 100);
+	return 1;
 }
 
-sub getinfo_flac($) {
-	$_[0] =~ /\.flac$/i
+sub getinfo_flac($\%) {
+	my ($file, $info) = @_;
+
+	$file =~ /\.flac$/i
 		or return undef;
-	open F, $_[0] or return undef;
+
+	open F, $file or return undef;
 
 	my $buf;
 	read F, $buf, 26;
@@ -326,30 +373,37 @@ sub getinfo_flac($) {
 	my ($magic, $l1, $num) = unpack "a4x14NN", $buf;
 	$magic eq "fLaC" or return undef;
 
-	my $sr = $l1 >> 12;
-	my $ch = 1 + (($l1 >> 9) & 7);
+	$info->{freq} = $l1 >> 12;
+	$info->{chan} = 1 + (($l1 >> 9) & 7);
 	my $bt = 1 + (($l1 >> 4) & 0x1f);
 	$num += ($l1 & 0xf) << 32;
-#warn "flac($magic, $sr, $ch, $bt, $num)\n";
+	$info->{len} = $num / $info->{freq};
 
 	my $percent = '';
-	if($num && $ch && $bt) {
+	if($num && $info->{ch} && $bt) {
 		$percent = sprintf " %d%%",
-			(-s $_[0]) / ($num * $ch * $bt / 8 / 100);
+			(-s $file) / ($num * $info->{chan} * $bt / 8 / 100);
 	}
-	return ("flac$percent", $num / $sr, $sr / 1000, $ch);
+	$info->{desc} = "flac$percent";
+	return 1;
 }
 
-sub getinfo_raw($) {
-	$_[0] =~ /\.raw$/i
+sub getinfo_raw($\%) {
+	my ($file, $info) = @_;
+
+	$file =~ /\.raw$/i
 		or return undef;
 
-	return ("raw", (-s $_[0]) / 176400, 44.1, 2);
+	$info->{desc} = "raw";
+	$info->{len} = (-s $file) / 176400;
+	$info->{freq} = 44100;
+	$info->{chan} = 2;
+	return 1;
 }
 
-# returns (samplefreq, channels, seconds)
-sub get_wav_params($;$) {
-	my ($file, $offset) = @_;
+# returns samplefreq, channels, seconds
+sub get_wav_params($\%;$) {
+	my ($file, $info, $offset) = @_;
 	$offset = 0 + $offset;
 	local *F;
 	my $buf;
@@ -392,12 +446,14 @@ sub get_wav_params($;$) {
 			}
 		}
 		close F;
-		return int($len / $bytespersec + 0.5), $freq / 1000, $chan;
+		$info->{len} = int($len / $bytespersec + 0.5);
+		$info->{freq} = $freq;
+		$info->{chan} = $chan;
+		return 1;
 	}
 	close F;
 	return undef;
 }
-
 
 sub read_eric_files() {
 	foreach $file (split /\s+/, $conf{'description_files'}) {
@@ -520,4 +576,3 @@ sub extract_artist_title {
 	if(-e "$p/.reverse") { ($a, $t) = ($t, $a); }
 	return (cleanup_name($a), cleanup_name($t), $tr, cleanup_name($alb));
 }
-
