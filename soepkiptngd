@@ -31,7 +31,7 @@ $ENV{'PATH'} = "/usr/local/bin:/usr/bin:/bin";
 use DBI;
 use IO::Handle;
 use MPEG::MP3Info;
-use Socket;
+use IO::Socket;
 use POSIX ":sys_wait_h";
 use Sys::Hostname;
 use Getopt::Std;
@@ -57,15 +57,10 @@ while(<F>) {
 }
 close F;
 
-socket(KILLSOCK, PF_INET, SOCK_STREAM, getprotobyname('tcp'))
-	or die "socket: $!\n";
-setsockopt(KILLSOCK, SOL_SOCKET, SO_REUSEADDR, pack("l", 1));
-bind(KILLSOCK, sockaddr_in(0, INADDR_ANY))
-	or die "bind $killport: $!\n";
-listen(KILLSOCK, SOMAXCONN);
-
+$killsock = IO::Socket::INET->new(Listen => 5)
+	or die "cannot create listening TCP socket: $!\n";
 $killhost = hostname;
-($killport) = unpack_sockaddr_in(getsockname(KILLSOCK));
+$killport = $killsock->sockport();
 
 $dbh = DBI->connect("DBI:mysql:$db_name:$db_host", $db_user, $db_pass)
 	or die "Can't connect to database $db_name\@$db_host as user $db_user\n";
@@ -153,8 +148,8 @@ for(;;) {
 	if($restart) {
 		# close-on-exec apparently doesn't work
 		$dbh->disconnect;
-		close SOCK if $socket_open;
-		close KILLSOCK;
+		$killsock_conn and $killsock_conn->close();
+		$killsock->close();
 
 		warn "execing myself\n";
 		exec $0, '-r', $cdrplaypid;
@@ -220,8 +215,8 @@ EOF
 	}
 
 	# close accepted socket after statusfile was updated
-	if($socket_open) {
-		print SOCK <<EOF;
+	if($killsock_conn) {
+		print $killsock_conn <<EOF;
 $song_id
 $filename
 $$
@@ -229,8 +224,8 @@ $cdrplaypid
 $killhost
 $killport
 EOF
-		close SOCK;
-		$socket_open = 0;
+		$killsock_conn->close();
+		undef $killsock_conn;
 	}
 
 	# get file type
@@ -266,8 +261,8 @@ EOF
 	}
 	warn "pid=$pid\n";
 
-	# wait until player is done or we get a connect on KILLSOCK
-	vec($rin, fileno(KILLSOCK), 1) = 1;
+	# wait until player is done or we get a connect on $killsock
+	vec($rin, $killsock->fileno(), 1) = 1;
 	while($pid) {
 		if(select($rout = $rin, undef, undef, 0.1) == 1) {
 			warn "got connection\n";
@@ -285,13 +280,13 @@ EOF
 
 			# accept the tcp connection; we close it later,
 			# after a new song has been selected
-			accept SOCK, KILLSOCK and $socket_open = 1;
+			$killsock_conn = $killsock->accept();
 
 			# write to log file
 			logprintf("K %6d", $song_id);
 		}
 	}
-	if(($pid_status || $pid_signal) && !$socket_open) {
+	if(($pid_status || $pid_signal) && !$killsock_conn) {
 		# write to log file
 		logprintf("E %6d status=%d signal=%d", $song_id, $pid_status, $pid_signal);
 	}
