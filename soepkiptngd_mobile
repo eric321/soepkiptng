@@ -1,0 +1,185 @@
+#!/usr/bin/perl
+############################################################################
+# soepkiptngd_mobile (Soepkip The Next Generation daemon, Mobile version)
+#
+# (c) copyright 2001 Eric Lammerts <eric@lammerts.org>
+#
+# $Id$
+############################################################################
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License, version 2, as 
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# A copy of the GNU General Public License is available on the World Wide Web
+# at `http://www.gnu.org/copyleft/gpl.html'.  You can also obtain it by
+# writing to the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+# Boston, MA 02111-1307, USA.
+############################################################################
+
+# fork, and start soepkiptngd
+# fork, and start funkey handler
+# wait until soepkip is playing stuff, or timeout (timeout is needed when no preload is available)
+# exec /sbin/init
+
+my $configfile = "/etc/soepkiptng.conf";
+
+use Audio::Mixer;
+use Socket;
+
+$mixerchannel = 'pcm';
+
+my $field;
+open F, $configfile
+	or die "$configfile: $!\n";
+while(<F>) {
+	/^#/ and next;
+	s/\s+$//;
+	/./ or next;
+	if(/^(\w+)\s*=\s*(.*?)\s*$/) {
+		$field = $1;
+		$conf{$field} = $2;
+	} elsif(/^\s+(.*?)\s*$/) {
+		# continuation line
+		$conf{$field} .= "\n$1";
+	} else {
+		die "$configfile line $.: invalid format\n";
+	}
+}
+close F;
+
+$ENV{'PATH'} = "$conf{progdir}:$conf{progdir}/bin:$ENV{'PATH'}";
+
+# return higest of (left, right) volume
+sub getvol() {
+	my ($l, $r) = Audio::Mixer::get_cval($mixerchannel);
+	return $l > $r? $l : $r;
+}
+
+sub setvol($;$) {
+	my ($incr, $abs) = @_;
+
+	if($muted) {
+		if($incr > 0) {
+			$muted = 0;
+		} elsif($incr < 0) {
+			$volume += $incr;
+			return;
+		}
+	} else {
+		$volume = getvol() + $incr;
+		warn "volume=$volume\n";
+	}
+
+	if($incr == 0) { $muted = !$muted; }
+	if($abs) { $volume = $incr; $muted = 0; }
+
+	if($volume > 100) { $volume = 100; }
+	if($volume < 0) { $volume = 0; }
+
+	warn "setting volume, volume=$volume, muted=$muted\n";
+	Audio::Mixer::set_cval($mixerchannel, ($muted? 0 : $volume));
+}
+
+sub killsong() {
+	my $iaddr   = inet_aton($killhost) or return;
+	$paddr   = sockaddr_in($killport, $iaddr);
+
+	socket SOCK, PF_INET, SOCK_STREAM, getprotobyname('tcp')
+		or return;
+	connect SOCK, $paddr
+		or return;
+	close SOCK;
+}
+
+sub digit($) {
+	$keypadvalue *= 10;
+	$keypadvalue += $_[0];
+	warn "keypadvalue=$keypadvalue";
+}
+
+sub funkeyd() {
+	warn "funkeyd cdrplaypid=$cdrplaypid k=$killhost:$killport\n";
+	local *F;
+
+	open F, "| loadkeys -";
+	my $keynum = 89;
+	foreach(keys %conf) {
+		next unless /^funkey_(\d+)$/;
+		$keynum < 128 or die "too many funkeys defined!\n";
+		printf F "  keycode %d = U+%04x\n", $1, 0xfe00 + $keynum;
+		$funkey_handle{$keynum} = $conf{$_};
+		$keynum++;
+	}
+	close F;
+
+	if(fork == 0) {
+		setpgrp;
+
+		Audio::Mixer::init_mixer();
+		open F, "/dev/funkey" or die "/dev/funkey: $!\n";
+		for(;;) {
+			sysread F, $key, 1;
+			$key = unpack "C", $key;
+
+			# skip autorepeated keys
+			next if $key == $prevkey;
+			$prevkey = $key;
+
+			# don't act on releasing a key
+			next if $key & 0x80;
+
+			eval $funkey_handle{$key};
+		}
+	}
+}
+
+sub wait_for_soepkiptng() {
+	local *ST;
+
+	for(;;) {
+		if(open ST, $conf{statusfile}) {
+			chop((undef, undef, undef, $cdrplaypid, $killhost, $killport) = <ST>);
+			close ST;
+			last if $cdrplaypid && $killhost && $killport;
+		}
+		sleep 1;
+	}
+}
+
+
+### MAIN ###
+
+unlink $conf{statusfile};
+
+setvol($conf{volume_init}, 1) if $conf{volume_init};
+
+if($$ == 1) { system "ifconfig lo 127.0.0.1"; }
+
+if(fork == 0) {
+	$ENV{PATH} .= ":/usr/local/bin";
+	exec 'sched', 'soepkiptngd';
+	die 'soepkiptngd';
+}
+
+wait_for_soepkiptng;
+funkeyd;
+
+# for testing
+exit if $$ != 1;
+
+sleep 1;
+
+exec "/sbin/init";
+warn "/sbin/init: $!\n";
+
+exec "/bin/sh";
+warn "/bin/sh: $!\n";
+
+# nothing else we can do
+for(;;) { }
+
