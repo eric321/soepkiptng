@@ -362,6 +362,8 @@ sub start_play($) {
 			exec "wav2raw", $filename;
 		} elsif($ext eq "pac") {
 			exec "lpac2raw", $filename;
+		} elsif($ext eq "flac") {
+			exec "flac", "-d", "-fl", $filename, "-";
 		} else {
 			warn "no player for .$ext files.\n";
 		}

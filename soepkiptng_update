@@ -40,9 +40,10 @@ if($@) {
 	$omitmp3info = 1;
 }
 
-getopts('f');
+getopts('fred');
 $force = 1 if $opt_f;
 $| = 1;
+$do_delete = !$opt_d && !$opt_r;
 
 # for the web interface (stupid browsers/users)
 $SIG{'PIPE'} = 'IGNORE';
@@ -71,7 +72,7 @@ require "$progdir/soepkiptng.lib";
 $dbh = DBI->connect("DBI:$db_type:$db_name:$db_host", $db_user, $db_pass)
 	or die "can't connect to database";
 
-read_eric_files();
+read_eric_files() unless $opt_e;
 
 # get existing filenames in database
 if($ARGV[0]) {
@@ -93,7 +94,9 @@ while(($id, $f, $l, $pres) = $sth->fetchrow_array) {
 
 # scan mp3 directories
 if(open(FILES, "-|") == 0) {
-	exec 'find', @paths, '-type' , 'f', '-print0';
+	my @findargs = ('-type', 'f');
+	$opt_r and push @findargs, '-maxdepth', 1;
+	exec 'find', @paths, @findargs, '-print0';
 	die "find: $!\n";
 }
 $/ = "\0";
@@ -113,6 +116,7 @@ while(<FILES>) {
 	$desc or ($desc, $len, $freq, $chan) = getinfo_ogg($_);
 	$desc or ($desc, $len, $freq, $chan) = getinfo_wav($_);
 	$desc or ($desc, $len, $freq, $chan) = getinfo_pac($_);
+	$desc or ($desc, $len, $freq, $chan) = getinfo_flac($_);
 	$len = 0 + $len;
 	$desc or do {
 		warn "Filetype of $_ unknown\n";
@@ -201,11 +205,13 @@ while(<FILES>) {
 }
 
 # delete all filenames in database what were not found on disk
-$sth = $dbh->prepare("UPDATE song SET present=0 WHERE filename=?");
-foreach(keys %filename) {
-	$sth->execute($_);
-	print "Deleting $_\n";
-	$num_deleted++;
+if($do_delete) {
+	$sth = $dbh->prepare("UPDATE song SET present=0 WHERE filename=?");
+	foreach(keys %filename) {
+		$sth->execute($_);
+		print "Deleting $_\n";
+		$num_deleted++;
+	}
 }
 
 print "Optimizing Tables.\n";
@@ -294,6 +300,19 @@ sub getinfo_pac($) {
 	return ("LPAC $percent%", 0 + $sec, $sfreq / 1000, 0 + $chan);
 }
 
+sub getinfo_flac($) {
+	$_[0] =~ /\.flac$/i
+		or return undef;
+#	if(open(F, "-|") == 0) {
+#		exec "lpac2raw", "-i", $_[0];
+#		die;
+#	}
+#	my ($sfreq, $chan, $sec, $bytes) = split(/,/, <F>);
+#	my $percent = int((-s $_[0]) / ($bytes / 100));
+#	
+#	close F;
+	return ("Flac $percent%", 0 + $sec, $sfreq / 1000, 0 + $chan);
+}
 
 # returns (samplefreq, channels, seconds)
 sub get_wav_params($;$) {
