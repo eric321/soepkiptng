@@ -693,7 +693,7 @@ sub print_shoutcast_page($$) {
 		my $alid = get_id($dbh, "album", '') or die;
 		$dbh->do("REPLACE INTO song SET title=?, filename=?, album_id=?, " .
 			"artist_id=?, present=1, encoding=\"Shoutcast\", track=0, " .
-			"length=0", undef,
+			"length=0, time_added=NULL", undef,
 			$args->{name}, $args->{url}, $alid, $arid) or die;
 	}
 
