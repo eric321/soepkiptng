@@ -60,6 +60,45 @@ sub can_delete($) {
 	return 1 if -k $dir && -w $file;
 }
 
+sub ids_encode(@) {
+	my $prev = 0;
+	my $out = '';
+	foreach(@_) {
+		if($_ > $prev && $_ - $prev <= 26) {
+			$out .= chr(ord('A') - 1 + $_ - $prev);
+		} elsif($_ < $prev && $prev - $_ <= 26) {
+			$out .= chr(ord('a') - 1 + $prev - $_);
+		} else {
+			if($_ - $prev >= 0 && substr($out, -1) =~ /\d/) {
+				$out .= "+";
+			}
+			$out .= ($_ - $prev);
+		}
+		$prev = $_;
+	}
+	return $out;
+}
+
+sub ids_decode($) {
+	my ($str) = @_;
+	my $val = 0;
+	my @out = ();
+	do {
+		if($str =~ s/^([a-z])//) {
+			$val -= ord($1) - (ord('a') - 1);
+		} elsif($str =~ s/^([A-Z])//) {
+			$val += ord($1) - (ord('A') - 1);
+		} elsif($str =~ s/^([-+ ]?\d+)//) {
+			$val += $1;
+		} else {
+			die "Invalid id encoding: '$str'\n";
+		}
+		push @out, $val;
+	} while($str);
+	return @out;
+}
+
+
 sub print_frame() {
 	print <<EOF;
 <html>
@@ -204,7 +243,7 @@ EOF
 		$td_song, $title_href, enchtml($q->{title}), $title_href? "</a>":"",
 		$td_time, $q->{length} / 60, $q->{length} % 60,
 		$td_enc, enchtml($q->{encoding}, 1),
-		$td_edit, $self, $q->{id}, join(",", @$idsref),
+		$td_edit, $self, $q->{id}, ids_encode(@$idsref),
 		$edit_target || 'bframe', $listch;
 }
 
@@ -269,14 +308,14 @@ sub print_playlist_table($$) {
 #		next if $_->{id} == $nowplaying;
 		push @ids, $_->{id};
 		my $col1 = sprintf(
-			qq|<a id=a href="%s?cmd=del&id=%s">%s</a> | .
+			qq|<a id=a href="%s?cmd=del&ids=%s">%s</a> | .
 			qq|<a id=a href="%s?cmd=up&id=%s">%s</a>|,
 			$self, $_->{id}, $deltext, $self, $_->{id}, $uptext);
 		$output .= table_entry($_, $col1);
 	}
 	if(@ids) {
-		$delall = sprintf <<EOF, $self, join(",", @ids);
-<a id=a href="%s?cmd=del&id=%s">$delalltext</a>
+		$delall = sprintf <<EOF, $self, ids_encode(@ids);
+<a id=a href="%s?cmd=del&ids=%s">$delalltext</a>
 EOF
 	}
 	print <<EOF;
@@ -375,7 +414,7 @@ EOF
 			}
 		}
 
-		my $thref = sprintf(qq|<a id=a href="%s?cmd=add&id=%d" target=tframe>|,
+		my $thref = sprintf(qq|<a id=a href="%s?cmd=add&ids=%d" target=tframe>|,
 			$self, $_->{id});
 		$output .= table_entry($_, "$thref$addtext</a>", $thref, \@ids);
 	}
@@ -401,8 +440,8 @@ EOF
 	print "<table border=0 cellspacing=0>\n";
 
 	if(@ids) {
-	$addall = sprintf <<EOF, join(",", @ids);
-   <a id=a href="$self?cmd=add&id=%s" target=tframe>$addalltext</a>
+	$addall = sprintf <<EOF, ids_encode(@ids);
+   <a id=a href="$self?cmd=add&ids=%s" target=tframe>$addalltext</a>
 EOF
 	}
 
@@ -483,7 +522,7 @@ function closethis() {
 EOF
 	my $prevnext = '';
 	my $i = 0;
-	my @ids = split(/,/, $$argsref{'ids'});
+	my @ids = ids_decode($$argsref{'ids'});
 	foreach(@ids) {
 		last if $_ == $$argsref{'id'};
 		$i++;
@@ -679,11 +718,11 @@ if($cmd eq 'empty') {
 }
 
 if($cmd eq 'add') {
-	add_song($dbh, split(/,/, $args{'id'}));
+	add_song($dbh, ids_decode($args{'ids'}));
  	printredirexit($q, 'playlist', undef);
 }
 elsif($cmd eq 'del') {
-	del_song($dbh, split(/,/, $args{'id'}));
+	del_song($dbh, ids_decode($args{'ids'}));
  	printredirexit($q, 'playlist', undef);
 }
 elsif($cmd eq 'up') {
