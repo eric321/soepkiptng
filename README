@@ -2,6 +2,7 @@
 Soepkip The Next Generation
 ---------------------------
 by Eric Lammerts <eric@lammerts.org>
+$Id$
 
 Install procedure:
 * sudo mysql -u root < soepkiptng_create.my

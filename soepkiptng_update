@@ -1,4 +1,5 @@
 #!/usr/bin/perl
+# $Id$
 
 $configfile = "/etc/soepkiptng.conf";
 

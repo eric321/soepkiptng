@@ -1,4 +1,5 @@
 
+# $Id$
 
 sub kill_song() {
 	local *F;
