@@ -181,6 +181,8 @@ sub do_mp3($$) {
 	};
 	$sth->finish;
 
+	next unless -s $f;
+
 	open F, "+<$f" or do {
 		warn "$f: $!\n";
 		return 1;
