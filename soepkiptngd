@@ -344,8 +344,8 @@ sub exec_prog(;$$) {
 	return $pid;
 }
 
-sub play_mplayer($) {
-	my @args = @_;
+sub play_mplayer(@) {
+	my @prog = @_;
 	local *F;
 
 	exec_prog and return;
@@ -356,26 +356,30 @@ sub play_mplayer($) {
 	fcntl F, F_SETFD, 0;
 
 	open STDIN, "/dev/null";
-	open STDERR, ">/dev/null";
+#	open STDERR, ">/dev/null";
 	open STDOUT, ">&STDERR";
 	delete $ENV{http_proxy};
 
-	if($args[0] =~ /^http:/) { unshift @args, "-cache", 512; }
+	if($prog[$#prog] =~ /^http:/) { unshift @prog, "-cache", 512; }
 
-	exec qw"mplayer -ao pcm -nowaveheader -aop list=resample:fout=44100 -vc dummy -vo null",
-		"-aofile", "/dev/fd/" . fileno(F), @args;
-	die "mplayer: $!\n";
+	unshift @prog, qw"mplayer -quiet -ao pcm -nowaveheader -srate 44100 -vc dummy -vo null",
+		"-aofile", "/dev/fd/" . fileno(F);
+
+	warn "running: " . join(" ", @prog) . "\n";
+	exec @prog;
+	die "$prog[0]: $!\n";
 }
 
 
 sub start_play($) {
-	my ($filename) = @_;
+	my ($song) = @_;
+	my $filename = $song->{filename};
 
 	# get file type
 	$filename =~ /([^.]*)$/;
 	my $ext = lc($1);
 
-	if($filename =~ /^http:/ || $ext eq "wma") {
+	if($filename =~ /^http:/ || $ext eq "wma" || $song->{encoding} =~ /RealAudio/) {
 		play_mplayer($filename);
 	} elsif($filename =~ /^cdda:[^:]*:(\d+)/) {
 		exec_prog ["$conf{cdda_prog} $1"];
@@ -407,6 +411,7 @@ sub start_play($) {
 		exec_prog ["soepkiptng_video", $filename], 1;
 	} elsif($ext eq "ac3") {
 		exec_prog ["a52dec", "-o", "oss6", $filename], 1;
+		#play_mplayer("-demuxer", 17, $filename);
 	} else {
 		warn "no player for .$ext files.\n";
 	}
@@ -626,7 +631,7 @@ EOF
 		my ($a, $b, $c, $d) = times;
 		$childtime = $c + $d;
 	}
-	start_play($song->{filename});
+	start_play($song);
 	warn "pid=$pid\n";
 
 	# update random song cache
