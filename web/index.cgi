@@ -181,8 +181,8 @@ $editlistopts
 EOF
 }
 
-sub table_entry($;$$) {
-	my ($q, $col1, $title_href) = @_;
+sub table_entry($;$$$$) {
+	my ($q, $col1, $title_href, $idsref) = @_;
 	my $fmt = <<EOF;
  <tr>
   <td %s>&nbsp;%s&nbsp;</td>
@@ -192,7 +192,8 @@ sub table_entry($;$$) {
   <td %s>&nbsp;%s%s%s&nbsp;</td>
   <td %s>&nbsp;%d:%02d&nbsp;</td>
   <td %s>&nbsp;%s&nbsp;</td>
-  <td %s> <a id=a href="%s?cmd=edit&id=%d" title="Edit" target=%s>*</a>%s</td>
+  <td %s> <a id=a href="%s?cmd=edit&id=%d&ids=%s" title="Edit" target=%s>*</a>%s</td>
+  %s
  </tr>
 EOF
 	return sprintf $fmt, 
@@ -203,7 +204,8 @@ EOF
 		$td_song, $title_href, enchtml($q->{title}), $title_href? "</a>":"",
 		$td_time, $q->{length} / 60, $q->{length} % 60,
 		$td_enc, enchtml($q->{encoding}, 1),
-		$td_edit, $self, $q->{id}, $edit_target || 'bframe', $listch;
+		$td_edit, $self, $q->{id}, join(",", @$idsref),
+		$edit_target || 'bframe', $listch;
 }
 
 sub albumlist_entry($) {
@@ -340,10 +342,14 @@ sub print_alllist_table($$$$@) {
 		or die "can't do sql command: " . $dbh->errstr;
 	my @ids;
 	my %artistids;
-	my $numresults = 0;
+	my %records;
+	my @ids;
 	while($_ = $sth->fetchrow_hashref) {
-		$numresults++;
+		$records{$_->{id}} = $_;
 		push @ids, $_->{id};
+	}
+	foreach $id (@ids) {
+		$_ = $records{$id};
 		$artistids{$_->{arid}}++;
 		my $el = $$session{'editlist'};
 		my $listch;
@@ -371,7 +377,7 @@ EOF
 
 		my $thref = sprintf(qq|<a id=a href="%s?cmd=add&id=%d" target=tframe>|,
 			$self, $_->{id});
-		$output .= table_entry($_, "$thref$addtext</a>", $thref);
+		$output .= table_entry($_, "$thref$addtext</a>", $thref, \@ids);
 	}
 	print <<EOF;
 <center id=hdr>$caption</center>
@@ -403,12 +409,13 @@ EOF
 	my %revsort;
 	$revsort{$$argsref{'sort'}} = "r_";
 
-	delete $$argsref{'sort'};
 	my $baseurl = "$self?";
 	foreach(keys %$argsref) {
+		next if $_ eq 'sort';
 		$baseurl .= "$_=" . encurl($$argsref{$_}) . "&";
 	}
 
+	my $res = $#ids + 1;
 	print <<EOF;
  <tr>
   <th $th_left>&nbsp;$addall&nbsp;</th>
@@ -422,21 +429,21 @@ EOF
  </tr>
  <tr><td colspan=7></td></tr>
 $output
-<tr><td colspan=8>$numresults search results.</td></tr>
+<tr><td colspan=8>$res search results.</td></tr>
 </table>
 EOF
 }
 
 sub print_edit_page($$) {
-	my ($dbh, $id) = @_;
+	my ($dbh, $argsref) = @_;
 
 	my $sth = $dbh->prepare("SELECT artist.name as artist,album.name as album,song.*," .
 		" unix_timestamp(last_played) as lp," .
 		" unix_timestamp(time_added) as ta" .
-		" FROM song,artist,album WHERE song.id=$id" .
+		" FROM song,artist,album WHERE song.id=$$argsref{'id'}" .
 		" AND song.artist_id=artist.id AND song.album_id=album.id");
 	$sth->execute();
-	$_ = $sth->fetchrow_hashref() or die "id $id not found.\n";
+	$_ = $sth->fetchrow_hashref() or die "id $$argsref{'id'} not found.\n";
 
 	my $fmt = <<EOF;
 <script language="Javascript">
@@ -457,9 +464,11 @@ function closethis() {
   <form action="%s" method=get>
   <input type=hidden name=id value="%d">
     <input type=hidden name=cmd value=changefile>
+    <input type=hidden name=ids value=%s>
+  <tr><td>%s</td></tr>
   <tr><td>Present:</td><td>%s</td></tr>
-  <tr><td>Artist:</td><td><input type=text size=60 name=artist value="%s"><input type=submit name=action_clear_artist value="Clear"><input type=submit name=action_fix_artist value="Fix"><input type=submit name=action_swap value="Swap Artist/Title"></td></tr>
-  <tr><td>Title:</td> <td><input type=text size=60 name=title  value="%s"><input type=submit name=action_clear_title value="Clear"><input type=submit name=action_fix_title value="Fix"></td></tr>
+  <tr><td>Artist:</td><td><input type=text size=60 name=artist value="%s"><input type=submit name=action_clear_artist value="Clear"><input type=submit name=action_fix_artist value="Fix"><input type=submit name=action_swapa value="Swap First/Last"></td></tr>
+  <tr><td>Title:</td> <td><input type=text size=60 name=title  value="%s"><input type=submit name=action_clear_title value="Clear"><input type=submit name=action_fix_title value="Fix"><input type=submit name=action_swap value="Swap Artist/Title"></td></tr>
   <tr><td>Album:</td> <td><input type=text size=60 name=album  value="%s"><input type=submit name=action_clear_album value="Clear"><input type=submit name=action_fix_album value="Fix"></td></tr>
   <tr><td>Track:</td> <td><input type=text size=3 name=track  value="%s" maxlength=2></td></tr>
   <tr><td>Time:</td>  <td>%d:%02d</td></tr>
@@ -472,8 +481,24 @@ function closethis() {
   <tr><td colspan=2><input type=submit value="Update"></td></tr>
   </form>
 EOF
+	my $prevnext = '';
+	my $i = 0;
+	my @ids = split(/,/, $$argsref{'ids'});
+	foreach(@ids) {
+		last if $_ == $$argsref{'id'};
+		$i++;
+	}
+	if($i > 0) {
+		$prevnext .= "<input type=submit name=go_$ids[$i-1] value=Prev>";
+	}
+	if($i < $#ids) {
+		$prevnext .= "<input type=submit name=go_$ids[$i+1] value=Next>";
+	}
+
 	$_->{filename} =~ m|^(.*)/(.*?)$|;
-	printf $fmt, $self, $id, $_->{present}? "Yes" : "No",
+	printf $fmt, $self, $$argsref{'id'}, $$argsref{'ids'},
+		$prevnext,
+		$_->{present}? "Yes" : "No",
 		enchtml($_->{artist}),
 		enchtml($_->{title}),
 		enchtml($_->{album}),
@@ -490,7 +515,7 @@ EOF
   <tr><td>
    <form action="$self" method=get onSubmit="return verifydelete();">
     <input type=hidden name=cmd value=delfile>
-    <input type=hidden name=id value="$id">
+    <input type=hidden name=id value="$$argsref{'id'}">
     <input type=submit value="Delete Song">
    </form>
   </td></tr>
@@ -504,15 +529,17 @@ EOF
   <tr><td>
    <form action="$self/$f" method=post>
     <input type=hidden name=cmd value=download>
-    <input type=hidden name=id value="$id">
+    <input type=hidden name=id value="$$argsref{'id'}">
     <input type=submit value="Download">
    </form>
   </td></tr>
   <tr><td>&nbsp;</td></tr>
   <tr><td>
-   <form>
-    <input type=submit value="Close" onClick="javascript:window.close();">
-   </form>
+<script language="Javascript">
+<!--
+ document.write('<form><input type=submit value="Close" onClick="javascript:window.close();"></form>');
+// -->
+</script>
   </td></tr>
 </table>
 EOF
@@ -701,14 +728,27 @@ elsif($cmd eq 'shuffle') {
  	printredirexit($q, 'playlist', \%args);
 }
 elsif($cmd eq 'changefile') {
+	my $newid = 0;
+
 	if($args{'action_clear_artist'})   { $args{'artist'} = '' }
 	elsif($args{'action_clear_title'}) { $args{'title'} = '' }
-	elsif($args{'action_clear_album'}) { $args{'album'} = '' }
+	elsif($args{'action_clear_album'}) { $args{'album'} = $args{'track'} = '' }
 	elsif($args{'action_fix_artist'}) { $args{'artist'} = cleanup_name(lc($args{'artist'})); }
 	elsif($args{'action_fix_title'}) { $args{'title'} = cleanup_name(lc($args{'title'})); }
 	elsif($args{'action_fix_album'}) { $args{'album'} = cleanup_name(lc($args{'album'})); }
 	elsif($args{'action_swap'}) {
 		($args{'title'}, $args{'artist'}) = ($args{'artist'}, $args{'title'});
+	}
+	elsif($args{'action_swapa'}) {
+		$args{'artist'} =~ s/(.*)\s*,\s*(.*)/$2 $1/
+			or $args{'artist'} =~ s/(.*?)\s+(.*)/$2 $1/
+	} else {
+		foreach(keys %args) {
+			if(/^go_(\d+)$/) {
+				$newid = $1;
+				last;
+			}
+		}
 	}
 	my $arid = get_id($dbh, "artist", $args{'artist'}) or die;
 	my $alid = get_id($dbh, "album", $args{'album'}) or die;
@@ -716,6 +756,7 @@ elsif($cmd eq 'changefile') {
 	$dbh->do("UPDATE song SET artist_id=?, title=?, album_id=?, track=? WHERE id=?",
 		undef, $arid, $args{'title'}, $alid, $args{'track'}, $args{'id'})
 		or die "can't do sql command: " . $dbh->errstr;
+	if($newid) { $args{'id'} = $newid; }
  	printredirexit($q, 'edit', \%args);
 }
 
@@ -867,7 +908,7 @@ elsif($cmd eq 'update') {
 elsif($cmd eq 'edit') {
 	printhtmlhdr;
 	printhdr($editstyle);
-	print_edit_page($dbh, $args{'id'});
+	print_edit_page($dbh, \%args);
 	printftr;
 }
 elsif($cmd eq 'delfile') {
