@@ -199,7 +199,7 @@ EOF
 	$info{title},
 	$info{album},
 	$info{track},
-	$info{length} / 60, $info{length} % 60,
+	$info{len} / 60, $info{len} % 60,
 	$info{encoding};
 
 	# insert song into database
