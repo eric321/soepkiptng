@@ -847,7 +847,7 @@ elsif($cmd eq 'recent') {
 		" FROM song,artist,album WHERE present " .
 		" AND song.artist_id=artist.id AND song.album_id=album.id" .
 		" AND unix_timestamp(now()) - unix_timestamp(time_added) < $maxage" .
-		" ORDER BY $s LIMIT 500");
+		" ORDER BY $s,album.name,track,artist.name,title LIMIT 500");
 	printftr;
 }
 elsif($cmd eq 'maint') {
