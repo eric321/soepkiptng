@@ -392,16 +392,25 @@ sub print_alllist_table($$$$@) {
 	my ($dbh, $argsref, $session, $caption, $query, @val) = @_;
 	my ($output, $addall);
 
+	print <<EOF;
+<center id=hdr>$caption</center>
+EOF
+
 	my $sth = $dbh->prepare($query);
 	my $rv = $sth->execute(@val)
 		or die "can't do sql command: " . $dbh->errstr;
 	my @ids;
-	my %artistids;
 	my %records;
 	while($_ = $sth->fetchrow_hashref) {
 		$records{$_->{id}} = $_;
 		push @ids, $_->{id};
 	}
+	if(!@ids) {
+		print "No search results.\n";
+		return;
+	}
+
+	my %artistids;
 	foreach $id (@ids) {
 		$_ = $records{$id};
 		$artistids{$_->{arid}}++;
@@ -433,9 +442,7 @@ EOF
 			$self, $_->{id});
 		$output .= table_entry($_, "$thref$addtext</a>", $thref, \@ids);
 	}
-	print <<EOF;
-<center id=hdr>$caption</center>
-EOF
+
 	if(scalar keys %artistids == 1) {
 		my @al;
 
