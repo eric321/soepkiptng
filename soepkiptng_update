@@ -70,7 +70,10 @@ while(($_) = $sth->fetchrow_array) {
 }
 
 # scan mp3 directories
-open FILES, "find $mp3dirs -follow -type f -print0|";
+if(open(FILES, "-|") == 0) {
+	exec 'find', split(/\s+/, $mp3dirs), '-type' , 'f', '-print0';
+	die "find: $!\n";
+}
 $/ = "\0";
 while(<FILES>) {
 	chop;

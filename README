@@ -79,6 +79,7 @@ TODO:
 * silence before random songs
 * fade-out/fade-in in pause/resume
 * release of /dev/dsp during pause
+* get correct info for VBR mp3's
 * ogg-vorbis support                               ->done
 * reading of samplefreq/channels of lpac files.    ->done
 * resampling & mono->stereo conversion
