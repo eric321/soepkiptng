@@ -133,6 +133,7 @@ Usage:   cdrplay [-dvMR] [-b bufsize_kb] [-k n] [-D file] [command args...]\n\
          -d              : enable debugging output\n\
          -k n            : skip first n bytes (works only on seekable files)\n\
          -v              : verbose status output\n\
+         -w              : wait until audio device isn't busy\n\
          -D file         : send output to file instead of /dev/dsp\n\
          -M              : disable use of mlockall(2)\n\
          -R              : disable use of real-time scheduling\n\
@@ -152,13 +153,14 @@ int main(int argc, char **argv)
 	int bufsize, l, minlen = 0, status, i, r, w, iseek = 0, retval;
 	int maxfd;
 	fd_set rfds, wfds;
-	int do_mlockall = 1, verbose = 0;
+	int do_mlockall = 1, verbose = 0, busywait = 0;
 	time_t starttime = 0;
 	char *snddev = "/dev/dsp";
 	int s_minflt = 0, s_majflt = 0, s_nswap = 0, s_nivcsw = 0;
+	char waitstr[] = "|/-\\";
 
 	bufsize = 500 * 1024;
-	while((c = getopt(argc, argv, "+b:dhk:vD:RM")) != EOF) {
+	while((c = getopt(argc, argv, "+b:dhk:vwD:RM")) != EOF) {
 		switch(c) {
 			case 'b':
 				bufsize = atoi(optarg) * 1024;
@@ -179,6 +181,9 @@ int main(int argc, char **argv)
 			case 'v':
 				verbose++;
 				break;
+			case 'w':
+				busywait = 1;
+				break;
 			case 'D':
 				snddev = optarg;
 				break;
@@ -193,16 +198,21 @@ int main(int argc, char **argv)
 				exit(1);
 		}
 	}
-	if((buf = malloc(bufsize)) == NULL) perr("malloc");
-	if(do_mlockall && mlockall(MCL_CURRENT | MCL_FUTURE) == -1) perror("mlockall");
-
 	if(optind == argc)
 		fd1 = 0;
 	else
 		fd1 = pipeopen(argv + optind, &pid1);
 	if(iseek) lseek(fd1, iseek, SEEK_SET);
 
-	fd2 = open(snddev, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+	for(i = 0;;) {
+		fd2 = open(snddev, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+		if(!busywait || fd2 >= 0 || errno != EBUSY) break;
+		if(verbose) {
+			printf("%c\b", waitstr[i++ % 4]);
+			fflush(stdout);
+		}
+		usleep(200000);
+	}
 	if(fd2 < 0) { perror(snddev); exit(1); }
 
 	retval = ioctl(fd2, SNDCTL_DSP_SYNC, 0);
@@ -215,6 +225,9 @@ int main(int argc, char **argv)
 
 	if(retval == -1 && ischardev(fd2)) fprintf(stderr, "warning: sound ioctls failed\n");
 	
+	if((buf = malloc(bufsize)) == NULL) perr("malloc");
+	if(do_mlockall && mlockall(MCL_CURRENT | MCL_FUTURE) == -1) perror("mlockall");
+
 	maxfd = fd1 > fd2? fd1 : fd2;
 	
 	signal(SIGTERM, sighandler);
@@ -236,10 +249,22 @@ int main(int argc, char **argv)
 			else
 				t = 0;
 			perc = 100 * len / bufsize;
+			if(perc > 90) perc = -1;
 			
 			if(t != displayed_t || perc != displayed_perc) {
-				printf(" [%02u:%02u]", t / 60, t % 60);
-				if(perc <= 90) printf(" fill %d%%", perc);
+				printf(" [%02u:%02u", t / 60, t % 60);
+				if(verbose > 1) {
+					struct stat st;
+					unsigned t;
+
+					fstat(fd1, &st);
+					if(st.st_size) {
+						t = st.st_size / 176400;
+						printf(" / %02u:%02u", t / 60, t % 60);
+					}
+				}
+				putchar(']');
+				if(perc != -1) printf(" fill %d%%", perc);
 				if(readeof) printf(" EOF");
 				printf("               \r");
 				fflush(stdout);
