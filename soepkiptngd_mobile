@@ -28,7 +28,9 @@
 
 my $configfile = "/etc/soepkiptng.conf";
 
+use integer;
 use Audio::Mixer;
+use DBI;
 use Socket;
 
 $mixerchannel = 'pcm';
@@ -53,6 +55,58 @@ while(<F>) {
 close F;
 
 $ENV{'PATH'} = "$conf{progdir}:$conf{progdir}/bin:$ENV{'PATH'}";
+require "$conf{progdir}/soepkiptng.lib";
+
+sub open_db() {
+	# (re)open database connection if necessary
+	if(!$dbh) {
+		$dbh = DBI->connect("DBI:mysql:$conf{db_name}:$conf{db_host}",
+			$conf{db_user}, $conf{db_pass}) or do {
+
+			warn "Can't connect to database $conf{db_name}" .
+			     "\@$conf{db_host} as user $conf{db_user}\n";
+			return undef;
+		};
+	}
+	return 1;
+}
+
+sub playlist_clear() {
+	open_db() or return;
+	$dbh->do("DELETE FROM queue");
+}
+
+sub playlist_addall_generic($$) {
+	my ($crit, $order) = @_;
+
+	open_db() or return;
+	my $now = get_nowplaying($dbh);
+
+	my $songsref = $dbh->selectcol_arrayref(
+		"SELECT id FROM song WHERE present AND filename LIKE '/%' AND ".
+		"$crit AND id != $now->{id} AND ".
+                "unix_timestamp(now()) - unix_timestamp(last_played) > ".
+		"$conf{min_random_time} ORDER BY $order");
+	add_song($dbh, '', @{$songsref});
+}
+
+sub playlist_addall_artist() {
+	playlist_addall_generic("artist_id=$now->{arid}", "RAND()");
+}
+
+sub playlist_addall_album() {
+	playlist_addall_generic("album_id=$now->{alid}", "track");
+}
+
+sub playlist_addall_album_rest() {
+	playlist_addall_generic(
+		"album_id=$now->{alid} AND track > $now->{track}", "track");
+}
+
+sub shuffle() {
+	open_db() or return;
+	shuffle_queue($dbh);
+}
 
 # return higest of (left, right) volume
 sub getvol() {
@@ -99,7 +153,50 @@ sub killsong() {
 sub digit($) {
 	$keypadvalue *= 10;
 	$keypadvalue += $_[0];
+	push @keypadvalues, $_[0];
 	warn "keypadvalue=$keypadvalue";
+}
+
+sub digit_reset() {
+	$keypadvalue = 0;
+	@keypadvalues = ();
+}
+
+sub playlist() {
+	foreach(@keypadvalues) {
+		if($_ == 0) {
+		}
+		elsif($_ == 1) {
+			shuffle();
+		}
+		elsif($_ == 2) {
+			playlist_addall_album();
+		}
+		elsif($_ == 3) {
+			playlist_addall_album_rest();
+		}
+		elsif($_ == 4) {
+			playlist_addall_artist();
+		}
+		elsif($_ == 5) {
+		}
+		elsif($_ == 6) {
+		}
+		elsif($_ == 7) {
+		}
+		elsif($_ == 8) {
+		}
+		elsif($_ == 9) {
+			playlist_clear();
+		}
+	}
+	digit_reset();
+}
+	
+sub request() {
+	open_db() or return;
+	add_song($keypadvalue);
+	digit_reset();
 }
 
 sub funkeyd() {

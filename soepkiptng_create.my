@@ -21,6 +21,7 @@ CREATE TABLE song (
   last_played timestamp,
   time_added timestamp,
   present tinyint NOT NULL,
+  sets BIGINT UNSIGNED NOT NULL DEFAULT 0,
   PRIMARY KEY (id),
   KEY artist_id (artist_id),
   KEY title (title(4)),
@@ -46,6 +47,18 @@ CREATE TABLE queue (
   timestamp timestamp,
   user varchar(255),
   PRIMARY KEY (song_id)
+);
+
+CREATE TABLE seealso (
+  id1 int NOT NULL,
+  id2 int NOT NULL,
+);
+
+CREATE TABLE sets (
+  num int NOT NULL,
+  name varchar(255) NOT NULL,
+  UNIQUE(num),
+  UNIQUE(name)
 );
 
 CREATE TABLE list (
