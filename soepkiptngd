@@ -362,8 +362,8 @@ sub play_mplayer(@) {
 
 	if($prog[$#prog] =~ /^http:/) { unshift @prog, "-cache", 512; }
 
-	unshift @prog, qw"mplayer -quiet -ao pcm -nowaveheader -srate 44100 -vc dummy -vo null",
-		"-aofile", "/dev/fd/" . fileno(F);
+	unshift @prog, qw"mplayer -quiet -srate 44100 -vc dummy -vo null -ao",
+		"pcm:nowaveheader:file=/dev/fd/" . fileno(F);
 
 	warn "running: " . join(" ", @prog) . "\n";
 	exec @prog;
@@ -376,9 +376,11 @@ sub play_mp3($) {
 	my ($song) = @_;
 
 	my @madplay = qw"madplay --ignore-crc -SQoraw:- -R44100";
-	my $gainrec = $dbh->selectrow_hashref("SELECT gain FROM song WHERE id=$song->{id}");
-	if($gainrec->{gain}) {
-		push @madplay, "-a", ($gainrec->{gain} / 1000);
+	if($dbh) {
+		my $gainrec = $dbh->selectrow_hashref("SELECT gain FROM song WHERE id=$song->{id}");
+		if($gainrec->{gain}) {
+			push @madplay, "-a", ($gainrec->{gain} / 1000);
+		}
 	}
 	push @madplay, $song->{filename};
 	exec_prog \@madplay;
