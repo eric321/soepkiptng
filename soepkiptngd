@@ -392,8 +392,7 @@ for(;;) {
 	logprintf("%s %6d %s", $songtype, $song_id, $filename);
 
 	# write status file
-	if(open ST, ">$conf{statusfile}.tmp") {
-		print ST <<EOF;
+	my $status = <<EOF;
 $song_id
 $filename
 $$
@@ -403,6 +402,8 @@ $killport
 $songtype
 $user
 EOF
+	if(open ST, ">$conf{statusfile}.tmp") {
+		print ST $status;
 		close ST;
 		rename "$conf{statusfile}.tmp", $conf{statusfile}
 			or warn "cannot rename $conf{statusfile}.tmp -> $conf{statusfile}: $!\n";
@@ -412,16 +413,7 @@ EOF
 
 	# close accepted socket after statusfile was updated
 	if($killsock_conn) {
-		print $killsock_conn <<EOF;
-$song_id
-$filename
-$$
-$cdrplaypid
-$killhost
-$killport
-$songtype
-$user
-EOF
+		print $killsock_conn $status;
 		$killsock_conn->close();
 		undef $killsock_conn;
 	}

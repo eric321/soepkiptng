@@ -103,9 +103,11 @@ sub shuffle_queue($) {
 	$db->do("UNLOCK TABLES");
 }
 
-sub kill_song() {
+sub kill_song(;$) {
+	my ($user) = @_;
+
 	if($kill_song_external) {
-		system $kill_song_external;
+		system $kill_song_external, $user || '';
 
 		open F, $statusfile
 			or die "$statusfile: $!\n";
