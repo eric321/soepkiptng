@@ -7,7 +7,7 @@
 
 Features:
 ---------
-* mp3, wav, lpac, flac & Ogg-Vorbis support.
+* mp3 (+id3/id3v2), wav, lpac, flac & Ogg-Vorbis support.
 * (My)SQL database with songs.
 * nice web interface
 * commandline interface
@@ -20,6 +20,7 @@ Requirements: (you can get things with (*) from my homepage)
 * apache + mod_perl
 * perl modules:
   - MP3-Info (optional)
+  - MP3::Tag
   - CGI
   - DBI
   - ApacheDBI
@@ -45,12 +46,15 @@ Requirements: (you can get things with (*) from my homepage)
 
 
 On a Debian system you can install all the necessary software (except the
-programs marked with (*)) with apt-get:
+programs marked with (*), and MP3::Tag) with apt-get:
 
 apt-get install libapache-mod-perl libapache-dbi-perl libdbd-mysql-perl \
    mysql-server libmpeg-mp3info-perl libterm-readkey-perl \
    splay libvorbis-dev flac
 
+Perl modules can be installed directly from CPAN by starting "perl -MCPAN
+-e shell" (you must answer some configuration questions if you do this for
+the first time) and typing "install Some::Module".
 
 
 Installation:
@@ -82,7 +86,9 @@ Installation:
   If everything works alright, start it without -d to run it in the
   background. Debugging output is then sent to
   /var/local/soepkiptng/soepkiptng.err, which is automatically
-  rotated if the size reaches 64Kbyte.
+  rotated if the size reaches 64Kbyte. Make sure file permissions
+  in /var/local/soepkiptngd are OK. If you sometimes run soepkiptngd as root
+  and sometimes as non-root you can expect problems.
  
 
 TODO:
@@ -97,7 +103,9 @@ TODO:
 * reading of samplefreq/channels of lpac files.    ->done
 * resampling & mono->stereo conversion	           ->done (quick hack)
 * smooth transition between 2 songs (interpolation)
-* id3/id3v2 support				   ->done (id3)
+* id3/id3v2 support				   ->done (id3/id3v2)
+* id3/id3v2 support for flac
+* putting dbase info back in to mp3s using id3v2
 * synchronize update of statusfile with cdrplay
 * if currently playing song is missing from db, show "?" instead of nothing ->done
 * fix kill problem when player spawns children	   ->done
