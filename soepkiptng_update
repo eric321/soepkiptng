@@ -368,7 +368,12 @@ sub getinfo_mp3($\%) {
 			$info->{freq};
 		$bitrate = int(8 * (-s $file) / $info->{len} / 1000);
 	}
-	$info->{encoding} = "MP3";
+	if($mp3info->{LAYER} == 3) {
+		$info->{encoding} = "MP3";
+	} else {
+		$info->{encoding} = sprintf "MPEG-%d Layer %d",
+			$mp3info->{VERSION}, $mp3info->{LAYER};
+	}
 	push @{$info->{encoding_extra}}, sprintf("%dkb/s", $bitrate);
 	if($xframes) { push @{$info->{encoding_extra}}, "VBR"; }
 
