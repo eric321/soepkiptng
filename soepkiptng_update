@@ -575,7 +575,7 @@ sub getinfo_shorten($\%) {
 	return 1;
 }
 
-# TODO: read APETAGEX
+# handles only SV7 
 sub getinfo_musepack($\%) {
 	my ($file, $info) = @_;
 	my ($buf, $id3);
@@ -592,8 +592,12 @@ sub getinfo_musepack($\%) {
 	read F, $id3, 128;
 	close F;
 	$buf =~ /^MP\+/ or return undef;
-	my (undef, $frames, $flags) = unpack "VVV", $buf;
-
+	my ($version, $frames, $flags) = unpack "VVV", $buf;
+	$version >>= 24;
+	if($version != 7) {
+		warn "$_: unknown version: SV$version\n";
+		return undef;
+	}
 	$info->{encoding} = "Musepack";
 	$info->{freq} = (44100, 48000, 37800, 32000)[($flags >> 16) & 3];
 	$info->{len} = $frames * 1152 / $info->{freq};
