@@ -80,13 +80,17 @@ sub playlist_addall_generic($$) {
 	my ($crit, $order) = @_;
 
 	open_db() or return;
-	my $now = get_nowplaying($dbh);
+	my $now = get_nowplaying($dbh) or do {
+		warn "no now!\n";
+		return;
+	};
 
 	my $songsref = $dbh->selectcol_arrayref(
 		"SELECT id FROM song WHERE present AND filename LIKE '/%' AND ".
 		"$crit AND id != $now->{id} AND ".
                 "unix_timestamp(now()) - unix_timestamp(last_played) > ".
 		"$conf{min_random_time} ORDER BY $order");
+	warn "adding songs: " . join(",", @{$songsref}) . ".\n";
 	add_song($dbh, '', @{$songsref});
 }
 
@@ -106,6 +110,7 @@ sub playlist_addall_album_rest() {
 sub shuffle() {
 	open_db() or return;
 	shuffle_queue($dbh);
+	warn "shuffle\n";
 }
 
 # return higest of (left, right) volume
@@ -147,6 +152,7 @@ sub killsong() {
 		or return;
 	connect SOCK, $paddr
 		or return;
+	warn "killed song.\n";
 	close SOCK;
 }
 
@@ -196,6 +202,7 @@ sub playlist() {
 sub request() {
 	open_db() or return;
 	add_song($keypadvalue);
+	warn "adding song: $keypadvalue.\n";
 	digit_reset();
 }
 
