@@ -55,7 +55,7 @@ sub get_host($) {
 }
 
 sub printhttphdr() {
-	print $cgiquery->header("text/html");
+	print $cgiquery->header(-type=>"text/html; charset=ISO-8859-15");
 }
 
 sub require_write_access() {

@@ -50,7 +50,7 @@ sub get_host($) {
 
 sub printhttphdr() {
 	my $r = Apache->request;
-	$r->content_type("text/html");
+	$r->content_type("text/html; charset=ISO-8859-15");
 	$r->send_http_header;
 }
 
