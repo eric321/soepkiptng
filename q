@@ -28,7 +28,7 @@ use DBI;
 use Socket;
 use Getopt::Std;
 
-getopts('v');
+getopts('vn');
 
 eval "use Term::ReadKey;";
 if($@) {
@@ -108,6 +108,42 @@ $| = 1;
 $dbh = DBI->connect("DBI:$db_type:$db_name:$db_host", $db_user, $db_pass)
 	or die "can't connect to database";
 
+if($opt_n) {
+	open F, $statusfile or exit;
+	$nowplaying = <F>;
+	close F;
+
+	$ids = $dbh->selectcol_arrayref("SELECT song_id FROM queue,song ".
+		"WHERE queue.song_id=song.id AND song.present");
+	my %idsq;
+	foreach(@$ids) {
+#		warn "q $_\n";
+		$idsq{$_} = 1;
+	}
+
+	my $sth = $dbh->prepare("SELECT song2.* FROM song AS song1,".
+		" song AS song2 WHERE song1.id=$nowplaying AND".
+		" song1.artist_id = song2.artist_id AND".
+		" song1.album_id = song2.album_id AND".
+		" song2.track > song1.track AND".
+		" song2.present ORDER BY song2.track");
+	$sth->execute;
+	while($_ = $sth->fetchrow_hashref) {
+#warn "$_->{id} $idsq{$_->{id}}\n";
+		next if $idsq{$_->{id}};
+		last;
+	}
+
+	exit unless $_->{id};
+
+	my $user = (getpwuid $<)[6] || getpwuid $< || "uid $<";
+	$user =~ s/,.*//;
+
+	print "Adding next song ($_->{track}, $_->{title}).\n";
+	add_song($dbh, $user, $_->{id}) or warn "can't add song.\n";
+	exit;
+}
+
 $screen_width = 80 if $screen_width == 0; # just in case
 $w_a = $screen_width * 25 / 100;
 $w_t = $screen_width * 45 / 100;
@@ -167,11 +203,12 @@ if(@ARGV) {
 	$user =~ s/,.*//;
 	if(/^a/i) {
 		for($n = 1; $n < $i; $n++) {
-			add_song($dbh, $user, $id[$n]);
+			add_song($dbh, $user, $id[$n]) or warn "can't add song.\n";
 		}
 	} else {
 		foreach(splitrange($_, $i)) {
-			add_song($dbh, $user, $id[$_]) if $id[$_];
+			add_song($dbh, $user, $id[$_]) or warn "can't add song.\n"
+				if $id[$_];
 		}
 	}
 }
