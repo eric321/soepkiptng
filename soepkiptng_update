@@ -26,10 +26,10 @@ use DBI;
 use Getopt::Std;
 
 #eval "
-use POSIX qw(locale_h);
+#use POSIX qw(locale_h);
 #";
 #unless($@) {
-	setlocale(LC_CTYPE, "en_US.ISO8859-1") or die;
+#	setlocale(LC_CTYPE, "en_US.ISO8859-1") or die;
 #q}
 
 # optional
@@ -351,7 +351,7 @@ sub read_eric_files() {
 sub unsimplify {
 	my ($s) = @_;
 	$s =~ s/_/ /g;
-	$s =~ s/(^|\b)(\S)/\U\2/g;
+	$s =~ s/([^'\w]|^)(\w)/\1\U\2/g;
 	$s =~ s/n T\b/n't/g;
 	$s =~ s/ S\b/'s/g;
 	$s =~ s/\bI M\b/I'm/g;
@@ -366,7 +366,7 @@ sub extract_artist_title {
 	my ($f) = @_;
 	my ($a, $t, $tr, $alb);
 
-	$f =~ s/\..*?$//;
+	$f =~ s/(.*)\..*/\1/;
 	$f =~ s|(.*)/||;
 	my $p = $1;
 	$p = '' if -e "$p/.noalbum";
