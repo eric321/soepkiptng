@@ -317,35 +317,6 @@ sub logprintf($@) {
 	}
 }
 
-sub playshoutcast($) {
-	my ($file) = @_;
-	my $starttime;
-	my $errors = 0;
-	# append trailing slash if necessary
-	# (mpg123 gets confused if it's missing)
-	$file =~ m|^http:/+[^/]+/| or $file .= "/";
-
-	for(;;) {
-		$starttime = time;
-		if($file =~ /\.ogg$/i) {
-			system qw/ogg123 -q -d raw -f -/, $file;
-		} else {
-			system qw/mpg123 -s -y -r44100 --stereo/, $file;
-		}
-		if(time - $starttime < 60) {
-			$errors++;
-		} else {
-			$errors = 0;
-		}
-		if($errors > 5) {
-			die "Too many errors, giving up on $file.\n";
-		}
-		sleep 1;
-		warn "restarting mpg123/ogg123 [$file]\n";
-	}
-}
-
-
 sub exec_prog(;$$) {
 	my ($prog, $pause) = @_;
 
@@ -364,12 +335,50 @@ sub exec_prog(;$$) {
 			player_cmd("waitbufferempty", "pause") or warn "error pausing output\n";
 		}
 
-		if(@$prog > 0) {
+		if(defined $prog) {
 			exec @$prog;
 			die "exec $prog->[0] failed: $!\n";
 		}
 	}
+	return $pid;
 }
+
+sub play_mplayer($) {
+	my ($file) = @_;
+	my ($i, $tmpdir);
+
+	for($i = 0; $i < 100; $i++) {
+		$tmpdir = "/tmp/mplayer.$$.audiodump.$i";
+		mkdir $tmpdir and last;
+	}
+	$i < 100 or do { warn "$tmpdir: $!\n"; return undef; };
+
+	chdir $tmpdir or do { warn "chdir $tmpdir: $!\n"; return undef; };
+	system "mkfifo", "audiodump.pcm";
+	if($?) { warn "mkfifo audiodump.pcm: $!\n"; return undef; }
+
+	exec_prog and return;
+
+	if(($pid = fork) == 0) {
+		# protect us from being sigkilled by soepkiptngd so we can
+		# clean up
+		setpgrp;
+		system "cat audiodump.pcm";
+		unlink "audiodump.pcm";
+		chdir "/";
+		rmdir $tmpdir;
+		exit;
+	}
+
+	open STDIN, "/dev/null";
+	open STDERR, ">/dev/null";
+	open STDOUT, ">&STDERR";
+
+	delete $ENV{http_proxy};
+	exec qw"mplayer -ao pcm -nowaveheader -cache 512 -aop list=resample:fout=44100 -vc dummy -vo null", $file;
+	die "mplayer: $!\n";
+}
+
 
 sub start_play($) {
 	my ($filename) = @_;
@@ -378,9 +387,8 @@ sub start_play($) {
 	$filename =~ /([^.]*)$/;
 	my $ext = lc($1);
 
-	if($filename =~ /^http:/) {
-		exec_prog;
-		$pid == 0 and playshoutcast($filename);
+	if($filename =~ /^http:/ || $ext eq "wma") {
+		play_mplayer($filename);
 	} elsif($filename =~ /^cdda:[^:]*:(\d+)/) {
 		exec_prog ["$conf{cdda_prog} $1"];
 	} elsif($ext eq "mp2" || $ext eq "mp3") {
@@ -411,8 +419,6 @@ sub start_play($) {
 		exec_prog ["soepkiptng_video", $filename], 1;
 	} elsif($ext eq "ac3") {
 		exec_prog ["a52dec", "-o", "oss6", $filename], 1;
-	} elsif($ext eq "wma") {
-		exec_prog ["wma2raw", $filename];
 	} else {
 		warn "no player for .$ext files.\n";
 	}
@@ -507,7 +513,7 @@ if($opt_r) {
 	warn "cdrplaypid=$cdrplaypid\n";
 
 	# play 2 sec. of silence to get my external DAC going
-	print pack("x352800");
+	print "\0"x352800;
 }
 
 # we might have missed the exiting of cdrplay, so reap once now

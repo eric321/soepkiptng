@@ -57,15 +57,12 @@ Requirements:
 * perl5
 * mysql 3.22
   (3.23 recommended; 3.22 cannot do case-insensitive regexps)
-* apache + mod_perl
 * perl modules:
   - MPEG::MP3Info
   - CGI
   - DBI
   - DBD::mysql
   - Compress::Zlib
-  - Apache::DBI
-  - Apache::Session
   - TermReadKey (optional)
   - FreeDB (optional)
 * programs for decoding the various sound formats:
@@ -89,6 +86,10 @@ Requirements:
   - Shorten: requires shorten (http://www.etree.org/shnutils/shorten/) 
     and shntool (http://www.etree.org/shnutils/shntool/)
 
+The webinterface used to run under Apache using mod_perl, but I've switched
+to running as a separate webserver. The Apache method may still work, but is
+now completely untested.
+
 Perl modules can be installed directly from CPAN by starting "perl -MCPAN
 -e shell" (you must answer some configuration questions if you do this for
 the first time) and typing "install Some::Module".
@@ -108,10 +109,7 @@ Package list:
 - madplay                 (for mp3 support)
 - mysql-server
 - sox                     (optional; for wav support)
-- apache                  (optional; for apache/mod_perl-based web interface)
-- libapache-dbi-perl      (optional; for apache/mod_perl-based web interface)
-- libapache-mod-perl      (optional; for apache/mod_perl-based web interface)
-- libwww-perl             (optional; for standalone web interface)
+- libwww-perl
 - cdparanoia              (optional; for CD-DA support)
 - libfreedb-perl          (optional; for CD-DA support)
 - a52dec                  (optional; for AC3 support)
@@ -133,31 +131,22 @@ Installation:
 * edit the config file to taste
 * make the directory /var/local/soepkiptng and make sure
   it's writable for the user that will run soepkiptngd
-* Add something like the following to /etc/apache/httpd.conf:
-
-  Alias /soepkiptng /usr/local/soepkiptng/web
-
-  <Directory /usr/local/soepkiptng/web>
-    Options +ExecCGI
-    DirectoryIndex index.cgi
-    AddHandler perl-script .cgi
-    PerlHandler Apache::Registry
-    PerlRequire /usr/local/soepkiptng/modperl.pl
-    PerlSendHeader On
-  </Directory>
-
 * run soepkiptng_update to add songs to the database
 * run soepkiptngd -d to start playing with debugging on.
   If everything works alright, start it without -d to run it in the
   background. Debugging output is then sent to
-  /var/local/soepkiptng/soepkiptng.err, which is automatically
-  rotated if the size reaches 64Kbyte. Make sure file permissions
-  in /var/local/soepkiptng are OK. If you sometimes run soepkiptngd as root
-  and sometimes as non-root you can expect problems.
- 
+  /var/local/soepkiptng/soepkiptng.err, which is automatically rotated if
+  the size reaches 64Kbyte. Make sure file permissions in
+  /var/local/soepkiptng are OK. If you sometimes run soepkiptngd as root and
+  sometimes as non-root you can expect problems.
+* run soepkiptng_httpd -d to start the webinterface. By default it runs on
+  port 8888. 
+  If everything works alright, start it without -d to run it in the
+  background.  
 
 TODO:
 -----
+* write man pages for all scripts & executables
 * better interface / web interface for 'see also' feature
 * clean up Shoutcast support (separate table, multiple urls per name with
   automatic fallback)
