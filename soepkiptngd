@@ -73,9 +73,6 @@ $killsock = IO::Socket::INET->new(Listen => 5)
 $killhost = hostname;
 $killport = $killsock->sockport();
 
-$dbh = DBI->connect("DBI:mysql:$db_name:$db_host", $db_user, $db_pass)
-	or die "Can't connect to database $db_name\@$db_host as user $db_user\n";
-
 sub rotatelog(;$) {
 	if($_[0] or -s STDERR > 65000) {
 		rename $errfile, "$errfile.old" or do {
@@ -128,6 +125,7 @@ sub get_song_jingle() {
 			warn "playing jingle $jingledir/$_\n";
 			$song_id = -1;
 			$filename = "$jingledir/$_";
+			last;
 		}
 		close JINGLEDIR;
 	}
@@ -257,12 +255,13 @@ child_reaper();
 
 srand;
 
+$num_errors = 0;
 for(;;) {
 	my ($song_id, $songtype, $filename);
 
 	if($restart) {
 		# close-on-exec apparently doesn't work
-		$dbh->disconnect;
+#		$dbh->disconnect;
 		$killsock_conn and $killsock_conn->close();
 		$killsock->close();
 		unlink $statusfile;
@@ -272,19 +271,32 @@ for(;;) {
 		die "$0: $!\n";
 	}
 
+	if($num_errors > 5) {
+		sleep 60;
+	} elsif($num_errors > 1) {
+		sleep 5;
+	}
+
+	if(!$dbh) {
+		$dbh = DBI->connect("DBI:mysql:$db_name:$db_host", $db_user, $db_pass)
+			or die "Can't connect to database $db_name\@$db_host as user $db_user\n";
+	}
+
 	($song_id, $songtype, $filename) = get_song_jingle();
 	$song_id or ($song_id, $songtype, $filename) = get_song_queued($dbh);
 	$song_id or ($song_id, $songtype, $filename) = 	get_song_random_recent($dbh);
 	$song_id or ($song_id, $songtype, $filename) = 	get_song_random($dbh);
 
-	if(!$song_id) {
+	if($song_id) {
+		# update database
+		$dbh->do("UPDATE song set last_played=NULL where id=$song_id");
+	} else {
 		warn "no song found.\n";
-		sleep 5;
+		$dbh->disconnect;
+		$dbh = undef;
+		$num_errors++;
 		next;
 	}
-
-	# update database
-	$dbh->do("UPDATE song set last_played=NULL where id=$song_id");
 
 	# write to log file
 	logprintf("%s %6d %s", $songtype, $song_id, $filename);
@@ -361,6 +373,9 @@ EOF
 	if(($pid_status || $pid_signal) && !$killsock_conn) {
 		# write to log file
 		logprintf("E %6d status=%d signal=%d", $song_id, $pid_status, $pid_signal);
+		$num_errors++;
+	} else {
+		$num_errors = 0;
 	}
 
 	if($debug) {
@@ -373,11 +388,8 @@ EOF
 		unlink "$filename" or warn "unlink $filename: $!\n";
 	}
 
-	# if it took less than 1 second to play it, pause for 1 second
-	# to prevent us from eating 100% cpu time in case of misconfiguration
-	if(time == $starttime) {
-		sleep 1;
-	}
+	# prevent us from eating 100% cpu time in case of misconfiguration
+	time == $starttime or $num_errors++;
 }
 
 sub logprintf($@) {
