@@ -222,7 +222,7 @@ sub table_entry($;$$$$) {
   <td %s>&nbsp;%s&nbsp;</td>
   <td %s>&nbsp;%s&nbsp;</td>
   <td %s>&nbsp;%s%s%s&nbsp;</td>
-  <td %s>&nbsp;%d:%02d&nbsp;</td>
+  <td %s>&nbsp;%s&nbsp;</td>
   <td %s>&nbsp;%s&nbsp;</td>
   <td %s> %s</td>
   %s
@@ -239,7 +239,8 @@ EOF
 			: enchtml($q->{album}),
 		$conf{td_track}, $q->{track}? "$q->{track}." : "",
 		$conf{td_song}, $title_href, enchtml($q->{title}), $title_href? "</a>":"",
-		$conf{td_time}, $q->{length} / 60, $q->{length} % 60,
+		$conf{td_time},
+		$q->{length}? sprintf("%d:%02d", $q->{length} / 60, $q->{length} % 60) : "?",
 		$conf{td_enc}, enchtml($q->{encoding}, 1),
 		$conf{td_edit},
 		$ids? sprintf(<<EOF, $self, $q->{id}, $ids, $conf{edit_target} || 'bframe') : "",
@@ -654,7 +655,7 @@ function closethis() {
       onClick="return verifyall();">
   </td></tr>
   <tr><td colspan=2>Track:</td> <td><input type=text size=3 name=track  value="%s" maxlength=3></td></tr>
-  <tr><td colspan=2>Time:</td>  <td>%d:%02d</td></tr>
+  <tr><td colspan=2>Time:</td>  <td>%s</td></tr>
   <tr><td colspan=2>Encoding:</td>        <td>%s</td></tr>
   <tr><td colspan=2 nowrap>Time Added:</td><td>%s</td></tr>
   <tr><td colspan=2 nowrap>Last played:</td><td>%s%s</td></tr>
@@ -683,7 +684,7 @@ EOF
 		enchtml($_->{title}),
 		enchtml($_->{album}),
 		$_->{track} || "",
-		$_->{length} / 60, $_->{length} % 60,
+		$_->{length}? sprintf("%d:%02d", $_->{length} / 60, $_->{length} % 60) : "?",
 		$_->{encoding},
 		$_->{ta}? scalar localtime($_->{ta}) : "-",
 		$_->{lp}? scalar localtime($_->{lp}) : "-",
