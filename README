@@ -50,8 +50,8 @@ Requirements:
   - Apache::Session
   - TermReadKey (optional)
 * programs for decoding the various sound formats:
-  - mp3: mpg123 and splay
-  - wav: for instance splay
+  - mp3: madplay (>= 0.14.2b recommended)
+  - wav: sox
   - lpac:
     LPAC is a non-free lossless compression algorithm. You can get a linux
     binary from http://www-ft.ee.tu-berlin.de/~liebchen/lpac.html at no cost.
@@ -68,7 +68,7 @@ On a Debian system you can install all the necessary software with apt-get:
 
 apt-get install libapache-mod-perl libapache-dbi-perl libdbd-mysql-perl \
    mysql-server libmpeg-mp3info-perl libterm-readkey-perl \
-   libcompress-zlib-perl splay mpg123 libvorbis-dev flac
+   libcompress-zlib-perl madplay sox libvorbis-dev flac
 
 Perl modules can be installed directly from CPAN by starting "perl -MCPAN
 -e shell" (you must answer some configuration questions if you do this for
