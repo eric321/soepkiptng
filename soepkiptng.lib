@@ -52,7 +52,7 @@ sub add_song($@) {
 	$db->do("LOCK TABLES queue WRITE");
 	del_song($db, @ids);
 	my ($order) = $db->selectrow_array("SELECT MAX(song_order) FROM queue")
-		or $order = -1;
+		or $order = 0;
 	add_song_nolock($db, $order + 1, @ids);
 	$db->do("UNLOCK TABLES");
 }
@@ -64,7 +64,7 @@ sub move_song_to_top($@) {
 
 	del_song($db, @ids);
 
-	my @res = get_queue_ids($db, "song_id");
+	my @res = get_queue_ids($db, "song_order");
 	$db->do("DELETE FROM queue");
 	add_song_nolock($db, 1, (@ids, @res));
 
