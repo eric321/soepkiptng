@@ -195,6 +195,7 @@ sub do_mp3($$) {
 		seek F, -128, 2;
 		truncate F, tell F or warn "truncate $f: $!\n"
 			unless $opt_t;
+		last if $opt_t;
 	}
 	close F;
 
@@ -233,7 +234,7 @@ sub do_mp3($$) {
 			warn "renaming $fullf -> $newname\n";
 			if(-e $newname) {
 				warn "$f: $newname exists, skipping\n";
-			} else {
+			} elsif(!$opt_t) {
 				if(rename $fullf, $newname) {
 					$dbh->do("DELETE FROM song WHERE filename=?",
 						undef, $newname)
