@@ -538,7 +538,7 @@ sub getinfo_video($\%) {
 
 	$info->{freq} = 0;
 	$info->{chan} = 0;
-	$info->{len} = 0;
+	$info->{len} = $prop{length};
 	return 1;
 }
 
