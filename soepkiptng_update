@@ -101,10 +101,12 @@ read_eric_files() unless $opt_e;
 
 # get existing filenames in database
 if(scalar @ARGV) {
-	@paths = map { abs_path $_; } @ARGV;
+	@paths = grep { -d } map { abs_path $_; } @ARGV;
 	@paths or exit 1; # abs_path complains for us
-	$sth = $dbh->prepare("SELECT id,filename,unix_timestamp(last_played),unix_timestamp(time_added),present FROM song WHERE binary filename LIKE ?");
-	$sth->execute("$paths[0]/%");
+	$sth = $dbh->prepare("SELECT id,filename,unix_timestamp(last_played)," .
+		"unix_timestamp(time_added),present FROM song WHERE (0" .
+		(" OR binary filename LIKE ?" x scalar @paths) . ")");
+	$sth->execute(map { "$_/%" } @paths);
 } else {
 	$sth = $dbh->prepare("SELECT id,filename,unix_timestamp(last_played),unix_timestamp(time_added),present FROM song WHERE filename LIKE \"/%\"");
 	$sth->execute();
