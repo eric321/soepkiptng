@@ -29,6 +29,9 @@ Features:
   - Shorten
   - lpac
   - AC3
+  - AAC
+  - WMA & RealAudio (all formats that are supported by your mplayer)
+  - Musepack (SV7 only)
 * supports playing Shoutcast streams (MP3 / Ogg Vorbis)
 * player uses real-time scheduling and memory locking for uninterrupted music
   playback; zero silence period between two songs (very nice for consecutive
