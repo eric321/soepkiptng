@@ -49,6 +49,7 @@ Requirements:
   - Apache::DBI
   - Apache::Session
   - TermReadKey (optional)
+  - FreeDB (optional)
 * programs for decoding the various sound formats:
   - mp3: madplay (>= 0.14.2b recommended)
   - wav: sox
@@ -62,6 +63,8 @@ Requirements:
     difference is marginal.
   - Ogg-Vorbis
     Get the libraries from http://www.xiph.org.
+  - cdparanoia
+    Cdparanoia is required for CD-DA support (streaming directly from CD)
 
 Perl modules can be installed directly from CPAN by starting "perl -MCPAN
 -e shell" (you must answer some configuration questions if you do this for
@@ -86,7 +89,8 @@ Package list:
 - libapache-dbi-perl      (optional; for apache/mod_perl-based web interface)
 - libapache-mod-perl      (optional; for apache/mod_perl-based web interface)
 - libwww-perl             (optional; for standalone web interface)
-
+- cdparanoia              (optional; for CD-DA support)
+- libfreedb-perl          (optional; for CD-DA support)
 
 Installation:
 -------------
