@@ -24,7 +24,7 @@ use Cwd 'abs_path';
 use DBI;
 use Getopt::Std;
 
-getopts('qh');
+getopts('fqhc');
 
 # read config file
 open F, $configfile
@@ -50,11 +50,12 @@ require "$conf{progdir}/soepkiptng.lib";
 
 if($opt_h) {
 	print <<EOF;
-Usage: soepkiptng_delete [-qc] [dir]
+Usage: soepkiptng_delete [-fqc] [dir]
 
 Soepkiptng_delete deletes files from the SoepkipTNG database that do not exist
 anymore.
 
+    -f : delete entries even if they still exist
     -q : quiet
     -c : permanently delete entries that are not present
 
@@ -66,16 +67,17 @@ $dbh = DBI->connect("DBI:$conf{db_type}:$conf{db_name}:$conf{db_host}",
 	$conf{db_user}, $conf{db_pass}) or die "can't connect to database";
 
 $sth = $dbh->prepare("SELECT filename FROM song WHERE present AND filename like ?");
-$sth->execute(($ARGV[0]? abs_path($ARGV[0]) : "/") . "%");
+$sth->execute(($ARGV[0]? abs_path($ARGV[0]) : "/") . "/%");
 
 while(($filename) = $sth->fetchrow_array) {
-	-s $filename and next;
+	if(!$opt_f) { -s $filename and next; }
 	warn "Deleting $filename from database.\n" unless $opt_q;
-	$dbh->do("UPDATE song SET present=0 WHERE filename=?", undef, $filename);
+	if($opt_c) {
+		$dbh->do("DELETE FROM song WHERE filename=?", undef, $filename);
+	} else {
+		$dbh->do("UPDATE song SET present=0 WHERE filename=?", undef, $filename);
+	}
 }
 
-if($opt_c) {
-	$dbh->do("DELETE FROM song WHERE not present");
-}
 
 $dbh->disconnect();
