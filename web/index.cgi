@@ -304,7 +304,7 @@ EOF
 			" UCASE(album.name) as sort" .
 			" FROM song,artist,album WHERE present AND $field.name REGEXP ?".
 			" AND song.artist_id=artist.id AND song.album_id=album.id".
-			" GROUP BY artist.name,album.name ORDER BY sort";
+			" GROUP BY binary artist.name, binary album.name ORDER BY sort";
 	my $sth = $dbh->prepare($query);
 	my $rv = $sth->execute($val)
 		or die "can't do sql command: " . $dbh->errstr . "\n";
@@ -402,7 +402,7 @@ EOF
 				"song.artist_id, song.album_id" .
 				" FROM song,artist,album WHERE present AND song.artist_id = ?".
 				" AND song.artist_id=artist.id AND song.album_id=album.id".
-				" GROUP BY album.name ORDER BY album.name";
+				" GROUP BY binary album.name ORDER BY album.name";
 		my $sth = $dbh->prepare($query);
 		my $rv = $sth->execute(keys %artistids);
 		my ($al, $a, $c, $arid, $alid, @al);
