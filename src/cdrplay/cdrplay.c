@@ -55,6 +55,9 @@ void realtime(int on)
 {
 	struct sched_param sp;
 
+	/* regain root privileges (from saved uid) temporarily */
+	seteuid(0);
+
 	if(debug) fprintf(stderr,"realtime(%s)\n", on? "on":"off");
 	if(on) {
 		sp.sched_priority = 3;
@@ -77,6 +80,10 @@ void realtime(int on)
 				perror("sched_setscheduler");
 		}
 	}
+
+	/* surrender root privileges again */
+	seteuid(getuid());
+
 }
 
 void sighandler(int s)
@@ -121,7 +128,7 @@ int pipeopen(char **cmd, int *pid)
 		case 0:		dup2(fd[1],1);
 					close(fd[0]);
 					close(fd[1]);
-					setuid(getuid()); 	/* surrender root privileges */
+					setuid(getuid()); 	/* surrender root privileges forever */
 					setpgrp();			/* give program its own program group so signals from the shell don't reach it */
 					execvp(*cmd, cmd);
 					perr("execvp");
@@ -209,6 +216,13 @@ int main(int argc, char **argv)
 				exit(1);
 		}
 	}
+
+	if((buf = malloc(bufsize)) == NULL) perr("malloc");
+	if(do_mlockall && mlockall(MCL_CURRENT | MCL_FUTURE) == -1) perror("mlockall");
+
+	/* surrender root privileges temporarily */
+	seteuid(getuid());
+
 	if(optind == argc)
 		fd1 = 0;
 	else
@@ -237,9 +251,6 @@ int main(int argc, char **argv)
 
 	if(retval == -1 && ischardev(fd2)) fprintf(stderr, "warning: sound ioctls failed\n");
 	
-	if((buf = malloc(bufsize)) == NULL) perr("malloc");
-	if(do_mlockall && mlockall(MCL_CURRENT | MCL_FUTURE) == -1) perror("mlockall");
-
 	maxfd = fd1 > fd2? fd1 : fd2;
 	
 	signal(SIGTERM, sighandler);
