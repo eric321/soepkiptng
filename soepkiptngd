@@ -117,6 +117,94 @@ sub child_reaper {
 	}
 };
 
+sub get_song_jingle() {
+	local *JINGLEDIR;
+	my ($song_id, $filename);
+
+	$song_id = 0;
+	if($jingledir && opendir JINGLEDIR, $jingledir) {
+		foreach(readdir JINGLEDIR) {
+			next if /^\./;
+			warn "playing jingle $jingledir/$_\n";
+			$song_id = -1;
+			$filename = "$jingledir/$_";
+		}
+		close JINGLEDIR;
+	}
+	$song_id or return undef;
+	return ($song_id, 'J', $filename);
+}
+
+sub get_song_queued($) {
+	my ($dbh) = @_;
+	my ($song_id, $song_order, $filename, $pres);
+
+	# get queued song
+	$dbh->do("LOCK TABLES queue WRITE, song READ");
+	for(;;) {
+		($song_id, $song_order, $filename, $pres) = $dbh->selectrow_array(
+			"SELECT queue.song_id,queue.song_order,song.filename,song.present" .
+			" FROM queue,song" .
+			" WHERE queue.song_id=song.id" .
+			" ORDER BY queue.song_order" .
+			" LIMIT 1"
+		);
+		last if !$song_id || $pres;
+		warn "deleting non-present song $song_id ($filename)\n";
+		$dbh->do("DELETE FROM queue WHERE song_id = $song_id");
+	}
+		
+
+	if($song_id) {
+		warn "playing queued $filename\n";
+
+		# delete it from the queue
+		$dbh->do("DELETE FROM queue WHERE song_id = $song_id");
+		$dbh->do("UPDATE queue SET song_order = song_order - $song_order - 1");
+	}
+	$dbh->do("UNLOCK TABLES");
+	$song_id or return undef;
+	return ($song_id, 'Q', $filename);
+}
+
+sub get_song_random_recent($) {
+	my ($dbh) = @_;
+	my ($song_id, $filename);
+
+	if(rand() < $recent_prob) {
+		my $maxage = $recent_age * 86400;
+		($song_id, $filename) = $dbh->selectrow_array(
+			"SELECT id,filename FROM song WHERE present AND " .
+			"unix_timestamp(now()) - unix_timestamp(time_added) < $maxage AND " .
+			"unix_timestamp(now()) - unix_timestamp(last_played) > $min_random_time " .
+			"ORDER BY rand() LIMIT 1"
+		);
+		warn "playing recent $filename\n" if $song_id;
+	}
+	$song_id or return undef;
+	return ($song_id, 'r', $filename);
+}
+
+sub get_song_random($) {
+	my ($dbh) = @_;
+	my ($song_id, $filename);
+
+	my $min = $min_random_time;
+	for(;;) {
+		($song_id, $filename) = $dbh->selectrow_array(
+			"SELECT id,filename FROM song WHERE present AND " .
+			"unix_timestamp(now()) - unix_timestamp(last_played) > $min " .
+			"ORDER BY rand() LIMIT 1"
+		);
+		last if $song_id || $min == 0;
+		$min >>= 1;
+		warn "no random song found, retrying with min_random_time=$min\n";
+	}
+	warn "playing random $filename\n";
+	$song_id or return undef;
+	return ($song_id, 'R', $filename);
+}
+
 
 unless($debug) {
 	if(!$opt_r) {
@@ -184,78 +272,13 @@ for(;;) {
 		die "$0: $!\n";
 	}
 
-	if($jingledir && opendir JINGLEDIR, $jingledir) {
-		foreach(readdir JINGLEDIR) {
-			next if /^\./;
-			warn "playing jingle $jingledir/$_\n";
-			start_play("$jingledir/$_");
-			kill 'HUP', $cdrplaypid;
-			while($pid) { select undef, undef, undef, 0.1; }
-			unlink "$jingledir/$_"
-				or warn "unlink $jingledir/$_: $!\n";
-		}
-		close JINGLEDIR;
-	}
-
-	# get queued song
-	$dbh->do("LOCK TABLES queue WRITE, song READ");
-	for(;;) {
-		my $pres;
-		($song_id, $song_order, $filename, $pres) = $dbh->selectrow_array(
-			"SELECT queue.song_id,queue.song_order,song.filename,song.present" .
-			" FROM queue,song" .
-			" WHERE queue.song_id=song.id" .
-			" ORDER BY queue.song_order" .
-			" LIMIT 1"
-		);
-		last if !$song_id || $pres;
-		warn "deleting non-present song $song_id ($filename)\n";
-		$dbh->do("DELETE FROM queue WHERE song_id = $song_id");
-	}
-		
-
-	if($song_id) {
-		$songtype = 'Q';
-		warn "playing queued $filename\n";
-
-		# delete it from the queue
-		$dbh->do("DELETE FROM queue WHERE song_id = $song_id");
-		$dbh->do("UPDATE queue SET song_order = song_order - $song_order - 1");
-	}
-	$dbh->do("UNLOCK TABLES");
-
-	#  if nothing in queue, get recent random song
-	if(!$song_id && rand() < $recent_prob) {
-		$songtype = 'r';
-		my $maxage = $recent_age * 86400;
-		($song_id, $filename) = $dbh->selectrow_array(
-			"SELECT id,filename FROM song WHERE present AND " .
-			"unix_timestamp(now()) - unix_timestamp(time_added) < $maxage AND " .
-			"unix_timestamp(now()) - unix_timestamp(last_played) > $min_random_time " .
-			"ORDER BY rand() LIMIT 1"
-		);
-		warn "playing recent $filename\n";
-	}
-
-	#  if no recent song found, get normal random song
-	if(!$song_id) {
-		$songtype = 'R';
-		my $min = $min_random_time;
-		for(;;) {
-			($song_id, $filename) = $dbh->selectrow_array(
-				"SELECT id,filename FROM song WHERE present AND " .
-				"unix_timestamp(now()) - unix_timestamp(last_played) > $min " .
-				"ORDER BY rand() LIMIT 1"
-			);
-			last if $song_id || $min == 0;
-			$min >>= 1;
-			warn "no random song found, retrying with min_random_time=$min\n";
-		}
-		warn "playing random $filename\n";
-	}
+	($song_id, $songtype, $filename) = get_song_jingle();
+	$song_id or ($song_id, $songtype, $filename) = get_song_queued($dbh);
+	$song_id or ($song_id, $songtype, $filename) = 	get_song_random_recent($dbh);
+	$song_id or ($song_id, $songtype, $filename) = 	get_song_random($dbh);
 
 	if(!$song_id) {
-		warn "no random song found.\n";
+		warn "no song found.\n";
 		sleep 5;
 		next;
 	}
@@ -342,6 +365,10 @@ EOF
 		($a, $b, $c, $d) = times;
 		$childtime = $c + $d - $childtime;
 		warn "song finished, time=$childtime\n";
+	}
+
+	if($songtype eq 'J') {
+		unlink "$filename" or warn "unlink $filename: $!\n";
 	}
 
 	# if it took less than 1 second to play it, pause for 1 second
