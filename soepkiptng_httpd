@@ -141,7 +141,12 @@ if(!$opt_d) {
 	setpgrp;
 	chdir "/";
 	open STDIN, "</dev/null";
-	open STDOUT, ">" . ($conf{httpd_errfile} || "/dev/null");
+	if(defined($conf{httpd_errfile})) {
+		rename $conf{httpd_errfile}, "$conf{httpd_errfile}.old";
+		open STDOUT, ">$conf{httpd_errfile}";
+	} else {
+		open STDOUT, ">/dev/null";
+	}
 	open STDERR, ">&STDOUT";
 }
 
@@ -152,11 +157,22 @@ $SIG{HUP} = sub {
 	kill 1, keys %pids;
 };
 
+$SIG{USR1} = sub {
+	warn "master: killing -9 all children\n";
+	kill 9, keys %pids;
+	$doexec = 1;
+};
+
 my $httpd_instances = $opt_i || $conf{httpd_instances} || 2;
 warn "master starting, pid=$$\n";
 for(;;) {
 	my $pid;
 
+	if($doexec) {
+		warn "master $$: exec self [$0]\n";
+		exec $0, @ARGV;
+		warn "master $$: exec self: $!\n";
+	}
 	if($reread) {
 		%conf = undef;
 		warn "master: rereading configfile\n";
@@ -166,6 +182,7 @@ for(;;) {
 		
 	while(keys %pids < $httpd_instances) {
 		if(($pid = fork) == 0) {
+			%pids = ();
 			run_instance();
 			exit 0;
 		}
