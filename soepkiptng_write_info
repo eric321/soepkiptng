@@ -117,7 +117,8 @@ sub do_file($$) {
 	$full_filename =~ s|(.*)/|abs_path($1) . "/"|e;		# get absolute pathname
 
 	my $filename_noext = $full_filename;
-	$filename_noext =~ s/_/\\_/g;	# escape _
+	$filename_noext =~ s/\\/\\\\/g;	# escape \
+	$filename_noext =~ s/_/\\_/g;	# and _
 	$filename_noext =~ s/%/\\%/g;	# and %
 
 	my $sth = $dbh->prepare(
