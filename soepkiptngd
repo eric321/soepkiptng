@@ -187,13 +187,13 @@ sub get_song_random() {
 		"SELECT artist.name as artist, album.name as album,song.* " .
 		"FROM song,artist,album " .
 		"WHERE $where AND artist.id=song.artist_id AND album.id=song.album_id " .
-		"ORDER BY rand()*pow(random_pref/?,10000/?) DESC LIMIT 1");
+		"ORDER BY rand()*pow(random_pref/?,1/?) DESC LIMIT 1");
 
 	for(; $min > 0; $min >>= 1, warn "no random song found, retrying with min_random_time=$min\n") {
-		my ($sum_pref) = $dbh->selectrow_array(
-			"SELECT sum(random_pref) FROM song WHERE $where", undef, $min)
+		my ($sum_pref, $count) = $dbh->selectrow_array(
+			"SELECT sum(random_pref),count(*) FROM song WHERE $where", undef, $min)
 			or next;
-		$sth->execute($min, $sum_pref, $sum_pref)
+		$sth->execute($min, $sum_pref, $count)
 			or next;
 		$s = $sth->fetchrow_hashref
 			and last;
