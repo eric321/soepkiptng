@@ -239,7 +239,8 @@ sub do_mp3($$$$$$$$$) {
 	}
 	if($opt_f || $p_ti ne $ti || $p_tr != $tr || $p_ar ne $ar || $p_al ne $al ||
 		$p_len != 1000 * $len || $p_uslt->{Description} ne $lyrdesc || 
-		$p_uslt->{Language} ne $lyrlang || $p_uslt->{Text} ne $lyrics) {
+		($lyrics && $p_uslt->{Language} ne $lyrlang) ||
+		$p_uslt->{Text} ne $lyrics) {
 
 		$newtag->add_frame('TIT2', $ti) if $ti;
 		$newtag->add_frame('TPE1', $ar) if $ar;
