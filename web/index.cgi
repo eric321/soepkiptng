@@ -666,7 +666,7 @@ EOF
 		$_->{ta}? scalar localtime($_->{ta}) : "-",
 		$_->{lp}? scalar localtime($_->{lp}) : "-",
 		$_->{lp}? " <font size=-1><input type=submit name=action_clearlp value=Reset></font>":"",
-		"$self/$f?cmd=alllist&sort=artist&filename=" . encurl($1), $1,
+		"$self?cmd=alllist&sort=artist&filename=" . encurl($1), $1,
 		"$self/$f?cmd=download&id=$$argsref{'id'}", $2,
 		((-s $_->{filename}) + 512) / 1024,
 		$prev, $next,
