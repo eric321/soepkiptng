@@ -21,29 +21,20 @@
 # Boston, MA 02111-1307, USA.
 ############################################################################
 
-my $configfile = "/etc/soepkiptng.conf";
+use Cwd qw'abs_path';
 
-my $field;
-open F, $configfile
-	or die "$configfile: $!\n";
-while(<F>) {
-	/^#/ and next;
-	s/\s+$//;
-	/./ or next;
-	if(/^(\w+)\s*=\s*(.*?)\s*$/) {
-		$field = $1;
-		$conf{$field} = $2;
-	} elsif(/^\s+(.*?)\s*$/) {
-		# continuation line
-		$conf{$field} .= "\n$1";
-	} else {
-		die "$configfile line $.: invalid format\n";
-	}
+# find program directory
+$_ = $0;
+while(-l) {
+	my $l = readlink or die "readlink $_: $!\n";
+	if($l =~ m|^/|) { $_ = $l; } else { s|[^/]*$|/$l|; }
 }
-close F;
+m|(.*)/|;
+my $progdir = abs_path($1);
 
-$ENV{'PATH'} = "$conf{progdir}/bin:$ENV{'PATH'}";
-require "$conf{'progdir'}/soepkiptng.lib";
+require "$progdir/../soepkiptng.lib";
+read_configfile(\%conf);
+$ENV{PATH} = "$progdir:$ENV{PATH}";
 
 open STDIN, "/dev/null";
 open STDOUT, ">/dev/null";
