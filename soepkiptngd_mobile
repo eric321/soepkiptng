@@ -158,7 +158,24 @@ sub killsong() {
 	my $iaddr   = inet_aton($killhost) or return;
 	$paddr   = sockaddr_in($killport, $iaddr);
 
-	say("kill song") if $debug;
+	say("kill song $keypadvalue") if $debug;
+	if($keypadvalue && open_db()) {
+		$dbh->do("LOCK TABLES queue WRITE, song READ");
+		my $res = $dbh->selectall_arrayref(
+			"SELECT song_id,song.track FROM queue " .
+			"LEFT JOIN song ON queue.song_id=song.id " .
+			"ORDER BY song_order");
+		my @goners;
+		foreach(@$res) {
+			last if $_->[1] == $keypadvalue;
+			push @goners, $_->[0];
+		}
+		warn sprintf "deleting songs up to track %d: %s\n", $keypadvalue, join(",", @goners);
+		del_song($dbh, @goners);
+		$dbh->do("UNLOCK TABLES");
+		digit_reset();
+	}
+
 	socket SOCK, PF_INET, SOCK_STREAM, getprotobyname('tcp')
 		or return;
 	connect SOCK, $paddr
@@ -243,7 +260,7 @@ sub playlist() {
 	}
 }
 
-sub say($) {
+sub prepare_word($) {
 	my ($t) = @_;
 
 	my $wavfile = "/tmp/soepkiptngd_mobile_say_$t.wav";
@@ -253,20 +270,44 @@ sub say($) {
 	unlink $tmpfile;
 	symlink $wavfile, $tmpfile;
 
-	# pause _before_ doing text2speech (to speed it up)
-	warn "kill -USR2 $cdrplaypid\n";
-	kill 'USR2', $cdrplaypid;	# pause: make it close /dev/dsp
-
 	if(! -f $wavfile) {
 		local *F;
 		open F, "| text2wave -scale 5 -F 44100 -o $tmpfile";
 		print F "$t\n";
 		close F;
 	}
-
 	warn "wavfile size=" . (-s $wavfile) . " bytes.\n";
+	return $wavfile;
+}
 
-	system "wav2raw $tmpfile | cdrplay -w";
+sub say($;$) {
+	my ($t, $dontsplit) = @_;
+	my @words;
+	if($dontsplit) {
+		@words = ($t);
+	} else {
+		@words = split /\s+/, $t;
+	}
+
+	# pause _before_ doing text2speech (to speed it up)
+	warn "kill -USR2 $cdrplaypid\n";
+	kill 'USR2', $cdrplaypid;	# pause: make it close /dev/dsp
+
+	my @wavs;
+	foreach(@words) {
+		push @wavs, prepare_word($_);
+	}
+	open PL, "|cdrplay -w";
+	foreach(@wavs) {
+		my $pid;
+		if(($pid = fork) == 0) {
+			open STDOUT, ">&PL" or die;
+			exec "wav2raw", $_;
+		}
+		waitpid $pid, 0;
+	}
+	close PL;
+
 	warn "kill -HUP $cdrplaypid\n";
 	kill 'HUP', $cdrplaypid;	# resume
 	unlink $tmpfile;
@@ -280,7 +321,7 @@ sub sayit() {
 
 	my $t = "$now->{artist} ... $now->{title}";
 	$t =~ s|/| |g;
-	say($t);
+	say($t, 1);
 }
 	
 sub request() {
