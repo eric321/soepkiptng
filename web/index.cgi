@@ -286,7 +286,7 @@ EOF
 }
 
 sub print_alllist_table($$@) {
-	my ($dbh, $caption, $url, $query, @val) = @_;
+	my ($dbh, $argsref, $caption, $query, @val) = @_;
 	my ($output, $addall);
 
 	my $sth = $dbh->prepare($query);
@@ -351,15 +351,24 @@ EOF
 EOF
 	}
 
+	my %revsort;
+	$revsort{$$argsref{'sort'}} = "r_";
+
+	delete $$argsref{'sort'};
+	my $baseurl = "$self?";
+	foreach(keys %$argsref) {
+		$baseurl .= "$_=" . encode($$argsref{$_}) . "&";
+	}
+
 	print <<EOF;
  <tr>
   <th $th_left>&nbsp;$addall&nbsp;</th>
-  <th $th_artist>&nbsp;Artist&nbsp;</th>
-  <th $th_album>&nbsp;Album&nbsp;</th>
-  <th $th_track>&nbsp;#&nbsp;</th>
-  <th $th_song>&nbsp;Song&nbsp;</th>
-  <th $th_time>&nbsp;Time&nbsp;</th>
-  <th $th_enc>&nbsp;Encoding&nbsp;</th>
+  <th $th_artist>&nbsp;<a href="${baseurl}sort=$revsort{'artist'}artist">Artist</a>&nbsp;</th>
+  <th $th_album>&nbsp;<a href="${baseurl}sort=$revsort{'album'}album">Album</a>&nbsp;</th>
+  <th $th_track>&nbsp;<a href="${baseurl}sort=$revsort{'track'}track">#</a>&nbsp;</th>
+  <th $th_song>&nbsp;<a href="${baseurl}sort=$revsort{'title'}title">Song</a>&nbsp;</th>
+  <th $th_time>&nbsp;<a href="${baseurl}sort=$revsort{'length'}length">Time</a>&nbsp;</th>
+  <th $th_enc>&nbsp;<a href="${baseurl}sort=$revsort{'encoding'}encoding">Encoding</a>&nbsp;</th>
   <th $th_edit>&nbsp;&nbsp;</th>
  </tr>
  <tr><td colspan=7></td></tr>
@@ -551,43 +560,43 @@ elsif($cmd eq 'alllist') {
 	my $q = "SELECT * FROM songs WHERE present";
 	my @qa;
 	my $cap;
+	my $s = $args{'sort'};
+	$s =~ s/\W//g;
 	if($args{'artist'}) {
 		$q .= " AND artist REGEXP ?";
 		push @qa, $args{'artist'};
 		$qa[$#qa] =~ s/[^-^\$_0-9a-z]+/.*/ig;
-		$args{'sort'} = "artist" unless $args{'sort'};
+		$s = "artist" unless $s;
 		$cap = sprintf($args{'cap'}, $args{'artist'});
 	}
 	if($args{'album'}) {
 		$q .= " AND album REGEXP ?";
 		push @qa, $args{'album'};
 		$qa[$#qa] =~ s/[^-^\$_0-9a-z]+/.*/ig;
-		$args{'sort'} = "album" unless $args{'sort'};
+		$s = "album" unless $s;
 		$cap = sprintf($args{'cap'}, $args{'album'});
 	}
 	if($args{'title'}) {
 		$q .= " AND title REGEXP ?";
 		push @qa, $args{'title'};
 		$qa[$#qa] =~ s/[^-^\$_0-9a-z]+/.*/ig;
-		$args{'sort'} = "title" unless $args{'sort'};
+		$s = "title" unless $s;
 		$cap = sprintf($args{'cap'}, $args{'title'});
 	}
-	$q .= " ORDER BY ?,album,track,artist,title";
-	my @args;
-	foreach(keys %args) { push @args, "$_=" . $args{$_}; }
-	print_alllist_table($dbh, $cap, "$self?" . join("&", @args),
-		$q, @qa, $args{'sort'});
+	$s =~ s/^r_(.*)/\1 DESC/;
+	$q .= " ORDER BY $s,album,track,artist,title";
+	print_alllist_table($dbh, \%args, $cap, $q, @qa);
 	printftr;
 }
 elsif($cmd eq 'recent') {
 	printhtmlhdr;
 	printhdr($allstyle);
 	my $n = (0 + $args{'num'}) || 40;
-	my $s = $args{'sort'} || "time_added";
-	delete $args{'sort'};
-	print_alllist_table($dbh, "Most recent $n songs", "$self?cmd=recent&num=$n",
-		"SELECT * FROM songs WHERE present ORDER BY ? DESC LIMIT ?",
-		$s, $n);
+	my $s = $args{'sort'} || "r_time_added";
+	$s =~ s/\W//g;
+	$s =~ s/^r_(.*)/\1 DESC/;
+	print_alllist_table($dbh, \%args, "Most recent $n songs",
+		"SELECT * FROM songs WHERE present ORDER BY $s LIMIT $n");
 	printftr;
 }
 elsif($cmd eq 'maint') {
