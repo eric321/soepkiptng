@@ -42,7 +42,7 @@ use Getopt::Std;
 use MP3::Tag;
 #use Data::Dumper;
 
-use vars qw/$opt_r $opt_h $opt_q $opt_t $opt_l $opt_c $opt_f $opt_1/;
+use vars qw/$opt_r $opt_h $opt_q $opt_t $opt_l $opt_c $opt_f $opt_1 $opt_s/;
 
 sub do_dir($$) {
 	my ($dbh, $f) = @_;
@@ -153,7 +153,9 @@ sub do_file($$) {
 
 	next unless -s $f;
 
-	if($f =~ /\.mp[123]$/i) {
+	if($opt_s) {
+		do_soepkip($dbh, $f, $ar, $ti, $al, $tr, $len, $lyrics, $description, $language, $uuid);
+	} elsif($f =~ /\.mp[123]$/i) {
 		do_mp3($dbh, $f, $ar, $ti, $al, $tr, $len, $lyrics, $description, $language, $uuid);
 	} elsif($f =~ /\.flac$/i) {
 		do_flac($dbh, $f, $ar, $ti, $al, $tr, $len);
@@ -196,6 +198,39 @@ sub do_file($$) {
 				}
 			}
 		}
+	}
+	return 1;
+}
+
+sub do_soepkip($$$$$$$$$) {
+	my ($dbh, $f, $ar, $ti, $al, $tr, $len, $lyrics, $lyrdesc, $lyrlang, $uuid) = @_;
+	local *IN, *OUT;
+	my $dir = ".";
+	$f =~ s|(.*)/+|| and $dir = $1;
+
+	open OUT, ">$dir/.soepkiptng_info.tmp"
+		or do { warn "$dir/.soepkiptng_info.tmp: $!\n"; return undef; };
+	print OUT <<EOF;
+[$f]
+artist=$ar
+title=$ti
+album=$al
+track=$tr
+
+EOF
+	if(open IN, "$dir/.soepkiptng_info") {
+		my $skip = 0;
+		while(<IN>) {
+			if(/^\[([^\]]+)\]/) { $skip = $1 eq $f; }
+			print OUT unless $skip;
+		}
+		close IN;
+	}
+	if(!rename "$dir/.soepkiptng_info.tmp", "$dir/.soepkiptng_info") {
+		warn "rename $dir/.soepkiptng_info.tmp -> $dir/.soepkiptng_info: $!\n";
+		unlink "$dir/.soepkiptng_info.tmp"
+			or warn "$dir/.soepkiptng_info.tmp: $!\n";
+		return undef;
 	}
 	return 1;
 }
@@ -379,14 +414,14 @@ sub do_flac($$$$$$$) {
 }
 
 
-getopts('rfhqtl:c:1');
+getopts('rfhqtl:c:1s');
 
 read_configfile(\%conf, $opt_c);
 
 ($prog = $0) =~ s|.*/||;
 if($opt_h || !@ARGV) {
 	print <<EOF;
-Usage: $prog [-hrqft] [-l len] mp3files...
+Usage: $prog [-hrqfts] [-l len] mp3files...
 
 Options: 
        -r      : rename files.
@@ -395,6 +430,7 @@ Options:
        -t      : testmode, don't actually write any tags.
        -l len  : restrict length of filenames to 'len'
        -1      : also write ID3 tag
+       -s      : write to .soepkiptng_info instead of file
 
 $prog reads Artist/Title/Album/Track info from the SoepkipTNG
 database and writes it to the specified files using ID3v2 (unless the files

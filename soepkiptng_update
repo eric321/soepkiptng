@@ -57,6 +57,7 @@ sub getinfo_raw($\%);
 sub getinfo_aac($\%);
 sub getinfo_mplayer($\%);
 sub getinfo_ac3($\%);
+sub getinfo_soepkip($\%);
 sub read_eric_files();
 sub extract_artist_title($\%);
 sub is_nfs($);
@@ -166,6 +167,9 @@ while(<FILES>) {
 	getinfo_mplayer($_, %info) ||
 	getinfo_ac3($_, %info) ||
 	getinfo_raw($_, %info);
+
+	getinfo_soepkip($_, %info);
+
 	$/ = "\0";
 
 	$info{len} = 0 + $info{len};
@@ -632,12 +636,6 @@ sub getinfo_mplayer($\%) {
 	$file =~ /\.(mpe?g|avi|asx|asf|vob|wmv|ra?m|ra|mov|m2v|wma)$/i
 		or return undef;
 
-	if($file =~ /\.(ra?m|ra)$/i) {
-		$info->{encoding} = "RealMedia";
-	} else {
-		$info->{encoding} = "$1";
-	}
-
 	local *F;
 	if(open(F, "-|") == 0) {
 		open STDIN, "/dev/null";
@@ -653,7 +651,11 @@ sub getinfo_mplayer($\%) {
 		/^ID_(\w+)=(.*)/ and $prop{lc($1)} = $2;
 	}
 	close F;
-	if($prop{video_format}) { $info->{encoding} = "Video: $info->{encoding}"; } 
+	if($file =~ /\.(ra?m|ra)$/i) {
+		$info->{encoding} = $prop{video_format}? "RealVideo":"RealAudio";
+	} else {
+		$info->{encoding} = ($prop{video_format}? "Video: ":"") . $1;
+	}
 	$info->{info_origin} = "Clip Info" if $info->{artist} || $info->{title};
 	if($prop{video_width} && $prop{video_height}) {
 		$info->{encoding} .= " ($prop{video_width}x$prop{video_height})";
@@ -713,6 +715,32 @@ sub getinfo_ac3($\%) {
 	$info->{chan} = 0;
 	$info->{len} = 0;
 	return 1;
+}
+
+sub getinfo_soepkip($\%) {
+	my ($file, $info) = @_;
+	local *F;
+
+	$file =~ s|(.*)/+||;
+	my $dir = $1;
+
+	open F, "$dir/.soepkiptng_info" or return undef;
+	local $_;
+	FILE: while(<F>) {
+		if(/^\[([^\]]+)\]/ && $1 eq $file) {warn;
+			$info->{info_origin} = ".soepkiptng_info";
+			while(<F>) {
+				last FILE if /^\[/;
+				s/\s+$//;
+				/^(artist|album|track|title)\s*=\s*(.*)/
+					and $info->{$1} = $2;
+			}
+			close F;
+			return 1;
+		}
+	}
+	close F;
+	return undef;
 }
 
 # returns samplefreq, channels, seconds
