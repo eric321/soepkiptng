@@ -23,7 +23,7 @@
 # CONFIG
 
 BEGIN {
-	$configfile = "/etc/soepkiptng2.conf";
+	$configfile = "/etc/soepkiptng.conf";
 	my $f;
 
 	local *F;
