@@ -34,6 +34,7 @@ int readeof = 0;
 int maywrite = 0;
 int do_realtime = 1;
 int debug = 0;
+int stop_on_buffer_empty = 0;
 
 void perr(char *s)
 {
@@ -80,21 +81,29 @@ void realtime(int on)
 void sighandler(int s)
 {
 	if(pid1) kill(pid1, s);
-	if(pid1 && s == SIGINT) {
-		short buf[2];
-
-		signal(SIGINT, sighandler);
-		ioctl(fd2, SNDCTL_DSP_RESET, 0); 
-		buf[0] = buf[1] = 0;
-		write(fd2, buf, sizeof(buf));
-		pos = len = maywrite = 0;
-		readeof = 0;
-
-		if(do_realtime) realtime(0);
-		return;
-	}
 	fprintf(stderr,"\nSignal %d received, exiting.\n",s);
 	exit(1);
+}
+
+void sigusr1(int s)
+{
+	short buf[2];
+
+	signal(s, sigusr1);
+/*	ioctl(fd2, SNDCTL_DSP_RESET, 0); */
+	buf[0] = buf[1] = 0;
+	write(fd2, buf, sizeof(buf));
+	ioctl(fd2, SNDCTL_DSP_SYNC, 0);  /* SNDCTL_DSP_POST doesn't seem to work ... */
+	pos = len = maywrite = 0;
+	readeof = 0;
+
+	if(do_realtime) realtime(0);
+}
+
+void sigusr2(int s)
+{
+	stop_on_buffer_empty = 1;
+	signal(s, sigusr2);
 }
 
 /* flags should be O_RDONLY or O_WRONLY. If pid != NULL, the pid of the
@@ -152,10 +161,10 @@ int main(int argc, char **argv)
 {
 	char *buf, c;
 	int bufsize, l, minlen = 0, status, i, r, w, iseek = 0, retval;
+	int write_total = 0;
 	int maxfd;
 	fd_set rfds, wfds;
 	int do_mlockall = 1, verbose = 0, busywait = 0;
-	time_t starttime = 0;
 	char *snddev = "/dev/dsp";
 	int s_minflt = 0, s_majflt = 0, s_nswap = 0, s_nivcsw = 0;
 	char waitstr[] = "|/-\\";
@@ -234,6 +243,8 @@ int main(int argc, char **argv)
 	
 	signal(SIGTERM, sighandler);
 	signal(SIGINT, sighandler);
+	signal(SIGUSR1, sigusr1);
+	signal(SIGUSR2, sigusr2);
 	signal(SIGPIPE, SIG_IGN);
 	
 	for(;;) {
@@ -246,10 +257,7 @@ int main(int argc, char **argv)
 			static unsigned displayed_t = -1;
 			static int displayed_perc = -1;
 			
-			if(starttime)
-				t = time(NULL) - starttime;
-			else
-				t = 0;
+			t = write_total / 176400;
 			perc = 100 * len / bufsize;
 			if(perc > 90) perc = -1;
 			
@@ -275,8 +283,9 @@ int main(int argc, char **argv)
 				fflush(stderr);
 				displayed_perc = perc;
 			}
-		}		
-	
+		}
+
+		if(stop_on_buffer_empty && len == 0) break;
 		if(readeof && len == 0) break;
 
 		if((readeof || len == bufsize) && !maywrite) {  /* off we go! */
@@ -287,7 +296,6 @@ int main(int argc, char **argv)
 
 			maywrite = 1;
 			minlen = len;
-			if(!starttime) time(&starttime);
 
 			if(debug) {			
 				struct rusage ru;
@@ -318,17 +326,18 @@ int main(int argc, char **argv)
 				break;
 			}
 			len -= w;
-			if(debug) {
+			if(debug > 1) {
 				fprintf(stderr, "wrote %8d bytes at %8d. len now %8d\n",
 					w, pos, len);
 			}
 			pos = (pos + w) % bufsize;
+			write_total += w;
 
 			/* flush data in soundcard driver if we are out of data */
 			if(len == 0) ioctl(fd2, SNDCTL_DSP_POST, 0);
 
 			/* if readeof == 1, we don't select() on fd1. Therefore, select
-			   always waits until fd2 is ready. If we continue here we'd
+			   always waits until fd2 is ready. If we'd continue here we'd
 			   never try reading */
 			if(!readeof) continue;
 		}
@@ -348,7 +357,7 @@ int main(int argc, char **argv)
 				break;
 			}
 			len += r;
-			if(debug) {
+			if(debug > 1) {
 				fprintf(stderr, "read  %8d bytes at %8d. len now %8d\n",
 					r, dst, len);
 			}
