@@ -67,6 +67,16 @@ sub decode($) {
 	$a;
 }
 
+sub encode_form($) {
+	my ($a) = @_;
+
+	$a =~ s|&|&amp;|g;
+	$a =~ s|"|&quot;|g;
+	$a =~ s|<|&lt;|g;
+	$a =~ s|>|&gt;|g;
+	$a;
+}
+
 sub can_delete($) {
 	my ($file) = @_;
 
@@ -116,13 +126,14 @@ EOF
 		my $e = encode("^$_");
 		print qq|<a id=a href="$self?cmd=$artistlistcmd&artist=$e" target=bframe>$_</a>&nbsp;|;
 	}
+	my $sz = $searchformsize || 10;
 	print <<EOF;
 </td>
 <td id=az nowrap>&nbsp;&nbsp;Search:</td>
 <td id=az nowrap>
  <form id=search action="$self" method=get target=bframe>
   <input type=hidden name=cmd value=search>
-  <input type=text size=5 name=sval style="$searchformstyle">
+  <input type=text size=$sz name=sval style="$searchformstyle">
 </td>
 <td id=az nowrap>
   <select name=stype style="$searchformstyle" onChange="form.submit()">
@@ -476,16 +487,7 @@ sub print_edit_page($$) {
 	$sth->execute();
 	$_ = $sth->fetchrow_hashref() or die "id $id not found.\n";
 
-	my $l = sprintf "%d:%02d", $_->{length} / 60, $_->{length} % 60;
-	my $t = $_->{track} || "";
-	my $size = sprintf("%dk", ((-s $_->{filename}) + 512) / 1024);
-	my $lp = $_->{lp}? localtime($_->{lp}) : "-";
-	my $ta = $_->{ta}? localtime($_->{ta}) : "-";
-	my $pr = $_->{present}? "Yes" : "No";
-	(my $dir = $_->{filename}) =~ s|/*[^/]+$||;
-	(my $file = $_->{filename}) =~ s|.*/||;
-
-	print <<EOF;
+	my $fmt = <<EOF;
 <script language="Javascript">
 <!--
 function verifydelete() {
@@ -498,25 +500,36 @@ function verifydelete() {
 <caption>Edit Song</caption>
 <tr>
  <td>
-  <form action="$self" method=get>
-  <input type=hidden name=id value="$id">
+  <form action="%s" method=get>
+  <input type=hidden name=id value="%d">
     <input type=hidden name=cmd value=changefile>
-  <tr><td>Present:</td><td>$pr</td></tr>
-  <tr><td>Artist:</td><td><input type=text size=60 name=artist value="$_->{artist}"><input type=submit name=action_clear_artist value="Clear"><input type=submit name=action_fix_artist value="Fix"><input type=submit name=action_swap value="Swap Artist/Title"></td></tr>
-  <tr><td>Title:</td> <td><input type=text size=60 name=title  value="$_->{title}"><input type=submit name=action_clear_title value="Clear"><input type=submit name=action_fix_title value="Fix"></td></tr>
-  <tr><td>Album:</td> <td><input type=text size=60 name=album  value="$_->{album}"><input type=submit name=action_clear_album value="Clear"><input type=submit name=action_fix_album value="Fix"></td></tr>
-  <tr><td>Track:</td> <td><input type=text size=3 name=track  value="$t" maxlength=2></td></tr>
-  <tr><td>Time:</td>  <td>$l</td></tr>
-  <tr><td>Encoding:</td>        <td>$_->{encoding}</td></tr>
-  <tr><td>Time Added:</td><td>$ta</td></tr>
-  <tr><td>Last played time:</td><td>$lp</td></tr>
-  <tr><td>Directory:</td>       <td>$dir</td></tr>
-  <tr><td>Filename:</td>        <td>$file</td></tr>
-  <tr><td>Size:</td>            <td>$size</td></tr>
+  <tr><td>Present:</td><td>%s</td></tr>
+  <tr><td>Artist:</td><td><input type=text size=60 name=artist value="%s"><input type=submit name=action_clear_artist value="Clear"><input type=submit name=action_fix_artist value="Fix"><input type=submit name=action_swap value="Swap Artist/Title"></td></tr>
+  <tr><td>Title:</td> <td><input type=text size=60 name=title  value="%s"><input type=submit name=action_clear_title value="Clear"><input type=submit name=action_fix_title value="Fix"></td></tr>
+  <tr><td>Album:</td> <td><input type=text size=60 name=album  value="%s"><input type=submit name=action_clear_album value="Clear"><input type=submit name=action_fix_album value="Fix"></td></tr>
+  <tr><td>Track:</td> <td><input type=text size=3 name=track  value="%s" maxlength=2></td></tr>
+  <tr><td>Time:</td>  <td>%d:%02d</td></tr>
+  <tr><td>Encoding:</td>        <td>%s</td></tr>
+  <tr><td>Time Added:</td><td>%s</td></tr>
+  <tr><td>Last played time:</td><td>%s</td></tr>
+  <tr><td>Directory:</td>       <td>%s</td></tr>
+  <tr><td>Filename:</td>        <td>%s</td></tr>
+  <tr><td>Size:</td>            <td>%dk</td></tr>
   <tr><td colspan=2><input type=submit value="Update"></td></tr>
   </form>
 EOF
-#<input type=text size=60 name=file value="$file">
+	$_->{filename} =~ m|^(.*)/(.*?)$|;
+	printf $fmt, $self, $id, $_->{present}? "Yes" : "No",
+		encode_form($_->{artist}),
+		encode_form($_->{title}),
+		encode_form($_->{album}),
+		$_->{track} || "",
+		$_->{length} / 60, $_->{length} % 60,
+		$_->{encoding},
+		$_->{ta}? scalar localtime($_->{ta}) : "-",
+		$_->{lp}? scalar localtime($_->{lp}) : "-",
+		$1, $2,
+		((-s $_->{filename}) + 512) / 1024;
 
 	if(can_delete($_->{filename})) {
 		print <<EOF;
