@@ -109,47 +109,49 @@ sub do_file($$) {
 	my ($dbh, $f) = @_;
 
 	$f =~ s|^\./+||;
-	my $fullf = $f;
-	$fullf =~ m|/| or $fullf = "./$f";
-	$fullf =~ s|(.*)/|abs_path($1) . "/"|e;
 
-	$q = "SELECT song.id,title,artist.name,album.name,track,length" .
-	     " FROM song,artist,album" .
-	     " WHERE song.artist_id=artist.id AND song.album_id=album.id" .
-	     " AND present AND filename=?";
-	$sth = $dbh->prepare($q);
-	$sth->execute($fullf)
-		or die "can't do sql command: " . $dbh->errstr;
+	my $full_filename = $f;
+	$full_filename =~ m|/| or $full_filename = "./$f";	# prepend ./ if relative path
+	$full_filename =~ s|(.*)/|abs_path($1) . "/"|e;		# get absolute pathname
 
-	($id, $ti, $ar, $al, $tr, $len) = $sth->fetchrow_array or do {
-		my $shortf = $fullf;
-		$shortf =~ s|^/+||;
-		$q = "SELECT song.id,title,artist.name,album.name,track,length" .
-		     " FROM song,artist,album" .
-		     " WHERE song.artist_id=artist.id AND song.album_id=album.id" .
-		     " AND present AND filename LIKE ?";
-		$sth = $dbh->prepare($q);
-		for(;;) {
-#			warn "===== %/$shortf\n";
-			$sth->execute("%/$shortf")
-				or die "can't do sql command: " . $dbh->errstr;
+	my $filename_noext = $full_filename;
+	$filename_noext =~ s/_/\\_/g;	# escape _
+	$filename_noext =~ s/%/\\%/g;	# and %
 
-			($id, $ti, $ar, $al, $tr, $len) = $sth->fetchrow_array
-				and last;
+	my $sth = $dbh->prepare(
+		"SELECT song.id,title,artist.name,album.name,track,length," .
+		"lyrics,language FROM song " .
+		"LEFT JOIN album ON album.id=song.album_id " .
+		"LEFT JOIN artist ON artist.id=song.artist_id " . 
+		"LEFT JOIN lyrics ON lyrics.id=song.id " .
+		"WHERE present AND filename LIKE ?");
 
-			$shortf =~ s|[^/]+/+|| or do {
+	my $partial = 0;
+	for(;;) {
+		$sth->execute($filename_noext)
+			or die "can't do sql command: " . $dbh->errstr;
+		($id, $ti, $ar, $al, $tr, $len, $lyrics, $language) =
+			$sth->fetchrow_array and last;
+
+		$partial++;
+		if($partial == 1) {
+			# replace extension by .% wildcard
+			$filename_noext =~ s/[^.]+$/%/;
+		} else {
+			# replace first pathname component by %/
+			$filename_noext =~ s|^%?/+[^/]+/+|%/| or do {
 				warn "$f: not found in dbase\n" unless $opt_q;
 				return 1;
-			}
+			};
 		}
-		warn "$f: partial filename match on $shortf\n" unless $opt_q;
-	};
+	}
 	$sth->finish;
+	$partial and warn "$f: partial filename match on $filename_noext\n" unless $opt_q;
 
 	next unless -s $f;
 
 	if($f =~ /\.mp[123]$/i) {
-		do_mp3($dbh, $f, $ar, $ti, $al, $tr, $len);
+		do_mp3($dbh, $f, $ar, $ti, $al, $tr, $len, $lyrics, $language);
 	} elsif($f =~ /\.flac$/i) {
 		do_flac($dbh, $f, $ar, $ti, $al, $tr, $len);
 	} elsif($f =~ /\.ogg$/i) {
@@ -170,15 +172,15 @@ sub do_file($$) {
 			$newname =~ s/_?$/_/;
 		}
 		$newname .= ".$ext";
-		$fullf =~ m|^(.*)/|;
+		$full_filename =~ m|^(.*)/|;
 		$newname = "$1/$newname";
 
-		if($newname ne $fullf) {
-			warn "renaming $fullf -> $newname\n";
+		if($newname ne $full_filename) {
+			warn "renaming $full_filename -> $newname\n";
 			if(-e $newname) {
 				warn "$f: $newname exists, skipping\n";
 			} elsif(!$opt_t) {
-				if(rename $fullf, $newname) {
+				if(rename $full_filename, $newname) {
 					$dbh->do("DELETE FROM song WHERE filename=?",
 						undef, $newname)
 						or die "can't do sql command: " . $dbh->errstr;
@@ -186,7 +188,7 @@ sub do_file($$) {
 						undef, $newname, $id)
 						or die "can't do sql command: " . $dbh->errstr;
 				} else {
-					warn "rename $fullf -> $newname: $!\n";
+					warn "rename $full_filename -> $newname: $!\n";
 				}
 			}
 		}
@@ -194,8 +196,8 @@ sub do_file($$) {
 	return 1;
 }
 
-sub do_mp3($$$$$$$) {
-	my ($dbh, $f, $ar, $ti, $al, $tr, $len) = @_;
+sub do_mp3($$$$$$$$) {
+	my ($dbh, $f, $ar, $ti, $al, $tr, $len, $lyrics, $lyrlang) = @_;
 
 	open F, "+<$f" or do {
 		warn "$f: $!\n";
@@ -216,26 +218,32 @@ sub do_mp3($$$$$$$) {
 	$mp3 = MP3::Tag->new($f) or die "$f: $!\n";
 	$mp3->config("autoinfo", "ID3v2");
 	my ($p_ti, $p_tr, $p_ar, $p_al) = $mp3->autoinfo();
-
+	my $p_uslt;
 	my $p_len = 0;
 	my $newtag = $mp3->{ID3v2};
 	if(defined($newtag)) {
-		$p_len = $mp3->{ID3v2}->getFrame("TLEN");
 		$newtag->remove_frame('TIT2');
 		$newtag->remove_frame('TPE1');
 		$newtag->remove_frame('TALB');
 		$newtag->remove_frame('TRCK');
+		$p_len = $mp3->{ID3v2}->getFrame('TLEN');
 		$newtag->remove_frame('TLEN');
+		$p_uslt = $mp3->{ID3v2}->getFrame('USLT');
+		$newtag->remove_frame('USLT');
+		#warn Dumper($p_uslt);
 	} else {
 		$newtag = $mp3->newTag('ID3v2');
 	}
+	if($p_ti ne $ti || $p_tr != $tr || $p_ar ne $ar || $p_al ne $al ||
+		$p_len != 1000 * $len || $p_uslt->{Description} ne "" || 
+		$p_uslt->{Language} ne $lyrlang || $p_uslt->{Text} ne $lyrics) {
 
-	if($p_ti ne $ti || $p_tr != $tr || $p_ar ne $ar || $p_al ne $al || $p_len != 1000 * $len) {
 		$newtag->add_frame('TIT2', $ti) if $ti;
 		$newtag->add_frame('TPE1', $ar) if $ar;
 		$newtag->add_frame('TALB', $al) if $al;
 		$newtag->add_frame('TRCK', $tr) if $tr;
 		$newtag->add_frame('TLEN', 1000 * $len) if $len;
+		$newtag->add_frame('USLT', 0, $lyrlang, "", $lyrics);
 		warn "$f: updating ID3v2 tag\n";
 		$newtag->write_tag()
 			unless $opt_t;
