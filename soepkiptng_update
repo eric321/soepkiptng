@@ -361,6 +361,41 @@ sub get_id3($\%) {
 	return 1;
 }
 
+# used by musepack; see http://www.personal.uni-jena.de/~pfk/mpp/sv8/apetag.html
+sub get_ape($\%$) {
+	my ($file, $info, $offset) = @_;
+	local *F;
+	my $apetag;
+	my $found;
+
+	open F, $file or return undef;
+	seek F, $offset, ($offset < 0? 2 : 0) or goto OUT;
+	read F, $apetag, 32 or goto OUT;
+	$apetag =~ /^APETAGEX/ or goto OUT;
+	my ($version, $length, $tagcount, $flags) = unpack "VVVV", substr $apetag, 8;
+	$version == 1000 || $version == 2000 or goto OUT;
+	$length > 32 or goto OUT;
+	unless(($flags >> 29) & 1) {
+		seek F, -$length, 1 or goto OUT;
+	}
+	read F, $apetag, $length - 32 or goto OUT;
+	my ($pos, $tag);
+	for($pos = 0, $tag = 0; $pos < $length && $tag < $tagcount; $tag++) {
+		my ($len, $fl, $name) = unpack "VVZ*", substr $apetag, $pos;
+		$pos += 8 + length($name) + 1;
+		if($name =~ /^(Artist|Title|Album|Track)$/) {
+			$info->{lc $1} = substr $apetag, $pos, $len;
+			$found++;
+		}
+		$pos += $len;
+	}
+	$found or goto OUT;
+	$info->{info_origin} = sprintf "APE %d.0", $version / 1000;
+OUT:
+	close F;
+	return $found;
+}
+
 # getinfo_* returns (description, length[sec], sfreq[khz], channels
 # or undef if it isn't the correct type
 
@@ -564,15 +599,10 @@ sub getinfo_musepack($\%) {
 	$info->{len} = $frames * 1152 / $info->{freq};
 	$info->{chan} = 2;
 
-	my ($magic, $ti, $ar, $al, $yr, $cm, $nl, $tr, $gn) =
-			unpack "a3a30a30a30a4a28aaa", $id3;
-	if($magic eq "ID3") {
-		$info->{info_origin} = "ID3";
-		$info->{artist} = $ar;
-		$info->{title} = $ti;
-		$info->{album} = $al;
-		$info->{track} = $tr if $nl eq "\0";
-	}
+	get_ape($file, %$info, 0) ||      # APE tag at beginning
+	get_ape($file, %$info, -32) ||    # APE tag at end
+	get_ape($file, %$info, -160) ||   # APE tag at end followed by ID3 tag
+	get_id3($file, %$info);
 	return 1;
 }
 
