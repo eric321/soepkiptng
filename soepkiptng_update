@@ -124,6 +124,7 @@ while(<FILES>) {
 	$desc or ($desc, $len, $freq, $chan) = getinfo_wav($_);
 	$desc or ($desc, $len, $freq, $chan) = getinfo_pac($_);
 	$desc or ($desc, $len, $freq, $chan) = getinfo_flac($_);
+	$desc or ($desc, $len, $freq, $chan) = getinfo_raw($_);
 	$len = 0 + $len;
 	$desc or do {
 		warn "Filetype of $_ unknown\n";
@@ -342,6 +343,13 @@ sub getinfo_flac($) {
 			(-s $_[0]) / ($num * $ch * $bt / 8 / 100);
 	}
 	return ("flac$percent", $num / $sr, $sr / 1000, $ch);
+}
+
+sub getinfo_raw($) {
+	$_[0] =~ /\.raw$/i
+		or return undef;
+
+	return ("raw", (-s $_[0]) / 176400, 44.1, 2);
 }
 
 # returns (samplefreq, channels, seconds)
