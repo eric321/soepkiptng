@@ -325,7 +325,7 @@ EOF
 
 
 	printf <<EOF;
-<center id=hdr></center>
+<center id=hdr>$caption</center>
 <table border=0 cellspacing=0>
  <tr>
   <th>&nbsp;Artist&nbsp;</th>
@@ -622,10 +622,13 @@ sub add_search_args($$$@) {
 	my $v;
 
 	foreach $v (split /\s+/, $val) {
+		my $m = "LIKE";
 		$$list[0] .= " AND ";
 		if($v =~ s/^!//) { $$list[0] .= "NOT "; }
-		$$list[0] .= "(" . join(" OR ", map { "$_ LIKE ?" } @fields) . ")";
-		foreach(@fields) { push @$list, "%$v%"; }
+		if($v =~ /^\^/) { $m = "REGEXP"; }
+		else { $v = "%$v%"; };
+		$$list[0] .= "(" . join(" OR ", map { "$_ $m ?" } @fields) . ")";
+		foreach(@fields) { push @$list, $v; }
 	}
 	$$sort = $fields[0] unless $$sort;
 }
