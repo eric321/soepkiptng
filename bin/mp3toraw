@@ -8,13 +8,17 @@ $_ = get_mp3info($ARGV[0]);
 
 open STDERR, ">/dev/null";
 
-if(!$_->{STEREO}) {
-	# convert to stereo
-	open STDOUT, "|resample -s 44100 44100";
+if(abs($_->{FREQUENCY} - 44.1) > 0.1) {
+	$sfreq_from = int($_->{FREQUENCY} * 1000 + 0.5);
+	if($sfreq_from) {
+		open STDOUT, "|resample $sfreq_from 44100";
+	}
 }
 
-if(abs(${FREQUENCY} - 44.1) > 0.1) {
-	exec 'mpg123', '-s', '-r44100', $ARGV[0];
-} else {
-	exec 'splay', '-d', '-', $ARGV[0];
-}
+@opts = ('-SQoraw:-');
+
+# check if the --ignore-crc option is supported
+# madplay versions prior to 0.14.2b don't have it
+push @opts, "--ignore-crc" if `madplay -h 2>&1 |grep -- --ignore-crc`;
+
+exec 'madplay', @opts, $ARGV[0];
