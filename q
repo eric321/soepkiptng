@@ -26,9 +26,13 @@ $configfile = "/etc/soepkiptng.conf";
 use integer;
 use DBI;
 use Socket;
+use Getopt::Std;
+
+getopts('v');
 
 eval "use Term::ReadKey;";
 if($@) {
+	warn "Term::ReadKey not found; assuming 80-column terminal.\n";
 	$screen_width = 80;
 } else {
 	($screen_width) = GetTerminalSize();
@@ -131,7 +135,7 @@ if(@ARGV) {
 		}
 		push @q, $q;
 	}
-	$q = "SELECT song.title,artist.name,album.name,song.id,song.track" .
+	$q = "SELECT title,artist.name,album.name,song.id,track,filename,length,encoding" .
 	     " FROM song,artist,album" .
 	     " WHERE song.artist_id=artist.id AND song.album_id=album.id" .
 	     " AND present AND " . join(" AND ", @q) .
@@ -149,6 +153,8 @@ if(@ARGV) {
 		$head = '';
 		printf STDERR "%-3s %-${w_a}.${w_a}s %-${w_t}.${w_t}s %-${w_al}.${w_al}s\n",
 			"$i.", $q[1], $q[0], albumtrack($q[2], $q[4]);
+		$opt_v and printf STDERR "%d:%02d %s %s\n", $q[6] / 60, $q[6] % 60,
+			$q[7], $q[5];
 		$id[$i] = $q[3];
 		$i++;
 	}
