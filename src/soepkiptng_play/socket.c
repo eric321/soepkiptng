@@ -16,7 +16,6 @@
 #include "socket.h"
 #include "output_oss.h"
 
-static int waitbufferempty;
 
 struct socket_t {
 	char inbuf[256];
@@ -25,6 +24,8 @@ struct socket_t {
 	char outbuf[256];
 	int outoff;
 	int outlen;
+
+	int waitbufferempty;
 };
 
 static void initsock(struct socket_t *p)
@@ -33,6 +34,8 @@ static void initsock(struct socket_t *p)
 
 	p->outoff = 0;
 	p->outlen = sprintf(p->outbuf, "+This is soepkiptng_play.\n");
+
+	p->waitbufferempty = 0;
 }
 
 static void closesock(int fd, struct socket_t *p)
@@ -77,7 +80,7 @@ static void handle_cmd(int fd, struct socket_t *p, char *s)
 	}
 
 	else if(strcasecmp(cmd, "waitbufferempty") == 0) {
-		waitbufferempty = 1;
+		p->waitbufferempty = 1;
 	}
 
 	else if(strcasecmp(cmd, "resume") == 0) {
@@ -111,10 +114,10 @@ static void socket_pre(int fd, long cookie)
 {
 	struct socket_t *p = (struct socket_t *)cookie;
 
-	if(waitbufferempty) {
+	if(p->waitbufferempty) {
 		if(buffer_length == 0) {
 			sockprintf(p, "+OK\n");
-			waitbufferempty = 0;
+			p->waitbufferempty = 0;
 		} else {
 			return;
 		}
