@@ -3,9 +3,8 @@
 
 use Getopt::Std;
 require 'syscall.ph';
-require '/usr/local/bin/latin.pl';
 use integer;
-use Cwd;
+use Cwd qw'cwd abs_path';
 use POSIX qw(strftime);
 
 sub df($);
@@ -14,7 +13,18 @@ sub delsymlinks();
 
 $| = 1;
 
-getopts('d:hnsweoWXYZ');
+# find program directory
+$_ = $0;
+while(-l) {
+	my $l = readlink or die "readlink $_: $!\n";
+	if($l =~ m|^/|) { $_ = $l; } else { s|[^/]*$|/$l|; }
+}
+m|(.*)/|;
+my $progdir = abs_path($1);
+
+require "$progdir/../soepkiptng.lib";
+
+getopts('c:d:hnsweoWXYZ');
 $dev = $opt_d || "/dev/cdrom";
 $fake = $opt_n;
 $waitdf = $opt_w;
@@ -24,6 +34,8 @@ $W = "-W" if $opt_W;
 $X = "-X" if $opt_X;
 $Y = "-Y" if $opt_Y;
 $Z = "-Z" if $opt_Z;
+
+read_configfile(\%conf, $opt_c);
 
 $output = "-w";
 $output_ext = "wav";
