@@ -35,7 +35,7 @@ my $progdir = abs_path($1);
 
 require "$progdir/soepkiptng.lib";
 
-getopts('vnc:');
+getopts('vnc:g');
 
 read_configfile(\%conf, $opt_c);
 
@@ -143,7 +143,7 @@ if(@ARGV) {
 		}
 		push @q, $q;
 	}
-	$q = "SELECT title,artist.name,album.name,song.id,track,filename,length,encoding" .
+	$q = "SELECT title,artist.name as artist,album.name as album,song.id as id,track,filename,length,encoding" .
 	     " FROM song,artist,album" .
 	     " WHERE song.artist_id=artist.id AND song.album_id=album.id" .
 	     " AND present AND " . join(" AND ", @q) .
@@ -156,15 +156,38 @@ if(@ARGV) {
 		'Artist', 'Song', 'Album', '-'x$w_a, '-'x$w_t, '-'x$w_al);
 
 	$i = 1;
-	while(@q = $sth->fetchrow_array) {
+	while($_ = $sth->fetchrow_hashref) {
+		if($opt_g) {
+			my $f = $_->{filename};
+			$f =~ s|//+|/|g;
+			$f =~ s|^(.*)/|| or die;
+			my $d = $1;
+			$d =~ s|^.*/|| or die;
+			$f =~ s|\.[^.]+$||;
+			$f =~ /([^-\w])/ and die "\nERROR: invalid character ($1) in filename ($f)!\n";
+			if(defined($dirname)) {
+				$dirname eq $d or die "\nERROR: inconsistent dirname ($dirname, $d)\n";
+			} else {
+				$dirname = $d;
+				$g_output .= ">$dirname\n";
+			}
+			$_->{title} =~ s/^(\W+)/<$1>/;
+			$g_output .=  "-$_->{track}\n" if $_->{track};
+			$g_output .=  "/$f\n";
+			next;
+		}
 		print STDERR $head;
 		$head = '';
 		printf STDERR "%-3s %-${w_a}.${w_a}s %-${w_t}.${w_t}s %-${w_al}.${w_al}s\n",
-			"$i.", $q[1], $q[0], albumtrack($q[2], $q[4]);
-		$opt_v and printf STDERR "%d:%02d %s %s\n", $q[6] / 60, $q[6] % 60,
-			$q[7], $q[5];
-		$id[$i] = $q[3];
+			"$i.", $_->{artist}, $_->{title}, albumtrack($_->{album}, $_->{track});
+		$opt_v and printf STDERR "%d:%02d %s %s\n", $_->{length} / 60, $_->{length} % 60,
+			$_->{encoding}, $_->{filename};
+		$id[$i] = $_->{id};
 		$i++;
+	}
+	if($opt_g) {
+		print $g_output;
+		exit 0;
 	}
 	exit if $i == 1;
 	print STDERR "\nAdd (a=all): ";
