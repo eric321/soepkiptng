@@ -9,7 +9,7 @@ struct sample {
 	short r;
 };
 
-#define MULT_BITS 32
+#define MULT_BITS 31
 #define MULT (1LL << MULT_BITS)
 #define BUFSIZE 1024
 
@@ -53,35 +53,48 @@ Usage: resample f_in f_out\n\
 	d = 0;
 	termflag = 0;
 	for(;;) {
-#if 1
+#if 0
 		dst[d].l = (t * (src[s].l - src[s - 1].l) >> MULT_BITS) + src[s - 1].l;
 		dst[d].r = (t * (src[s].r - src[s - 1].r) >> MULT_BITS) + src[s - 1].r;
 #else
-		fprintf(stderr,"s=%d d=%d t=%Lu\n", s, d, t);
-		asm ("movw %2, %%ebx;
-		      movw %3, %%eax;
-		      subl %%ebx, %%eax;
-		      mull %1;
-		      addl %%ebx, %%edx;
-		      movw %%edx, %0"
+#if 0
+		asm ("movl %2, %%eax;
+		      imull %1;
+		      sall %%eax;
+		      roll %%edx;
+		      movw %%dx, %0"
+
+			: "=m" (dst[d].l)
+			: "m" (t), "m" (src[s].l - src[s - 1].l)
+			: "edx", "eax", "cc");
+		dst[d].l += src[s - 1].l;
+#endif
+		asm ("movswl %2, %%edx;
+		      movswl %3, %%eax;
+		      subl %%edx, %%eax;
+		      imull %1;
+		      sall %%eax;
+		      roll %%edx;
+		      addw %2, %%dx;
+		      movw %%dx, %0"
 
 			: "=m" (dst[d].l)
 			: "m" (t), "m" (src[s - 1].l) , "m" (src[s].l)
-			: "edx", "ebx", "eax", "cc");
-		asm ("movw %2, %%ebx;
-		      movw %3, %%eax;
-		      subl %%ebx, %%eax;
-		      mull %1;
-		      addl %%ebx, %%edx;
-		      movw %%edx, %0"
+			: "eax", "edx", "cc");
+		asm ("movswl %2, %%edx;
+		      movswl %3, %%eax;
+		      subl %%edx, %%eax;
+		      imull %1;
+		      sall %%eax;
+		      roll %%edx;
+		      addw %2, %%dx;
+		      movw %%dx, %0"
 
 			: "=m" (dst[d].r)
 			: "m" (t), "m" (src[s - 1].r) , "m" (src[s].r)
-			: "edx", "ebx", "eax", "cc");
+			: "eax", "edx", "cc");
 #endif
 		d++;
-		if(debug) fprintf(stderr,"d=%d\n",d);
-
 		if(d == BUFSIZE) {
 			if(fwrite(dst, sizeof(struct sample), d, stdout) != d) exit(1);
 			d = 0;
