@@ -498,7 +498,7 @@ EOF
 		if($albumlist_length_threshold == 0 ||
 		   $al_len_tot < $albumlist_length_threshold ||
 		   $$argsref{'expanded_albumlist'}) {
-			printf "Albums: %s.\n", join(",&nbsp; ",
+			printf "Albums: %s.\n", join(",<br>\n",
 				map { $al{$_} } @alids);
 		} else {
 			my $len_left = $albumlist_length_threshold;
@@ -758,7 +758,8 @@ sub add_search_args($$$@) {
 	my ($list, $sort, $val, @fields) = @_;
 	my $v;
 
-	foreach $v (split /\s+/, $val) {
+	# split on space and latin1 'no break space'
+	foreach $v (split /[\s\xa0]+/, $val) {
 		my $m = "LIKE";
 		$$list[0] .= " AND ";
 		if($v =~ s/^!//) { $$list[0] .= "NOT "; }
