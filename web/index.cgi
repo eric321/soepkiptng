@@ -198,7 +198,7 @@ EOF
 	return sprintf $fmt, 
 		$td_left, $col1,
 		$td_artist, $self, $q->{arid}, encurl("Artist: $q->{artist}"), enchtml($q->{artist}),
-		$td_album, $self, $q->{alid}, encurl("Artist: $q->{album}"), enchtml($q->{album}),
+		$td_album, $self, $q->{alid}, encurl("Album: $q->{album}"), enchtml($q->{album}),
 		$td_track, $q->{track}? "$q->{track}." : "",
 		$td_song, $title_href, enchtml($q->{title}), $title_href? "</a>":"",
 		$td_time, $q->{length} / 60, $q->{length} % 60,
@@ -770,9 +770,14 @@ elsif($cmd eq 'artistlist') {
 		$cap = "Search Album: $args{'album'}";
 	}
 
-	$q[0] .= " AND song.artist_id=artist.id AND song.album_id=album.id".
-		 " GROUP BY binary artist.name, binary album.name ORDER BY $s";
-	print_artistlist_table($dbh, \%session, $cap, @q);
+	if($s) {
+		$s =~ s/^r_(.*)/\1 DESC/;
+		$q[0] .= " AND song.artist_id=artist.id AND song.album_id=album.id".
+			 " GROUP BY binary artist.name, binary album.name ORDER BY $s";
+		print_artistlist_table($dbh, \%session, $cap, @q);
+	} else {
+		print "Error: No search terms specified.\n";
+	}
 	printftr;
 }
 elsif($cmd eq 'alllist') {
