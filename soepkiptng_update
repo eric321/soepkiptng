@@ -407,16 +407,18 @@ sub extract_artist_title {
 	$f =~ s/^\W+//;
 	$tr = $1;
 
-	$p =~ s|/+$||;
-	$p =~ s|.*/||;
+	my $pp = $p;
+	$pp =~ s|/+$||;
+	$pp =~ s|.*/||;
 
 	if($f =~ /[_\s]*-[_\s]*/) {
 		($a, $t) = ($`, $');
-		($alb = $p) =~ s/.*-[_\s]*//;
+		($alb = $pp) =~ s/.*-[_\s]*//;
 	} else {
 		$p =~ s/-[_\s]*(.*)// and $alb = $1;
-		($a, $t) = ($p, $f);
+		($a, $t) = ($pp, $f);
 	}
+	if(-e "$p/.reverse") { ($a, $t) = ($t, $a); }
 	return (unsimplify($a), unsimplify($t), $tr, unsimplify($alb));
 }
 
