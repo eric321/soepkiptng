@@ -23,9 +23,7 @@
 
 $configfile = "/etc/soepkiptng.conf";
 
-use integer;
 use DBI;
-use Socket;
 
 open F, $configfile or die "$configfile: $!\n";
 while(<F>) {
@@ -51,7 +49,15 @@ $| = 1;
 $dbh = DBI->connect("DBI:$db_type:$db_name:$db_host", $db_user, $db_pass)
 	or die "can't connect to database";
 
+$SIG{'HUP'} = sub {
+	exec $0;
+	die;
+};
+
 for(;; sleep 1) {
+	$newmtime = (stat $statusfile)[9];
+	next if $newmtime == $mtime;
+	$mtime = $newmtime;
 	if(open F, $statusfile) {
 		$nowplaying = <F>;
 		close F;
@@ -62,32 +68,12 @@ for(;; sleep 1) {
 		my $sth = $dbh->prepare($query);
 		my $rv = $sth->execute;
 		if($now_playing = $sth->fetchrow_hashref) {
-			$newstatus = sprintf "%s-%s\n",
+			printf "\n%s\n%s\n  [%02d] %s\r",
 				$now_playing->{artist},
-				$now_playing->{title};
-			if($newstatus ne $status) {
-				print $newstatus;
-				$status = $newstatus;
-			}
+				$now_playing->{title},
+				$now_playing->{track},
+				$now_playing->{album};
 		}
 	}
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
