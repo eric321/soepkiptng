@@ -815,6 +815,46 @@ sub getlyrics_lyricsdomain_com($) {
 	return 1;
 }
 
+sub lyrics_string_simplify($) {
+	my ($a) = @_;
+
+	$a =~ s/(\d),(\d)/\1\2/g;
+	$a =~ s/-/ /g;
+	$a =~ s/[\[(](.*)//;
+	$a =~ s/[ _]?&[_ ]?/ and /;
+	$a =~ s/([\x80-\xff])/lc($latin9_to_ascii{ord($1)})/ge;
+	$a =~ s/[^'A-Za-z0-9]+/ /g;
+	$a =~ s/\s+/ /g;
+	$a =~ s/^\s+|\s+$//g;
+	return lc($a);
+}
+
+sub getlyrics($;$) {
+	my ($info, $try) = @_;
+
+	# save artist/title/album
+	my ($ar, $ti, $al) = ($_->{artist}, $_->{title}, $_->{album});
+
+	if($try == 3) {
+		$_->{artist} =~ s/'//g;
+		$_->{title} =~ s/'//g;
+		$_->{album} =~ s/'//g;
+	}
+	if($try >= 2) {
+		$_->{artist} = lyrics_string_simplify($_->{artist});
+		$_->{title} = lyrics_string_simplify($_->{title});
+		$_->{album} = lyrics_string_simplify($_->{album});
+	}
+	print "<!-- try$try '$_->{artist}', '$_->{title}', '$_->{album}' -->\n";
+
+	getlyrics_purelyrics_com($_) || getlyrics_lyricsdomain_com($_);
+
+	$_->{lyrics} =~ s/^\s+|\s+$//g;
+
+	# restore artist/title/album
+	($_->{artist}, $_->{title}, $_->{album}) = ($ar, $ti, $al);
+}
+
 sub print_lyrics_page($$) {
 	my ($dbh, $argsref) = @_;
 
@@ -846,17 +886,16 @@ sub print_lyrics_page($$) {
 
 	my $downloaded;
 	if($_->{lyrics} eq "" && !$argsref->{action_clear}) {
-		getlyrics_purelyrics_com($_) ||
-		getlyrics_lyricsdomain_com($_);
-
-		$_->{lyrics} =~ s/^\s+|\s+$//g;
+		getlyrics($_);
+		if($_->{lyrics} eq "") { getlyrics($_, 2); }
+		if($_->{lyrics} eq "") { getlyrics($_, 3); }
 
 		$downloaded = "<tr><td colspan=2><b>(";
 		if($_->{lyrics} eq "") {
 			$downloaded .= "No lyrics found";
 		} else {
-			$downloaded .= sprintf "Downloaded lyrics from <a href=\"%s\">%s</a>",
-				$_->{source}, enchtml($_->{source});
+			$downloaded .= sprintf "Downloaded lyrics from <a href=\"%s\">%s</a>%s",
+				$_->{source}, enchtml($_->{source}), $try > 1? $try : "";
 		}
 		$downloaded .= ")</b></td></tr>";
 	}

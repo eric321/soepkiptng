@@ -52,13 +52,53 @@ sub read_configfile($;@) {
 		join(" ", @extraconfigfiles, @globalconfigfiles);
 }
 
-%latin1toascii = (
+%latin9_to_ascii = (
+	128 => '_', 129 => '_', 130 => '_', 131 => '_',
+	132 => '_', 133 => '_', 134 => '_', 135 => '_',
+	136 => '_', 137 => '_', 138 => '_', 139 => '_',
+	140 => '_', 141 => '_', 142 => '_', 143 => '_',
+	144 => '_', 145 => '_', 146 => '_', 147 => '_',
+	148 => '_', 149 => '_', 150 => '_', 151 => '_',
+	152 => '_', 153 => '_', 154 => '_', 155 => '_',
+	156 => '_', 157 => '_', 158 => '_', 159 => '_',
+	160 => '_',		# no-break space
+	161 => '_',		# ¡ inverted exclamation mark
+	162 => 'c',		# ¢ cent sign
+	163 => 'L',		# £ pound sign
+	164 => 'EUR',		# ¤ euro sign
+	165 => 'Y',		# ¥ yen sign
+	166 => 'S',		# ¦ latin capital letter s with caron
+	167 => '_',		# § section sign
+	168 => 's',		# ¨ latin small letter s with caron
+	169 => 'C',		# © copyright sign
+	170 => 'a',		# ª feminine ordinal indicator
+	171 => '_',		# « left-pointing double angle quotation mark
+	172 => '_',		# ¬ not sign
+	173 => '_',		# ­ soft hyphen
+	174 => 'R',		# ® registered sign
+	175 => '_',		# ¯ macron
+	176 => 'o',		# ° degree sign
+	177 => '_',		# ± plus-minus sign
+	178 => '2',		# ² superscript two
+	179 => '3',		# ³ superscript three
+	180 => 'Z',		# ´ latin capital letter z with caron
+	181 => 'u',		# µ micro sign
+	182 => '_',		# ¶ pilcrow sign
+	183 => '_',		# · middle dot
+	184 => 'z',		# ¸ latin small letter z with caron
+	185 => '1',		# ¹ superscript one
+	186 => 'o',		# º masculine ordinal indicator
+	187 => '_',		# » right-pointing double angle quotation mark
+	188 => 'OE',		# ¼ latin capital ligature oe
+	189 => 'oe',		# ½ latin small ligature oe
+	190 => 'IJ',		# ¾ latin capital letter y with diaeresis
+	191 => '_',		# ¿ inverted question mark
 	192 => 'A',		# capital A, grave accent
 	193 => 'A',		# capital A, acute accent
 	194 => 'A',		# capital A, circumflex accent
 	195 => 'A',		# capital A, tilde
 	196 => 'A',		# capital A, dieresis or umlaut mark
-	197 => 'AA',		# capital A, ring
+	197 => 'A',		# capital A, ring
 	198 => 'AE',		# capital AE diphthong (ligature)
 	199 => 'C',		# capital C, cedilla
 	200 => 'E',		# capital E, grave accent
@@ -69,25 +109,28 @@ sub read_configfile($;@) {
 	205 => 'I',		# capital I, acute accent
 	206 => 'I',		# capital I, circumflex accent
 	207 => 'I',		# capital I, dieresis or umlaut mark
+	208 => '_',		# Ð latin capital letter eth
 	209 => 'N',		# capital N, tilde
 	210 => 'O',		# capital O, grave accent
 	211 => 'O',		# capital O, acute accent
 	212 => 'O',		# capital O, circumflex accent
 	213 => 'O',		# capital O, tilde
 	214 => 'O',		# capital O, dieresis or umlaut mark
+	215 => 'x',		# ×, multiplication sign
 	216 => 'O',		# capital O, slash
 	217 => 'U',		# capital U, grave accent
 	218 => 'U',		# capital U, acute accent
 	219 => 'U',		# capital U, circumflex accent
 	220 => 'U',		# capital U, dieresis or umlaut mark
 	221 => 'Y',		# capital Y, acute accent
+	222 => '_',		# Þ latin capital letter thorn
 	223 => 'ss',		# small sharp s, German (sz ligature)
 	224 => 'a',		# small a, grave accent
 	225 => 'a',		# small a, acute accent
 	226 => 'a',		# small a, circumflex accent
 	227 => 'a',		# small a, tilde
 	228 => 'a',		# small a, dieresis or umlaut mark
-	229 => 'aa',		# small a, ring
+	229 => 'a',		# small a, ring
 	230 => 'ae',		# small ae diphthong (ligature)
 	231 => 'c',		# small c, cedilla
 	232 => 'e',		# small e, grave accent
@@ -98,20 +141,36 @@ sub read_configfile($;@) {
 	237 => 'i',		# small i, acute accent
 	238 => 'i',		# small i, circumflex accent
 	239 => 'i',		# small i, dieresis or umlaut mark
+	240 => '_',		# ð latin small letter eth
 	241 => 'n',		# small n, tilde
 	242 => 'o',		# small o, grave accent
 	243 => 'o',		# small o, acute accent
 	244 => 'o',		# small o, circumflex accent
 	245 => 'o',		# small o, tilde
 	246 => 'o',		# small o, dieresis or umlaut mark
+	247 => '_',		# ÷ division sign
 	248 => 'o',		# small o, slash
 	249 => 'u',		# small u, grave accent
 	250 => 'u',		# small u, acute accent
 	251 => 'u',		# small u, circumflex accent
 	252 => 'u',		# small u, dieresis or umlaut mark
 	253 => 'y',		# small y, acute accent
-	255 => 'y',		# small y, dieresis or umlaut mark
+	254 => '_',		# þ latin small letter thorn
+	255 => 'ij',		# small y, dieresis or umlaut mark
 );
+
+sub string_to_filename($) {
+	my ($a) = @_;
+
+	$a =~ s/-/_/g;
+	$a =~ s/[\[(](.*)/-\1/;
+	$a =~ s/[ _]?&[_ ]?/_and_/;
+	$a =~ s/([\x80-\xff])/lc($latin9_to_ascii{ord($1)}) || $1/ge;
+	$a =~ s/[^-A-Za-z0-9]+/_/g;
+	$a =~ s/_?-_?/-/g;
+	$a =~ s/_$//;
+	return lc($a);
+}
 
 sub encurl($) {
 	my ($a) = @_;
