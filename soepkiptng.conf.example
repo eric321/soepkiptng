@@ -125,6 +125,7 @@ addalltext=add&nbsp;all
 deltext=del
 delalltext=del&nbsp;all
 uptext=up
+downtext=dn
 
 killtext=kill
 
