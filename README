@@ -86,12 +86,12 @@ TODO:
 * silence before random songs
 * fade-out/fade-in in pause/resume
 * release of /dev/dsp during pause
-* get correct info for VBR mp3's
+* get correct info for VBR mp3's                   ->partially done
 * ogg-vorbis support                               ->done
 * reading of samplefreq/channels of lpac files.    ->done
 * resampling & mono->stereo conversion	           ->done (quick hack)
 * smooth transition between 2 songs (interpolation)
-* id3/id3v2 support
+* id3/id3v2 support				   ->done (id3)
 * synchronize update of statusfile with cdrplay
 * if currently playing song is missing from db, show "?" instead of nothing ->done
 * fix kill problem when player spawns children	   ->done

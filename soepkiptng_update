@@ -243,14 +243,17 @@ sub getinfo_mp3($) {
 	}
 	# check Xing VBR tag
 	my $frames = 0;
-	if(open F, $_[0]) {
-		my ($buf, $tag, $flags);
-		seek F, 0x24, 0;
-		read F, $buf, 12;
-		close F;
-		($tag, $flags, $frames) = unpack("a4NN", $buf);
-		if($tag ne "Xing") { $frames = 0; }
-	}
+	open F, $_[0] or do {
+		warn "$_[0]: $!\n";
+		return "?";
+	};
+
+	my ($buf, $tag, $flags);
+	seek F, 0x24, 0;
+	read F, $buf, 12;
+	close F;
+	($tag, $flags, $frames) = unpack("a4NN", $buf);
+	if($tag ne "Xing") { $frames = 0; }
 
 	my $info = get_mp3info($_[0]);
 	my $secs = 0 + $info->{MM} * 60 + $info->{SS};
@@ -425,8 +428,12 @@ sub extract_artist_title {
 	my ($f) = @_;
 	my ($a, $t, $tr, $alb);
 
-	if(!$omitmp3info && $f =~ /\.mp3$/i) {
-		my $tag = get_mp3tag($f, 1);
+	# cut path
+	$f =~ s|(.*)/||;
+	my $p = $1;
+
+	if(!$omitmp3info && ! -e "$p/.noid3" && "$p/$f" =~ /\.mp3$/i) {
+		my $tag = get_mp3tag("$p/$f", 1);
 #		warn Dumper($tag);
 
 		$a = $tag->{ARTIST};
@@ -446,9 +453,8 @@ sub extract_artist_title {
 		}
 	}
 
+	# cut extension
 	$f =~ s/(.*)\..*/\1/;
-	$f =~ s|(.*)/||;
-	my $p = $1;
 
 	if(-e "$p/.andre" || ($f !~ /-/ && $f =~ /\..*\./)) {
 		# andre-notatie

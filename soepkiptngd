@@ -35,7 +35,7 @@ use POSIX ":sys_wait_h";
 use Sys::Hostname;
 use Getopt::Std;
 
-getopts('dr:');
+getopts('dr:s:');
 $debug = 1 if $opt_d;
 
 open F, $configfile
@@ -113,6 +113,7 @@ unless($debug) {
 	$SIG{__DIE__} = \&dierotate;
 	$SIG{__WARN__} = \&warnrotate;
 }
+sleep $opt_s if $opt_s;
 
 $SIG{'CHLD'} = sub {
 	for(;;) {
