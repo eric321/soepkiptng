@@ -112,6 +112,12 @@ static void socket_post(int fd, short events, long cookie)
 {
 	struct socket_t *p = (struct socket_t *)cookie;
 
+	if(events & (POLLERR | POLLHUP | POLLNVAL)) {
+		DEBUG("socket poll: revents=%hd, closing socket.\n", events);
+		closesock(fd, p);
+		return;
+	}
+
 	if(events & POLLIN) {
 		char *s;
 		int r;
