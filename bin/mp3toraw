@@ -1,3 +1,0 @@
-#!/bin/sh
-
-madplay --ignore-crc -SQoraw:- -R44100 "$1" 2>/dev/null
