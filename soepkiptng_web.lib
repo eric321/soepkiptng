@@ -571,13 +571,20 @@ sub print_edit_page($$) {
 	}
 
 	my $f = $_->{filename};
-	$f =~ s|.*/||;
-	$f =~ s|\\|_|g;
-	$f = encurl($f);
-	$_->{filename} =~ m|^(.*)/(.*?)$|;
-	my ($dir, $file) = ($1, $2);
-	my $dir_ = $dir;
-	$dir_ =~ s/ /_/g;
+	my ($dir, $file);
+	if($f =~ m|^(/.*)/(.*?)$|) {
+		my $dir2;
+		($dir, $dir2, $file) = ($1, $1, $2);
+		$dir2 =~ s/ /_/g;
+		$dir2 =~ s/\\/\\\\/g;
+		$dir = sprintf qq|<a href="%s?cmd=alllist&sort=artist&filename=%s">$dir</a>|,
+			$self, encurl($dir2), enchtml($dir);
+		$file = sprintf qq|<a href="%s/%s?cmd=download&id=%d">%s</a>|,
+			$self, encurl($file), $argsref->{id}, enchtml($file);
+	} else {
+		$file = enchtml($f);
+		$dir = "";
+	}
 
 	my $sets = '';
 	$sth = $dbh->prepare("SELECT * FROM sets");
@@ -648,8 +655,8 @@ function closethis() {
      <input type=submit name=action_setlpall value=\"Set entire list to current time\"></td></tr>
   <tr><td valign=bottom colspan=2 nowrap>Random pref.:</td><td valign=bottom><input type=text size=8 name=random_pref value="%d" maxlength=8>
      <input type=submit name=action_setrpall value="Set entire list." onClick="return verifyall();"></td></tr>
-  <tr><td valign=bottom colspan=2>Directory:</td>       <td valign=bottom><a href="%s">%s</a></td></tr>
-  <tr><td valign=bottom colspan=2>Filename:</td>        <td valign=bottom><a href="%s">%s</a></td></tr>
+  <tr><td valign=bottom colspan=2>Directory:</td>       <td valign=bottom>%s</td></tr>
+  <tr><td valign=bottom colspan=2>Filename:</td>        <td valign=bottom>%s</td></tr>
   <tr><td valign=bottom colspan=2>Size:</td>            <td valign=bottom>%dk</td></tr>
 %s  <tr>
    <td valign=bottom align=center>%s</td>
@@ -679,9 +686,7 @@ EOF
 		$_->{lp}? scalar localtime($_->{lp}) : "-",
 		$_->{lp}? " <font size=-1><input type=submit name=action_clearlp value=Reset> " .
 			"<input type=submit name=action_clearlpall value=\"Reset entire list\"></font>":"",
-		$_->{random_pref},
-		"$self?cmd=alllist&sort=artist&filename=" . encurl($dir_), $dir,
-		"$self/$f?cmd=download&id=$argsref->{id}", $file,
+		$_->{random_pref}, $dir, $file,
 		((-s $_->{filename}) + 512) / 1024, $sets,
 		$prev, $next,
 		(can_delete($_->{filename})? qq'<input type=submit ' .
@@ -1382,6 +1387,7 @@ EOF
 		}
 		$dbh->do("DELETE FROM song WHERE filename LIKE 'cdda:%'");
 		open F, "$conf{cdda_prog}|";
+		chop(my $cddbinfo = <F>);
 		chop($_ = <F>);
 		my $arid = get_id($dbh, "artist", $_) or die;
 		chop($_ = <F>);
@@ -1394,7 +1400,7 @@ EOF
 			$dbh->do("REPLACE INTO song SET title=?, filename=?, album_id=?, " .
 				"artist_id=?, present=1, encoding='CD-DA', track=?, " .
 				"length=?, time_added=NULL", undef,
-				$_, "cdda:$nr", $alid, $arid, $nr, $len) or die;
+				$_, "cdda:$nr:$cddbinfo", $alid, $arid, $nr, $len) or die;
 			$nr++;
 		}
 		close F;
