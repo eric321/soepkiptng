@@ -206,7 +206,7 @@ $editlistopts
  <td id=az>&nbsp;&nbsp;<a id=az href="$self?cmd=recent&days=7" target=bframe>Recent</a><a id=az href="$self?cmd=recent&days=7&np=1" target=bframe>*</a></td>
  <td id=az>&nbsp;&nbsp;<a id=az href="$self?cmd=alllist&rand=50" target=bframe>Random</a></td>
  <td id=az>&nbsp;&nbsp;<a id=az href="$self?cmd=alllist&encoding=^Video" target=bframe>Video</a></td>
- <td id=az>&nbsp;&nbsp;<a id=az target=_blank href="$self?cmd=maint">*</a></td>
+<!-- <td id=az>&nbsp;&nbsp;<a id=az target=_blank href="$self?cmd=maint">*</a></td>-->
  <td id=az>&nbsp;&nbsp;<a id=az target=bframe href="$self?cmd=shoutcast">Shoutcast</a></td>
  <td id=az width=100%>&nbsp;&nbsp;<a id=az target=bframe href="$self?cmd=sql">SQL</a></td>
 
@@ -937,26 +937,27 @@ sub get_user($) {
 
 my $query = new CGI;
 my $pathinfo = $query->path_info();
-if($pathinfo =~ s|^/*([.\d]+)/([^/]*)||) {
-	$sessionid = $1;
-	$cmd = $2;
-#	$bla = "ja,$pathinfo,$sessionid,$cmd";
-} else {
-	$sessionid = sprintf "%d.%d.%d", $$, time, rand 1e9;
-#	$bla = "nee,$pathinfo,$sessionid,$cmd";
-
-	# remove expired entries (>= 1 week old) from session hash
-	my $threshold = time - 7 * 86400;
-	foreach(keys %sessiontime) {
-		if($_ < $threshold) {
-			delete $sessiontime{$_};
-			delete $sessiondata{$_};
-		}
-	}
-}
-$sessiontime{$sessionid} = time;
-$bla = "s=$sessiondata{$sessionid},\$\$=$$";
-$self = $query->script_name() . "/$sessionid/";
+#if($pathinfo =~ s|^/*([.\d]+)/([^/]*)||) {
+#	$sessionid = $1;
+#	$cmd = $2;
+##	$bla = "ja,$pathinfo,$sessionid,$cmd";
+#} else {
+#	$sessionid = sprintf "%d.%d.%d", $$, time, rand 1e9;
+##	$bla = "nee,$pathinfo,$sessionid,$cmd";
+#
+#	# remove expired entries (>= 1 week old) from session hash
+#	my $threshold = time - 7 * 86400;
+#	foreach(keys %sessiontime) {
+#		if($_ < $threshold) {
+#			delete $sessiontime{$_};
+#			delete $sessiondata{$_};
+#		}
+#	}
+#}
+#$sessiontime{$sessionid} = time;
+#$bla = "s=$sessiondata{$sessionid},\$\$=$$";
+#$self = $query->script_name() . "/$sessionid/";
+$self = $query->script_name();
 my %args;
 foreach($query->param) { $args{$_} = $query->param($_); }
 
