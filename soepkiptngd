@@ -123,7 +123,7 @@ sub get_song_jingle() {
 
 	$song_id = 0;
 	if($jingledir && opendir JINGLEDIR, $jingledir) {
-		foreach(readdir JINGLEDIR) {
+		foreach(sort readdir JINGLEDIR) {
 			next if /^\./;
 			warn "playing jingle $jingledir/$_\n";
 			$song_id = -1;
