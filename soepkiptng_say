@@ -1,7 +1,13 @@
 #!/bin/sh
 
+tmpfile=/tmp/soepkiptng_say.$$.wav
+
 (head -9 /var/local/soepkiptng/soepkiptng.status | tail -1;
  echo ...;
- head -10 /var/local/soepkiptng/soepkiptng.status | tail -1) | \
-text2wave -F 44100 | \
-bplay -s 44100 -b 16
+ head -10 /var/local/soepkiptng/soepkiptng.status | tail -1) | text2wave -F 44100 -o $tmpfile
+
+echo pause | socket -w -q localhost 2222
+bplay $tmpfile
+echo resume | socket -w -q localhost 2222
+rm -f $tmpfile
+
