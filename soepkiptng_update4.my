@@ -1,0 +1,4 @@
+
+use soepkiptng;
+
+ALTER TABLE song add (random_pref INT DEFAULT 10000 NOT NULL);

@@ -413,7 +413,7 @@ sub print_albums_row($$$$$) {
 	}
 
 	$query = "SELECT DISTINCT binary album.name as album," .
-		" binary artist.name as artist," .
+		" binary artist.name as artist, song.random_pref as rp," .
 		" count(*) as c, song.artist_id as arid, song.album_id as alid " .
 		" FROM song,artist,album WHERE present AND song.artist_id = ?".
 		" AND song.artist_id=artist.id AND song.album_id=album.id".
@@ -425,10 +425,12 @@ sub print_albums_row($$$$$) {
 	my @alids;
 	my $al_len_tot = 0;
 	my %al_len;
+	my %al_rp;
 	while($_ = $sth->fetchrow_hashref()) {
 		push @alids, $_->{alid};
 		$al{$_->{alid}} = albumlist_entry($_);
 		$al_len_tot += $al_len{$_->{alid}} = length($_->{album});
+		$al_rp{$_->{alid}} = $_->{rp};
 	}
 	if($conf{albumlist_length_threshold} == 0 ||
 	   $al_len_tot < $conf{albumlist_length_threshold} ||
@@ -440,7 +442,7 @@ sub print_albums_row($$$$$) {
 	} else {
 		my $len_left = $conf{albumlist_length_threshold};
 		my %alids_shortlist;
-		foreach(sort { $al_len{$a} <=> $al_len{$b} } @alids) {
+		foreach(sort { $al_rp{$b} <=> $al_rp{$a} || $al_len{$a} <=> $al_len{$b} } @alids) {
 			last if $al_len{$_} > $len_left;
 			$len_left -= $al_len{$_};
 			$alids_shortlist{$_} = 1;
@@ -604,7 +606,7 @@ sub print_edit_page($$) {
 <tr>
  <td colspan=2>%s</td>
  <td><input type=checkbox name=sets_%d%s> %s
-     <input type=submit name=action_sets_all_%d value=\"Set Entire List\"></td>
+     <input type=submit name=action_sets_all_%d value=\"Set entire list\"></td>
 </tr>
 EOF
 			$i == 0? "Sets:" : "&nbsp;", $set->{num},
@@ -639,21 +641,21 @@ function closethis() {
      <input type=text size=60 name=artist value="%s">
      <input type=submit name=action_clear_artist value="Clear">
      <input type=submit name=action_fix_artist value="Fix">
-     <input type=submit name=action_swapa value="Swap First/Last">
-     <input type=submit name=action_all_artist value="Set Entire List"
+     <input type=submit name=action_swapa value="Swap first/last">
+     <input type=submit name=action_all_artist value="Set entire list"
       onClick="return verifyall();">
   </td></tr>
   <tr><td valign=bottom colspan=2>Title:</td> <td valign=bottom>
      <input type=text size=60 name=title  value="%s">
      <input type=submit name=action_clear_title value="Clear">
      <input type=submit name=action_fix_title value="Fix">
-     <input type=submit name=action_swap value="Swap Artist/Title">
+     <input type=submit name=action_swap value="Swap artist/title">
   </td></tr>
   <tr><td valign=bottom colspan=2>Album:</td> <td valign=bottom>
      <input type=text size=60 name=album  value="%s">
      <input type=submit name=action_clear_album value="Clear">
      <input type=submit name=action_fix_album value="Fix">
-     <input type=submit name=action_all_album value="Set Entire List"
+     <input type=submit name=action_all_album value="Set entire list"
       onClick="return verifyall();">
   </td></tr>
   <tr><td valign=bottom colspan=2>Track:</td> <td valign=bottom><input type=text size=3 name=track  value="%s" maxlength=3></td></tr>
@@ -661,7 +663,9 @@ function closethis() {
   <tr><td valign=bottom colspan=2>Encoding:</td>        <td valign=bottom>%s</td></tr>
   <tr><td valign=bottom colspan=2 nowrap>Time Added:</td><td valign=bottom>%s</td></tr>
   <tr><td valign=bottom colspan=2 nowrap>Last played:</td><td valign=bottom>%s%s
-     <input type=submit name=action_setlpall value=\"Set Entire List To Current Time\"></td></tr>
+     <input type=submit name=action_setlpall value=\"Set entire list to current time\"></td></tr>
+  <tr><td valign=bottom colspan=2 nowrap>Random pref.:</td><td valign=bottom><input type=text size=8 name=random_pref value="%d" maxlength=8>
+     <input type=submit name=action_setrpall value=\"Set entire list.\"></td></tr>
   <tr><td valign=bottom colspan=2>Directory:</td>       <td valign=bottom><a href="%s">%s</a></td></tr>
   <tr><td valign=bottom colspan=2>Filename:</td>        <td valign=bottom><a href="%s">%s</a></td></tr>
   <tr><td valign=bottom colspan=2>Size:</td>            <td valign=bottom>%dk</td></tr>
@@ -692,7 +696,8 @@ EOF
 		$_->{ta}? scalar localtime($_->{ta}) : "-",
 		$_->{lp}? scalar localtime($_->{lp}) : "-",
 		$_->{lp}? " <font size=-1><input type=submit name=action_clearlp value=Reset> " .
-			"<input type=submit name=action_clearlpall value=\"Reset Entire List\"></font>":"",
+			"<input type=submit name=action_clearlpall value=\"Reset entire list\"></font>":"",
+		$_->{random_pref},
 		"$self?cmd=alllist&sort=artist&filename=" . encurl($dir_), $dir,
 		"$self/$f?cmd=download&id=$argsref->{id}", $file,
 		((-s $_->{filename}) + 512) / 1024, $sets,
@@ -1056,6 +1061,13 @@ elsif($cmd eq 'changefile') {
 				or die "can't do sql command: " . $dbh->errstr;
 		}
 	}
+	if($args{action_setrpall}) {
+		foreach(ids_decode($args{ids})) {
+			$dbh->do("UPDATE song SET random_pref=? WHERE id=?",
+				undef, $args{random_pref}, $_)
+				or die "can't do sql command: " . $dbh->errstr;
+		}
+	}
 	elsif($args{action_clear_artist})   { $args{artist} = '' }
 	elsif($args{action_clear_title}) { $args{title} = '' }
 	elsif($args{action_clear_album}) { $args{album} = '' }
@@ -1105,8 +1117,8 @@ elsif($cmd eq 'changefile') {
 	}
 	
 
-	$dbh->do("UPDATE song SET artist_id=?, title=?, album_id=?, track=?, sets=($sets) WHERE id=?",
-		undef, $arid, $args{title}, $alid, $args{track}, $args{id})
+	$dbh->do("UPDATE song SET artist_id=?, title=?, album_id=?, track=?, random_pref=?, sets=($sets) WHERE id=?",
+		undef, $arid, $args{title}, $alid, $args{track}, $args{random_pref}, $args{id})
 		or die "can't do sql command: " . $dbh->errstr;
 
 	my ($all_field, $all_field_arg);

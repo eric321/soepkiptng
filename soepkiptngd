@@ -169,17 +169,20 @@ sub get_song_random_recent() {
 sub get_song_random() {
 	my $s = undef;
 
-	my $sth = $dbh->prepare(
-		"SELECT artist.name as artist, album.name as album,song.*".
-		" FROM song,artist,album WHERE present AND filename LIKE '/%' AND" .
-		"      artist.id=song.artist_id AND album.id=song.album_id AND" .
-		" unix_timestamp(now()) - unix_timestamp(last_played) > ?" .
-		" ORDER BY rand() LIMIT 1"
-	);
-
 	my $min = $conf{min_random_time};
+	my $where = "present AND filename LIKE '/%' AND " .
+	            "unix_timestamp(now()) - unix_timestamp(last_played) > $min";
+
+	my ($sum_pref) = $dbh->selectrow_array("SELECT sum(random_pref) FROM song WHERE $where");
+
+	my $sth = $dbh->prepare(
+		"SELECT artist.name as artist, album.name as album,song.* " .
+		"FROM song,artist,album " .
+		"WHERE $where AND artist.id=song.artist_id AND album.id=song.album_id " .
+		"ORDER BY rand()*pow(random_pref/$sum_pref,10000/$sum_pref) DESC LIMIT 1");
+
 	for(;;) {
-		$sth->execute($min) or return undef;
+		$sth->execute() or return undef;
 		$s = $sth->fetchrow_hashref and last;
 
 		# no song at all
@@ -189,7 +192,7 @@ sub get_song_random() {
 		warn "no random song found, retrying with min_random_time=$min\n";
 	}
 
-	warn "playing random $s->{filename}\n";
+	warn "playing random $s->{filename} (pref $s->{random_pref})\n";
 	$s->{type} = 'R';
 	$s->{user} = '';
 
@@ -207,7 +210,7 @@ sub update_preload() {
 		" FROM song,artist,album WHERE present AND filename LIKE '/%' AND" .
 		"      artist.id=song.artist_id AND album.id=song.album_id AND" .
 		" unix_timestamp(now()) - unix_timestamp(last_played) > $conf{min_random_time}" .
-		" ORDER BY rand() LIMIT 10"
+		" ORDER BY rand()*random_pref DESC LIMIT 10"
 	);
 
 	$sth->execute() or return;

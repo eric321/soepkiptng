@@ -22,6 +22,7 @@ CREATE TABLE song (
   last_played timestamp,
   time_added timestamp,
   present tinyint NOT NULL,
+  random_pref INT DEFAULT 10000 NOT NULL,
   sets BIGINT UNSIGNED NOT NULL DEFAULT 0,
   PRIMARY KEY (id),
   KEY artist_id (artist_id),
