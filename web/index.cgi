@@ -143,6 +143,7 @@ EOF
  </form>
 </td>
 
+<!--
 <td id=az>Play:</td>
 <td id=az>
   <form id=search action="$self" method=get target=tframe>
@@ -170,6 +171,8 @@ $editlistopts
 <td id=az>&nbsp;&nbsp;
 <a id=a target=bframe href="$self?cmd=lists">Playlists</a>
 </td>
+-->
+
 <td id=az>&nbsp;&nbsp;
 <a id=a target=_blank href="$self?cmd=maint">Maintenance</a>
 </td>
