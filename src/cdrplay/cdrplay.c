@@ -4,7 +4,7 @@
  * uses mlockall(2) and real-time scheduling to achieve uninterrupted playing
  *
  * copyright (c) 1998, Eric Lammerts <eric@scintilla.utwente.nl>
- * may be copied under the terms of the GNU General Public License
+ * may be copied under the terms of the GNU General Public License, version 2.
  */
 
 static char rcsid[] = "$Id$";
@@ -242,12 +242,12 @@ int main(int argc, char **argv)
 	if(fd2 < 0) { perror(snddev); exit(1); }
 
 	retval = ioctl(fd2, SNDCTL_DSP_SYNC, 0);
-	i = 44100;
-	if(retval != -1) retval = ioctl(fd2, SNDCTL_DSP_SPEED, &i);
 	i = AFMT_S16_LE;
 	if(retval != -1) retval = ioctl(fd2, SNDCTL_DSP_SETFMT, &i);
 	i = 1;
 	if(retval != -1) retval = ioctl(fd2, SNDCTL_DSP_STEREO, &i);
+	i = 44100;
+	if(retval != -1) retval = ioctl(fd2, SNDCTL_DSP_SPEED, &i);
 
 	if(retval == -1 && ischardev(fd2)) fprintf(stderr, "warning: sound ioctls failed\n");
 	
@@ -324,7 +324,11 @@ int main(int argc, char **argv)
 		if(!readeof && len < bufsize) FD_SET(fd1, &rfds);
 		FD_ZERO(&wfds);
 		if(maywrite && len > 0) FD_SET(fd2, &wfds);
-		select(maxfd + 1, &rfds, &wfds, NULL, NULL);
+
+		// skip select if there's just 1 fd we want
+		if(FD_ISSET(fd2, &wfds) && FD_ISSET(fd1, &rfds)) {
+			select(maxfd + 1, &rfds, &wfds, NULL, NULL);
+		}
 
 		/* try writing... */
 		if(FD_ISSET(fd2, &wfds)) {
@@ -379,6 +383,8 @@ int main(int argc, char **argv)
 	}
 	if(verbose) fprintf(stderr,"\n");
 	close(fd1);
+
+	/* write 1 sample to prevent badly designed cards to keep the DC value of the last sample */
 	buf[0] = buf[1] = buf[2] = buf[3] = 0;
 	write(fd2, buf, 4);
 	close(fd2);
