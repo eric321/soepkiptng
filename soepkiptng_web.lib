@@ -181,7 +181,7 @@ EOF
 #-->
 print <<EOF;
  <td id=az>&nbsp;&nbsp;<a id=az href="$req->{self}?cmd=shuffle">Shuffle</a></td>
- <td id=az>&nbsp;&nbsp;<a id=az href="$req->{self}?cmd=recent&days=7" target=bframe>Recent</a><a id=az href="$req->{self}?cmd=recent&days=7&np=1" target=bframe>*</a></td>
+ <td id=az>&nbsp;&nbsp;<a id=az href="$req->{self}?cmd=recent&days=7" target=bframe>Recent</a><a id=az href="$req->{self}?cmd=recent&days=7&np=1" target=bframe>*</a><a id=az href="$req->{self}?cmd=recent&days=1000000&limit=100" target=bframe>#</a></td>
  <td id=az>&nbsp;&nbsp;<a id=az href="$req->{self}?cmd=alllist&rand=50" target=bframe>Random</a></td>
  <td id=az>&nbsp;&nbsp;<a id=az href="$req->{self}?cmd=alllist&encoding=^Video" target=bframe>Video</a></td>
 <!-- <td id=az>&nbsp;&nbsp;<a id=az target=_blank href="$req->{self}?cmd=maint">*</a></td>-->
@@ -1724,6 +1724,7 @@ EOF
 		my $s = $args{sort} || "r_time_added";
 		$s =~ s/\W//g;
 		$s =~ s/^r_(.*)/\1 DESC/;
+		$args{limit} <= 500 or $args{limit} = 500;
 		print_alllist_table($req, \%session,
 			"Most recent $n songs" . ($args{np}? " (never played yet)":""),
 			"SELECT artist.name as artist,album.name as album,song.*," .
@@ -1732,7 +1733,7 @@ EOF
 			" AND song.artist_id=artist.id AND song.album_id=album.id" .
 			" AND unix_timestamp(now()) - unix_timestamp(time_added) < $maxage" .
 			($args{np}? " AND unix_timestamp(last_played) = 0":"") .
-			" ORDER BY $s,album.name,track,artist.name,title", 500);
+			" ORDER BY $s,album.name,track,artist.name,title", $args{limit});
 		printftr;
 	}
 	elsif($cmd eq 'maint') {
