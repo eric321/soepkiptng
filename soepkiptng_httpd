@@ -28,6 +28,7 @@ use Getopt::Std;
 use HTTP::Daemon;
 use HTTP::Status;
 use IO::Socket;
+use LWP::UserAgent;
 use Socket;
 
 # find program directory
