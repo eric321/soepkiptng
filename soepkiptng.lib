@@ -318,8 +318,16 @@ sub kill_song_internal($$) {
 
 sub player_cmd(;@) {
 	my $res = 1;
+	local *F;
+	my $host;
 
-	my $sock = IO::Socket::INET->new('localhost:2222') or return undef;
+	open F, $conf{statusfile}
+		or die "$conf{statusfile}: $!\n";
+	<F>; <F>; <F>; <F>;
+	chop($host = <F>);
+	close F;
+
+	my $sock = IO::Socket::INET->new("$host:2222") or return undef;
 	$sock->autoflush(1);
 	$response = <$sock>;	#greeting
 	foreach(@_) {
