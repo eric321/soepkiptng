@@ -23,30 +23,41 @@ use Socket;
 my @globalconfigfiles = ($ENV{SOEPKIPTNG_CONFIGFILE},
    "$ENV{HOME}/.soepkiptng.conf", "/etc/soepkiptng.conf");
 
+sub read_configfile1($$);
+
+sub read_configfile1($$) {
+	my ($conf, $cf) = @_;
+	local *F;
+
+	open F, $cf or return undef;
+	while(<F>) {
+		/^#/ and next;
+		s/\s+$//;
+		/./ or next;
+		if(/^include\s+(.*\S)/) {
+			read_configfile1($conf, $1);
+			next;
+		}
+		if(/^(\w[-.\w]*)\s*=\s*(.*?)\s*$/) {
+			$f = lc $1;
+			$conf->{$f} = $2;
+		} elsif(/^\s+(.*?)\s*$/) {
+			# continuation line
+			$conf->{$f} .= "\n$1";
+		} else {
+			die "$cf line $.: invalid format\n";
+		}
+	}
+	close F;
+	return 1;
+}
+
 sub read_configfile($;@) {
 	my ($conf, @extraconfigfiles) = @_;
 	my $cf;
 
 	foreach $cf ((@extraconfigfiles, @globalconfigfiles)) {
-		local *F;
-		defined($cf) && -f $cf or next;
-		open F, $cf or next;
-		while(<F>) {
-			/^#/ and next;
-			s/\s+$//;
-			/./ or next;
-			if(/^(\w[-.\w]*)\s*=\s*(.*?)\s*$/) {
-				$f = lc $1;
-				$conf->{$f} = $2;
-			} elsif(/^\s+(.*?)\s*$/) {
-				# continuation line
-				$conf->{$f} .= "\n$1";
-			} else {
-				die "$cf line $.: invalid format\n";
-			}
-		}
-		close F;
-		return;
+		defined($cf) and read_configfile1($conf, $cf) and return;
 	}
 	die sprintf "no configuration file found (tried %s)\n",
 		join(" ", @extraconfigfiles, @globalconfigfiles);
