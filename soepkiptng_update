@@ -601,6 +601,7 @@ sub getinfo_musepack($\%) {
 	$info->{encoding} = "Musepack";
 	$info->{freq} = (44100, 48000, 37800, 32000)[($flags >> 16) & 3];
 	$info->{len} = $frames * 1152 / $info->{freq};
+	push @{$info->{encoding_extra}}, sprintf "%dkb/s", (8 * (-s $file) / $info->{len} + 500) / 1000;
 	$info->{chan} = 2;
 
 	get_ape($file, %$info, 0) ||      # APE tag at beginning
