@@ -86,6 +86,7 @@ TODO:
 * smooth transition between 2 songs (interpolation)
 * id3/id3v2 support
 * synchronize update of statusfile with cdrplay
+* if currently playing song is missing from db, show "?" instead of nothing
 
 
 $Id$

@@ -69,12 +69,35 @@ $killhost = hostname;
 $dbh = DBI->connect("DBI:mysql:$db_name:$db_host", $db_user, $db_pass)
 	or die "Can't connect to database $db_name\@$db_host as user $db_user\n";
 
+sub rotatelog() {
+	return if -s STDERR < 65000;
+	rename $errfile, "$errfile.old" or do {
+		warn "rename $errfile -> $errfile.old: $!\n";
+		return;
+	};
+	close STDERR;
+	open STDERR, ">$errfile";
+}
+
+sub warnrotate {
+	printf STDERR "%s %s", scalar localtime, $_[0];
+	rotatelog();
+}
+
+sub dierotate {
+	printf STDERR "%s %s", scalar localtime, $_[0];
+	rotatelog();
+	exit 1;
+}
+
 unless($debug || $opt_r) {
 	fork && exit;
 	chdir "/";
 	setpgrp();
 	open STDIN, "</dev/null";
-	open STDERR, ">$errfile";
+	open STDERR, ">>$errfile";
+	$SIG{__DIE__} = \&dierotate;
+	$SIG{__WARN__} = \&warnrotate;
 }
 
 $SIG{'CHLD'} = sub {
@@ -82,7 +105,7 @@ $SIG{'CHLD'} = sub {
 		my $p = waitpid(-1, &WNOHANG);
 		return if $p < 1;
 		warn sprintf "reaped child %d, sig=%d status=%d\n",
-			$p, $? & 0x7f, $? >> 8 if $debug;
+			$p, $? & 0x7f, $? >> 8;
 		if($p == $cdrplaypid) {
 			unlink $statusfile;
 			die "exiting because '$playercmd' died.\n";
@@ -90,10 +113,12 @@ $SIG{'CHLD'} = sub {
 			$pid = 0;
 			$pid_status = $? >> 8;
 			$pid_signal = $? & 0x7f;
-			warn "player finished ($p)\n" if $debug;
+			warn "player finished ($p)\n";
 		}
 	}
 };
+
+warn "********** starting (pid=$$) **********\n";
 
 $SIG{'TERM'} = sub {
 	kill 'KILL', $pid, $cdrplaypid;
@@ -106,7 +131,7 @@ $SIG{'USR1'} = sub {
 
 unless($opt_r) {
 	$cdrplaypid = open STDOUT, "|$playercmd";
-	warn "cdrplaypid=$cdrplaypid\n" if $debug;
+	warn "cdrplaypid=$cdrplaypid\n";
 }
 
 $SIG{'PIPE'} = 'IGNORE';
@@ -120,6 +145,7 @@ for(;;) {
 		close SOCK if $socket_open;
 		close KILLSOCK;
 
+		warn "execing myself\n";
 		exec $0, '-r';
 		die "$0: $!\n";
 	}
@@ -136,7 +162,7 @@ for(;;) {
 
 	if($song_id) {
 		$songtype = 'Q';
-		warn "playing queued $filename\n" if $debug;
+		warn "playing queued $filename\n";
 
 		# delete it from the queue
 		$dbh->do("DELETE FROM queue WHERE song_id = $song_id");
@@ -151,7 +177,7 @@ for(;;) {
 			"SELECT id,filename FROM songs " .
 			"ORDER BY rand() LIMIT 1"
 		);
-		warn "playing random $filename\n" if $debug;
+		warn "playing random $filename\n";
 	}
 
 	if(!$song_id) {
@@ -217,24 +243,25 @@ EOF
 		}
 		die "exec failed";
 	}
-	warn "pid=$pid\n" if $debug;
+	warn "pid=$pid\n";
 
 	# wait until player is done or we get a connect on KILLSOCK
 	vec($rin, fileno(KILLSOCK), 1) = 1;
 	while($pid) {
 		if(select($rout = $rin, undef, undef, 0.1) == 1) {
-			warn "got connection\n" if $debug;
+			warn "got connection\n";
 
 			# kill player
-			kill 'KILL', $pid;
+			kill 'KILL', $pid
+				or warn "kill -KILL $pid: $!\n";
 
 			# tell cdrplay to flush its buffers
-			kill 'SIGUSR1', $cdrplaypid;
+			kill 'SIGUSR1', $cdrplaypid
+				or warn "kill -USR1 $cdrplaypid: $!\n";
 
 			# accept the tcp connection; we close it later,
 			# after a new song has been selected
-			accept SOCK, KILLSOCK;
-			$socket_open = 1;
+			accept SOCK, KILLSOCK and $socket_open = 1;
 
 			# write to log file
 			logprintf("K %6d", $song_id);
@@ -248,7 +275,7 @@ EOF
 	if($debug) {
 		($a, $b, $c, $d) = times;
 		$childtime = $c + $d - $childtime;
-		warn "song finished, time=$childtime\n" if $debug;
+		warn "song finished, time=$childtime\n";
 	}
 
 	# if it took less than 1 second to play it, pause for 1 second
