@@ -327,7 +327,7 @@ EOF
  </tr>
  <tr><td colspan=7></td></tr>
 %s%s
-<tr><td><font size=-2>&nbsp;Total time: %d:%02d</font></td></tr>
+<tr><td>%d song%s, total time: %d:%02d</td></tr>
 </table>
 EOF
 		$conf{th_left}, @ids? sprintf(qq|<a id=a href="%s?cmd=del&ids=%s">| .
@@ -342,7 +342,7 @@ EOF
 			undef, $_->{f} eq '/'? $ids : "",
 			($conf{show_user} && $_->{user})? "<td>&nbsp;(".$_->{user}.")</td>":"")
 			} @records),
-		$totaltime / 60, $totaltime % 60;
+		scalar @ids, @ids != 1? "s":"", $totaltime / 60, $totaltime % 60;
 }
 
 sub print_artistlist_table($$$@) {
@@ -474,7 +474,7 @@ EOF
 	if(!@ids) {
 		if($argsref->{artist_id}) {
 			print_seealso_row($dbh, $argsref->{artist_id});
-			print_albums_row($dbh, $baseurl, $argsref->{artist_id}, "Albums:")
+			print_albums_row($dbh, $baseurl, $argsref->{artist_id}, "Albums: ")
 				and return;
 		}
 		print "No search results.\n";
@@ -516,7 +516,7 @@ EOF
 
 	if(scalar keys %artistids == 1) {
 		print_seealso_row($dbh, (keys %artistids)[0]);
-		print_albums_row($dbh, $baseurl, (keys %artistids)[0], "Albums:");
+		print_albums_row($dbh, $baseurl, (keys %artistids)[0], "Albums: ");
 	}
 
 	print "<table border=0 cellspacing=0>\n";
@@ -1286,7 +1286,7 @@ EOF
 <center id=hdr>$args{cap}</center>
 EOF
 		print_seealso_row($dbh, $args{artist_id});
-		print_albums_row($dbh, $self, $args{artist_id}, "Albums:", 1);
+		print_albums_row($dbh, $self, $args{artist_id}, "Albums: ", 1);
 		printftr;
 	}
 	elsif($cmd eq 'sql') {
