@@ -153,20 +153,25 @@ sub do_mp3($$) {
 
 	($id, $ti, $ar, $al, $tr, $len) = $sth->fetchrow_array or do {
 		my $shortf = $fullf;
-		$shortf =~ s|.*/|%/|;
-
+		$shortf =~ s|^/+||;
 		$q = "SELECT song.id,title,artist.name,album.name,track,length" .
 		     " FROM song,artist,album" .
 		     " WHERE song.artist_id=artist.id AND song.album_id=album.id" .
 		     " AND present AND filename LIKE ?";
 		$sth = $dbh->prepare($q);
-		$sth->execute($shortf)
-			or die "can't do sql command: " . $dbh->errstr;
-	
-		($id, $ti, $ar, $al, $tr, $len) = $sth->fetchrow_array or do {
-			warn "$f: not found in dbase\n" unless $opt_q;
-			return 1;
-		};
+		for(;;) {
+			warn "===== %/$shortf\n";
+			$sth->execute("%/$shortf")
+				or die "can't do sql command: " . $dbh->errstr;
+
+			($id, $ti, $ar, $al, $tr, $len) = $sth->fetchrow_array
+				and last;
+
+			$shortf =~ s|[^/]+/+|| or do {
+				warn "$f: not found in dbase\n" unless $opt_q;
+				return 1;
+			}
+		}
 		warn "$f: partial filename match on $shortf\n" unless $opt_q;
 	};
 	$sth->finish;
