@@ -65,7 +65,7 @@ $| = 1;
 $do_delete = !$opt_d && !$opt_r;
 
 $opt_h and die <<EOF;
-usage: soepkiptng_update [-defhqrvCL] [-c configfile] [-R pref] [dir]
+usage: soepkiptng_update [-defhqrvCL] [-c configfile] [-R pref] [dir...]
 
 options:
   -c configfile : override soepkiptng config file
@@ -79,6 +79,8 @@ options:
   -C            : don't fix artist/title/album upper/lowercase
   -L            : set last_played to current time
   -R pref       : set random_pref field
+
+Directories containing the file ".nosoepkiptng" will be skipped.
 EOF
 
 read_configfile(\%conf, $opt_c);
@@ -98,9 +100,9 @@ $dbh = DBI->connect("DBI:$conf{'db_type'}:$conf{'db_name'}:$conf{'db_host'}", $c
 read_eric_files() unless $opt_e;
 
 # get existing filenames in database
-if($ARGV[0]) {
-	chdir $ARGV[0] or die "$ARGV[0]: $!\n";
-	@paths = (cwd);
+if(scalar @ARGV) {
+	@paths = map { abs_path $_; } @ARGV;
+	@paths or exit 1; # abs_path complains for us
 	$sth = $dbh->prepare("SELECT id,filename,unix_timestamp(last_played),unix_timestamp(time_added),present FROM song WHERE binary filename LIKE ?");
 	$sth->execute("$paths[0]/%");
 } else {
