@@ -37,6 +37,8 @@ todo's voor cdrplay:
   * starten zonder real-time sch.
   * wachten op seintje
   * schrijven naar stdout
+  * signal handlers geinstalleerd? -> send SIG
+  * eof on input? -> send SIGUSR2 to parent
 - optie om /dev/dsp-parameters op stdout in te stellen
 - (evt) resampling/mono->stereo
 - SIGxxx/SIGyyy -> pause/resume (release/get /dev/dsp)
