@@ -516,7 +516,7 @@ function verifydelete() {
   <tr><td>Directory:</td>       <td>$dir</td></tr>
   <tr><td>Filename:</td>        <td>$file</td></tr>
   <tr><td>Size:</td>            <td>$size</td></tr>
-  <tr><td colspan=2><input type=submit value="Change"></td></tr>
+  <tr><td colspan=2><input type=submit value="Update"></td></tr>
   </form>
 EOF
 #<input type=text size=60 name=file value="$file">
@@ -775,7 +775,7 @@ elsif($cmd eq 'alllist') {
 	my $cap;
 	my $s = $args{'sort'};
 	$s =~ s/\W//g;
-	if($args{'any'}) {
+	if($args{'any'} =~ /\S/) {
 		$q .= " AND (artist.name REGEXP ? OR " .
 		            "title REGEXP ? OR " .
 		            "album.name REGEXP ?)";
@@ -786,28 +786,28 @@ elsif($cmd eq 'alllist') {
 		push @qa, $args{'any'};
 		$s = "artist.name" unless $s;
 	}
-	if($args{'artist'}) {
+	if($args{'artist'} =~ /\S/) {
 		$q .= " AND artist.name REGEXP ?";
 		push @qa, $args{'artist'};
 		$qa[$#qa] =~ s/[^-^\$_0-9a-z]+/.*/ig;
 		$s = "artist.name" unless $s;
 		$cap = "Search Artist: $args{'artist'}";
 	}
-	if($args{'album'}) {
+	if($args{'album'} =~ /\S/) {
 		$q .= " AND album.name REGEXP ?";
 		push @qa, $args{'album'};
 		$qa[$#qa] =~ s/[^-^\$_0-9a-z]+/.*/ig;
 		$s = "album.name" unless $s;
 		$cap = "Search Album: $args{'album'}";
 	}
-	if($args{'title'}) {
+	if($args{'title'} =~ /\S/) {
 		$q .= " AND title REGEXP ?";
 		push @qa, $args{'title'};
 		$qa[$#qa] =~ s/[^-^\$_0-9a-z]+/.*/ig;
 		$s = "title" unless $s;
 		$cap = "Search Title: $args{'title'}";
 	}
-	if($args{'filename'}) {
+	if($args{'filename'} =~ /\S/) {
 		$q .= " AND filename REGEXP ?";
 		push @qa, $args{'filename'};
 		$qa[$#qa] =~ s/[^-^\$_0-9a-z]+/.*/ig;
