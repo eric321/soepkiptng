@@ -1,0 +1,76 @@
+#!/usr/bin/perl
+############################################################################
+# soepkiptng (c) copyright 2000 Eric Lammerts <eric@lammerts.org>.
+# $Id$
+############################################################################
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# A copy of the GNU General Public License is available on the World Wide Web
+# at `http://www.gnu.org/copyleft/gpl.html'.  You can also obtain it by
+# writing to the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+# Boston, MA 02111-1307, USA.
+############################################################################
+
+$configfile = "/etc/soepkiptng.conf";
+
+use Cwd;
+use DBI;
+
+# read config file
+open F, $configfile
+	or die "$configfile: $!\n";
+while(<F>) {
+	/^#/ and next;
+	s/\s+$//;
+	/./ or next;
+	if(/^(\w+)\s*=\s*(.*?)\s*$/) {
+		$f = $1;
+		${$f} = $2;
+	} elsif(/^\s+(.*?)\s*$/) {
+		# continuation line
+		${$f} .= "\n$1";
+	} else {
+		die "$configfile line $.: invalid format\n";
+	}
+}
+close F;
+
+$ENV{'PATH'} = "$progdir/bin:$ENV{'PATH'}";
+require "$progdir/soepkiptng.lib";
+
+if($ARGV[0] eq '-h') {
+	print <<EOF;
+Usage: soepkiptng_delete [dir]
+
+Soepkiptng_delete deletes files from the SoepkipTNG database that do not exist
+anymore.
+EOF
+	exit;
+}
+
+$dbh = DBI->connect("DBI:$db_type:$db_name:$db_host", $db_user, $db_pass)
+	or die "can't connect to database";
+
+if($ARGV[0]) {
+	chdir $ARGV[0] or die "$ARGV[0]\n";
+	$path = cwd;
+}
+
+$sth = $dbh->prepare("SELECT filename FROM song WHERE present AND filename like ?");
+$sth->execute("$path/%");
+
+while(($filename) = $sth->fetchrow_array) {
+	-s $filename and next;
+	warn "Deleting $filename from database.\n";
+	$dbh->do("UPDATE song SET present=0 WHERE filename=?", undef, $filename);
+}
+
+$dbh->disconnect();
