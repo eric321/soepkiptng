@@ -1125,25 +1125,26 @@ elsif($cmd eq 'artistlist') {
 
 	my $cap;
 	my $s;
-	my @q = ("SELECT DISTINCT artist.name as artist, album.name as album," .
+	my $q = ("SELECT DISTINCT artist.name as artist, album.name as album," .
 		 " count(*) as c, song.artist_id as arid, song.album_id as alid," .
 		 " UCASE(album.name) as sort" .
 		 " FROM song,artist,album WHERE present AND filename LIKE '/%'");
+	my @qargs;
 
 	if($args{artist} =~ /\S/) {
-		add_search_args(\@q, \$s, $args{artist}, 'artist.name');
+		add_search_args(\$q, \@qargs, \$s, $args{artist}, 'artist.name');
 		$cap = "Search Artist: $args{artist}";
 	}
 	if($args{album} =~ /\S/) {
-		add_search_args(\@q, \$s, $args{album}, 'album.name');
+		add_search_args(\$q, \@qargs, \$s, $args{album}, 'album.name');
 		$cap = "Search Album: $args{album}";
 	}
 
-	if($#q > 0) {
+	if(scalar @qargs > 0) {
 		$s =~ s/^r_(.*)/\1 DESC/;
-		$q[0] .= " AND song.artist_id=artist.id AND song.album_id=album.id".
-			 " GROUP BY artist_id, album_id ORDER BY sort";
-		print_artistlist_table($dbh, \%session, $cap, @q);
+		$q .= " AND song.artist_id=artist.id AND song.album_id=album.id".
+		      " GROUP BY artist_id, album_id ORDER BY sort";
+		print_artistlist_table($dbh, \%session, $cap, $q, @qargs);
 	} else {
 		print "Error: No search terms specified.\n";
 	}
