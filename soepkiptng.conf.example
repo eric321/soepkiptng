@@ -18,7 +18,10 @@ db_pass=soepkiptng
 
 playercmd=soepkiptng_play -b1000 -D/dev/dsp0
 
-min_random_time=286400
+# don't select random songs that have been played within the last
+# 'min_random_time' seconds (this time is adjusted automatically when
+# all songs fail this test)
+min_random_time=86400
 
 # probability that a recently added song will be played
 # (note: these songs are still subject to 'min_random_time')
