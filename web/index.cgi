@@ -300,26 +300,11 @@ $output
 EOF
 }
 
-sub print_artistlist_table($$$$) {
-	my ($dbh, $session, $field, $val) = @_;
+sub print_artistlist_table($$$@) {
+	my ($dbh, $session, $caption, $query, @val) = @_;
 
-	printf <<EOF, ucfirst($field), $val;
-<center id=hdr>Search %s: %s</center>
-<table border=0 cellspacing=0>
- <tr>
-  <th>&nbsp;Artist&nbsp;</th>
-  <th>&nbsp;Albums&nbsp;</th>
- </tr>
-EOF
-
-	my $query = "SELECT DISTINCT artist.name as artist, album.name as album," .
-			" count(*), song.artist_id, song.album_id," .
-			" UCASE(album.name) as sort" .
-			" FROM song,artist,album WHERE present AND $field.name REGEXP ?".
-			" AND song.artist_id=artist.id AND song.album_id=album.id".
-			" GROUP BY binary artist.name, binary album.name ORDER BY sort";
 	my $sth = $dbh->prepare($query);
-	my $rv = $sth->execute($val)
+	my $rv = $sth->execute(@val)
 		or die "can't do sql command: " . $dbh->errstr . "\n";
 	my ($ar, $al, $c, $arid, $alid);
 	my %artistname;
@@ -337,6 +322,16 @@ EOF
 EOF
 		}
 	}
+
+
+	printf <<EOF;
+<center id=hdr></center>
+<table border=0 cellspacing=0>
+ <tr>
+  <th>&nbsp;Artist&nbsp;</th>
+  <th>&nbsp;Albums&nbsp;</th>
+ </tr>
+EOF
 	foreach(sort {lc($artistname{$a}) cmp lc($artistname{$b})} keys %artistname) {
 		$al{$_} =~ s/, $//;
 		printf <<EOF, encode("Artist: $artistname{$_}"), $artistname{$_}, $al{$_};
@@ -351,12 +346,13 @@ EOF
 EOF
 }
 
-sub print_alllist_table($$$@) {
+sub print_alllist_table($$$$@) {
 	my ($dbh, $argsref, $session, $caption, $query, @val) = @_;
 	my ($output, $addall);
 
 	my $sth = $dbh->prepare($query);
-	my $rv = $sth->execute(@val);
+	my $rv = $sth->execute(@val)
+		or die "can't do sql command: " . $dbh->errstr . "\n";
 	my @ids;
 	my %artistids;
 	while($_ = $sth->fetchrow_hashref) {
@@ -621,6 +617,19 @@ sub printredirexit($$$) {
 	exit;
 }
 
+sub add_search_args($$$@) {
+	my ($list, $sort, $val, @fields) = @_;
+	my $v;
+
+	foreach $v (split /\s+/, $val) {
+		$$list[0] .= " AND ";
+		if($v =~ s/^!//) { $$list[0] .= "NOT "; }
+		$$list[0] .= "(" . join(" OR ", map { "$_ LIKE ?" } @fields) . ")";
+		foreach(@fields) { push @$list, "%$v%"; }
+	}
+	$$sort = $fields[0] unless $$sort;
+}
+
 ############################################################################
 # MAIN
 
@@ -761,78 +770,78 @@ EOF
 elsif($cmd eq 'artistlist') {
 	printhtmlhdr;
 	printhdr($artiststyle);
-	my $field = $args{'artist'}? 'artist':'album';
-	print_artistlist_table($dbh, \%session, $field, $args{$field});
+
+	my $cap;
+	my $s = $args{'sort'};
+	$s =~ s/\W//g;
+	my @q = ("SELECT DISTINCT artist.name as artist, album.name as album," .
+		 " count(*), song.artist_id, song.album_id," .
+		 " UCASE(album.name) as sort" .
+		 " FROM song,artist,album WHERE present");
+
+	if($args{'artist'} =~ /\S/) {
+		add_search_args(\@q, \$s, $args{'artist'}, 'artist.name');
+		$cap = "Search Artist: $args{'artist'}";
+	}
+	if($args{'album'} =~ /\S/) {
+		add_search_args(\@q, \$s, $args{'album'}, 'album.name');
+		$cap = "Search Album: $args{'album'}";
+	}
+
+	$q[0] .= " AND song.artist_id=artist.id AND song.album_id=album.id".
+		 " GROUP BY binary artist.name, binary album.name ORDER BY $s";
+	print_artistlist_table($dbh, \%session, $cap, @q);
 	printftr;
 }
 elsif($cmd eq 'alllist') {
 	printhtmlhdr;
 	printhdr($allstyle);
-	my $q = "SELECT artist.name as artist,album.name as album,song.*," .
-		"song.artist_id as arid, song.album_id as alid" .
-		" FROM song,artist,album" .
-		" WHERE present";
-	my @qa;
+	my @q = ("SELECT artist.name as artist,album.name as album,song.*," .
+		 "song.artist_id as arid, song.album_id as alid" .
+		 " FROM song,artist,album" .
+		 " WHERE present");
 	my $cap;
 	my $s = $args{'sort'};
 	$s =~ s/\W//g;
 	if($args{'any'} =~ /\S/) {
-		$q .= " AND (artist.name REGEXP ? OR " .
-		            "title REGEXP ? OR " .
-		            "album.name REGEXP ?)";
+		add_search_args(\@q, \$s, $args{'any'},
+			'artist.name', 'title', 'album.name');
 		$cap = "Search any: $args{'any'}";
-		$args{'any'} =~ s/[^-^\$_0-9a-z]+/.*/ig;
-		push @qa, $args{'any'};
-		push @qa, $args{'any'};
-		push @qa, $args{'any'};
-		$s = "artist.name" unless $s;
 	}
 	if($args{'artist'} =~ /\S/) {
-		$q .= " AND artist.name REGEXP ?";
-		push @qa, $args{'artist'};
-		$qa[$#qa] =~ s/[^-^\$_0-9a-z]+/.*/ig;
-		$s = "artist.name" unless $s;
+		add_search_args(\@q, \$s, $args{'artist'}, 'artist.name');
 		$cap = "Search Artist: $args{'artist'}";
 	}
 	if($args{'album'} =~ /\S/) {
-		$q .= " AND album.name REGEXP ?";
-		push @qa, $args{'album'};
-		$qa[$#qa] =~ s/[^-^\$_0-9a-z]+/.*/ig;
-		$s = "album.name" unless $s;
+		add_search_args(\@q, \$s, $args{'album'}, 'album.name');
 		$cap = "Search Album: $args{'album'}";
 	}
 	if($args{'title'} =~ /\S/) {
-		$q .= " AND title REGEXP ?";
-		push @qa, $args{'title'};
-		$qa[$#qa] =~ s/[^-^\$_0-9a-z]+/.*/ig;
-		$s = "title" unless $s;
+		add_search_args(\@q, \$s, $args{'title'}, 'title');
 		$cap = "Search Title: $args{'title'}";
 	}
 	if($args{'filename'} =~ /\S/) {
-		$q .= " AND filename REGEXP ?";
-		push @qa, $args{'filename'};
-		$qa[$#qa] =~ s/[^-^\$_0-9a-z]+/.*/ig;
-		$s = "filename" unless $s;
+		add_search_args(\@q, \$s, $args{'filename'}, 'filename');
 		$cap = "Search Filename: $args{'filename'}";
 	}
 
 	if($args{'artist_id'}) {
-		$q .= " AND song.artist_id=?";
-		push @qa, $args{'artist_id'};
+		$q[0] .= " AND song.artist_id=?";
+		push @q, $args{'artist_id'};
 		$s = "artist.name" unless $s;
 		$cap = sprintf($args{'cap'}, $args{'artist_id'});
 	}
 	if($args{'album_id'}) {
-		$q .= " AND song.album_id=?";
-		push @qa, $args{'album_id'};
+		$q[0] .= " AND song.album_id=?";
+		push @q, $args{'album_id'};
 		$s = "album.name" unless $s;
 		$cap = sprintf($args{'cap'}, $args{'album_id'});
 	}
 
 	$s =~ s/^r_(.*)/\1 DESC/;
-	$q .= " AND song.artist_id=artist.id AND song.album_id=album.id ".
+	$q[0] .= " AND song.artist_id=artist.id AND song.album_id=album.id ".
 	      " ORDER BY $s,album.name,track,artist.name,title";
-	print_alllist_table($dbh, \%args, \%session, $cap, $q, @qa);
+	print_alllist_table($dbh, \%args, \%session, $cap, @q);
 	printftr;
 }
 elsif($cmd eq 'recent') {
