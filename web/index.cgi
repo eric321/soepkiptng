@@ -83,7 +83,7 @@ sub ids_decode($) {
 	my ($str) = @_;
 	my $val = 0;
 	my @out = ();
-	do {
+	while($str) {
 		if($str =~ s/^([a-z])//) {
 			$val -= ord($1) - (ord('a') - 1);
 		} elsif($str =~ s/^([A-Z])//) {
@@ -94,7 +94,7 @@ sub ids_decode($) {
 			die "Invalid id encoding: '$str'\n";
 		}
 		push @out, $val;
-	} while($str);
+	}
 	return @out;
 }
 
@@ -262,8 +262,7 @@ sub albumlist_entry($) {
 sub print_playlist_table($$) {
 	my ($dbh, $nowplaying) = @_;
 	my $nowfile;
-	my $output;
-	my $delall;
+	my $killline;
 
 	if(!$nowplaying) {
 		local *F;
@@ -294,7 +293,7 @@ sub print_playlist_table($$) {
 		};
 		my $col1 = sprintf(qq|<a id=a href="%s?cmd=kill&id=%s">%s</a>|,
 			$self, $_->{id}, $killtext);
-		$output .= table_entry($_, $col1);
+		$killline = table_entry($_, $col1);
 	}
 
 	$query =  "SELECT title,artist.name as artist,album.name as album,song.id as id,track,length,encoding," .
@@ -305,36 +304,42 @@ sub print_playlist_table($$) {
 	$sth = $dbh->prepare($query);
 	$rv = $sth->execute;
 	my @ids;
+	my @records;
 	while($_ = $sth->fetchrow_hashref) {
-#		next if $_->{id} == $nowplaying;
 		push @ids, $_->{id};
-		my $col1 = sprintf(
-			qq|<a id=a href="%s?cmd=del&ids=%s">%s</a> | .
-			qq|<a id=a href="%s?cmd=up&id=%s">%s</a>|,
-			$self, $_->{id}, $deltext, $self, $_->{id}, $uptext);
-		$output .= table_entry($_, $col1);
+		push @records, $_;
 	}
-	if(@ids) {
-		$delall = sprintf <<EOF, $self, ids_encode(@ids);
-<a id=a href="%s?cmd=del&ids=%s">$delalltext</a>
-EOF
-	}
-	print <<EOF;
+	my $fmt = <<EOF;
 <table border=0 cellspacing=0>
  <tr>
-  <th $th_left>&nbsp;$delall&nbsp;</th>
-  <th $th_artist>&nbsp;Artist&nbsp;</th>
-  <th $th_album>&nbsp;Album&nbsp;</th>
-  <th $th_track>&nbsp;#&nbsp;</th>
-  <th $th_song>&nbsp;Song&nbsp;</th>
-  <th $th_time>&nbsp;Time&nbsp;&nbsp;</th>
-  <th $th_enc>&nbsp;Encoding&nbsp;</th>
-  <th $th_edit>&nbsp;&nbsp;</th>
+  <th %s>&nbsp;%s&nbsp;</th>
+  <th %s>&nbsp;Artist&nbsp;</th>
+  <th %s>&nbsp;Album&nbsp;</th>
+  <th %s>&nbsp;#&nbsp;</th>
+  <th %s>&nbsp;Song&nbsp;</th>
+  <th %s>&nbsp;Time&nbsp;&nbsp;</th>
+  <th %s>&nbsp;Encoding&nbsp;</th>
+  <th %s>&nbsp;&nbsp;</th>
  </tr>
  <tr><td colspan=7></td></tr>
-$output
-</table>
+%s%s</table>
 EOF
+	printf $fmt,
+		$th_left, @ids? sprintf(qq|<a id=a href="%s?cmd=del&ids=%s">| .
+			qq|$delalltext</a>|, $self, ids_encode(@ids)) : "",
+		$th_artist,
+		$th_album,
+		$th_track,
+		$th_song,
+		$th_time,
+		$th_enc,
+		$th_edit,
+		$killline,
+		join("", map { table_entry($_, sprintf(
+			qq|<a id=a href="%s?cmd=del&ids=%s">%s</a> | .
+			qq|<a id=a href="%s?cmd=up&id=%s">%s</a>|,
+			$self, $_->{id}, $deltext, $self, $_->{id}, $uptext),
+			undef, \@ids) } @records);
 }
 
 sub print_artistlist_table($$$@) {
@@ -383,7 +388,6 @@ sub print_alllist_table($$$$@) {
 	my @ids;
 	my %artistids;
 	my %records;
-	my @ids;
 	while($_ = $sth->fetchrow_hashref) {
 		$records{$_->{id}} = $_;
 		push @ids, $_->{id};
@@ -837,8 +841,7 @@ elsif($cmd eq 'artistlist') {
 	printhdr($artiststyle);
 
 	my $cap;
-	my $s = $args{'sort'};
-	$s =~ s/\W//g;
+	my $s;
 	my @q = ("SELECT DISTINCT artist.name as artist, album.name as album," .
 		 " count(*) as c, song.artist_id as arid, song.album_id as alid," .
 		 " UCASE(album.name) as sort" .
@@ -853,10 +856,10 @@ elsif($cmd eq 'artistlist') {
 		$cap = "Search Album: $args{'album'}";
 	}
 
-	if($s) {
+	if($#q > 0) {
 		$s =~ s/^r_(.*)/\1 DESC/;
 		$q[0] .= " AND song.artist_id=artist.id AND song.album_id=album.id".
-			 " GROUP BY artist_id, album_id ORDER BY $s";
+			 " GROUP BY artist_id, album_id ORDER BY sort";
 		print_artistlist_table($dbh, \%session, $cap, @q);
 	} else {
 		print "Error: No search terms specified.\n";
@@ -947,7 +950,7 @@ elsif($cmd eq 'update') {
 	printhtmlhdr;
 	printhdr($allstyle);
 	print "<pre>\n";
-	print `$progdir/soepkiptng_update $args{'args'} 2>/dev/null`;
+	print `$progdir/soepkiptng_update $args{'args'} 2>&1`;
 	print "</pre>\n";
 	printftr;
 }
