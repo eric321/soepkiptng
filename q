@@ -35,7 +35,7 @@ my $progdir = abs_path($1);
 
 require "$progdir/soepkiptng.lib";
 
-getopts('vnc:g');
+getopts('avnc:g');
 
 read_configfile(\%conf, $opt_c);
 
@@ -44,7 +44,11 @@ if($@) {
 	warn "Term::ReadKey not found; assuming 80-column terminal.\n";
 	$screen_width = 80;
 } else {
-	($screen_width) = GetTerminalSize();
+	if(-t) {
+		($screen_width) = GetTerminalSize();
+	} else {
+		$screen_width = 80;
+	}
 }
 
 sub albumtrack($$) {
@@ -134,6 +138,10 @@ if($0 =~ /qr$/ || @ARGV) {
 			$q .= " artist.name LIKE ?";
 			push @a, $_;
 		}
+		elsif($0 =~ /ql$/) {
+			$q .= " album.name LIKE ?";
+			push @a, $_;
+		}
 		elsif($0 =~ /qt$/) {
 			$q .= " song.title LIKE ?";
 			push @a, $_;
@@ -197,9 +205,14 @@ if($0 =~ /qr$/ || @ARGV) {
 		exit 0;
 	}
 	exit if $i == 1;
-	print STDERR "\nAdd (a=all): ";
-	$_ = <STDIN>;
-	exit unless /\S/;
+	if($opt_a) {
+		$i == 2 or die "More than 1 hit\n"; 
+		$_ = 1;
+	} else {
+		print STDERR "\nAdd (a=all): ";
+		$_ = <STDIN>;
+		exit unless /\S/;
+	}
 
 	my $user = (getpwuid $<)[6] || getpwuid $< || "uid $<";
 	$user =~ s/,.*//;
@@ -240,6 +253,7 @@ while(@q = $sth->fetchrow_array) {
 	$i++;
 }
 
+$opt_a and exit;
 print STDERR "\nDelete (a=all): ";
 $_ = <STDIN>;
 exit unless /\S/;
