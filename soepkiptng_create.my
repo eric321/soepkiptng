@@ -1,0 +1,30 @@
+
+drop database if exists soepkiptng;
+create database soepkiptng;
+grant select,insert,update,delete,create,drop
+	on soepkiptng.*
+	to soepkiptng identified by 'soepkiptng';
+use soepkiptng;
+
+CREATE TABLE songs (
+  id int(11) NOT NULL auto_increment,
+  artist varchar(255) DEFAULT '' NOT NULL,
+  title varchar(255) DEFAULT '' NOT NULL,
+  album varchar(255) DEFAULT '' NOT NULL,
+  encoding varchar(255) DEFAULT '' NOT NULL,
+  track int(4) unsigned DEFAULT '0',
+  filename varchar(255) DEFAULT '' NOT NULL,
+  length smallint DEFAULT '0' NOT NULL,
+  PRIMARY KEY (id),
+  KEY artist (artist(4)),
+  KEY title (title(4)),
+  KEY album (album(4)),
+  UNIQUE (filename)
+);
+
+CREATE TABLE queue (
+  id int(11) NOT NULL auto_increment,
+  song_id int(11) DEFAULT '0' NOT NULL,
+  timestamp timestamp(14),
+  PRIMARY KEY (id)
+);

@@ -1,0 +1,204 @@
+#!/usr/bin/perl
+
+############################################################################
+# soepkiptngd (Soepkip The Next Generation daemon)
+#
+# created by Eric Lammerts <eric@lammerts.org>
+# loosely based on mymusic by "caffiend" <caffiend@atdot.org>
+# and Soepkip by Andre Pool <andre@scintilla.utwente.nl>
+#
+############################################################################
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+############################################################################
+
+$configfile = "/etc/soepkiptng.conf";
+$ENV{'PATH'} = "/usr/local/bin:/usr/bin:/bin";
+$debug = 1 if @ARGV[0] eq "-d";
+
+use DBI;
+use MPEG::MP3Info;
+use Socket;
+use POSIX ":sys_wait_h";
+use Sys::Hostname;
+
+open F, $configfile
+	or die "$configfile: $!\n";
+while(<F>) {
+	/^#/ and next;
+	s/\s+$//;
+	/./ or next;
+	if(/^(\w+)\s*=\s*(.*?)\s*$/) {
+		$f = $1;
+		${$f} = $2;
+	} elsif(/^\s+(.*?)\s*$/) {
+		# continuation line
+		${$f} .= "\n$1";
+	} else {
+		die "$configfile line $.: invalid format\n";
+	}
+}
+close F;
+
+socket(KILLSOCK, PF_INET, SOCK_STREAM, getprotobyname('tcp'))
+	or die "socket: $!\n";
+setsockopt(KILLSOCK, SOL_SOCKET, SO_REUSEADDR, pack("l", 1));
+bind(KILLSOCK, sockaddr_in(0, INADDR_ANY))
+	or die "bind $killport: $!\n";
+listen(KILLSOCK, SOMAXCONN);
+
+$killhost = hostname;
+($killport) = unpack_sockaddr_in(getsockname(KILLSOCK));
+
+$dbh = DBI->connect("DBI:mysql:$db_name:$db_host", $db_user, $db_pass)
+	or die "Can't connect to database $db_name\@$db_host as user $db_user\n";
+
+unless($debug) {
+	fork && exit;
+	chdir "/";
+	setpgrp();
+	open STDIN, "</dev/null";
+	open STDERR, ">$errfile";
+}
+
+$SIG{'CHLD'} = sub {
+	for(;;) {
+		my $p = waitpid(-1, &WNOHANG);
+		return if $p < 1;
+		warn sprintf "reaped child %d, sig=%d status=%d\n",
+			$p, $? & 0x7f, $? >> 8 if $debug;
+		die "exiting because '$playercmd' died.\n" if $p == $cdrplaypid;
+		if($p == $pid) {
+			$pid = 0;
+			warn "player finished ($p)\n" if $debug;
+		}
+	}
+};
+
+$cdrplaypid = open STDOUT, "|$playercmd";
+warn "cdrplaypid=$cdrplaypid\n" if $debug;
+
+for(;;) {
+	my ($qid, $song_id, $filename);
+
+	# get queued song
+	($qid, $song_id, $filename) = $dbh->selectrow_array(
+		"SELECT queue.id,queue.song_id,songs.filename" .
+		" FROM queue,songs" .
+		" WHERE queue.song_id=songs.id" .
+		" ORDER BY queue.id" .
+		" LIMIT 1"
+	);
+
+	#  if nothing in queue, get random song
+	if($qid) {
+		warn "playing queued $filename\n" if $debug;
+	} else {
+		($song_id, $filename) = $dbh->selectrow_array(
+			"SELECT id,filename FROM songs " .
+			"ORDER BY rand() LIMIT 1"
+		);
+		warn "playing random $filename\n" if $debug;
+	}
+
+	if(!$song_id) {
+		warn "no random song found.\n";
+		sleep 5;
+		next;
+	}
+
+	# write to log file
+	if(open LOG, ">>$logfile") {
+		printf LOG "%s %s %d %s\n", scalar localtime,
+			$qid? "Q":"R", $song_id, $filename;
+		close LOG;
+	} else {
+		warn "cannot open logfile $logfile: $!\n";
+	}
+
+	# write status file
+	if(open ST, ">$statusfile") {
+		print ST <<EOF;
+$song_id
+$filename
+$$
+$cdrplaypid
+$killhost
+$killport
+EOF
+		close ST;
+	} else {
+		warn "cannot open statusfile $statusfile: $!\n";
+	}
+
+	# close accepted socket after statusfile was updated
+	if($closebla) { close BLA; }
+
+	# get player
+	$filename =~ /([^.]*)$/;
+	$ext = $1;
+	$player = ${"player_$ext"} or do {
+		warn "no player for .$ext files found.\n";
+		next;
+	};
+	$player =~ s/%s/$filename/g;
+
+	# launch player
+	$starttime = time;
+	if($debug) {
+		($a, $b, $c, $d) = times;
+		$childtime = $c + $d;
+		warn "launching player: $player\n";
+	}
+	if(($pid = fork) == 0) {
+		exec $player;
+		die;
+	}
+	warn "pid=$pid\n" if $debug;
+
+	# wait until player is done or we get a connect on KILLSOCK
+	vec($rin, fileno(KILLSOCK), 1) = 1;
+	while($pid) {
+		if(select($rout = $rin, undef, undef, 0.1) == 1) {
+			warn "got connection\n" if $debug;
+
+			# kill player
+			kill 'KILL', $pid;
+
+			# tell cdrplay to flush its buffers
+			kill 'SIGUSR1', $cdrplaypid;
+
+			# close new tcp connection
+			accept BLA, KILLSOCK;
+			$closebla = 1;
+		}
+	}
+	if($debug) {
+		($a, $b, $c, $d) = times;
+		$childtime = $c + $d - $childtime;
+		warn "song finished, time=$childtime\n" if $debug;
+	}
+
+	# if it was a queued song, delete it from the queue
+	if($qid) {
+		$dbh->do("DELETE FROM queue WHERE id = $qid");
+		$dbh->do("UPDATE queue SET id = id - 1");
+	}
+
+	# if it took less than 1 second to play it, pause for 1 second
+	# to prevent us from eating 100% cpu time in case of misconfiguration
+	if(time == $starttime) {
+		sleep 1;
+	}
+}

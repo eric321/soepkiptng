@@ -1,0 +1,70 @@
+
+
+sub kill_song() {
+	local *F;
+
+	open F, $statusfile
+		or die "$statusfile: $!\n";
+	<F>; <F>; <F>; <F>;
+	chop($host = <F>);
+	$port = <F>;
+	close F;
+
+	use Socket;
+
+	socket(F, PF_INET, SOCK_STREAM, getprotobyname('tcp'))
+		or die "socket: $!\n";
+	connect(F, sockaddr_in($port, inet_aton($host)))
+		or die "connect $host:$port: $!\n";
+	read F, $_, 1;	# will get end-of-file
+	close F;
+}
+
+# returns (samplefreq, channels, seconds)
+sub get_wav_params($) {
+	my ($file) = @_;
+	local *F;
+	my $buf;
+	my @res;
+
+	open F, $file or return undef;
+	FILE: do {
+		read F, $buf, 12 or last;
+		my ($riff, $len, $wave) = unpack("a4Va4", $buf);
+		last if $riff ne 'RIFF' || $wave ne 'WAVE';
+
+		# find 'fmt ' chunk
+		for(;;) {
+			read F, $buf, 8 or last FILE;
+			my ($type, $len) = unpack("a4V", $buf);
+			last if $type eq 'fmt ';
+			while($len) {
+				my $r = $len < 4096? $len : 4096;
+				$r = read F, $buf, $r or last FILE;
+				$len -= $r;
+			}
+		}
+		read F, $buf, 16 or last;
+		my ($fmt, $chan, $freq, $bytespersec, $align, $bitspersample) =
+			unpack("vvVVvv", $buf);
+		last if $fmt != 1;
+
+		# find 'data' chunk
+		for(;;) {
+			read F, $buf, 8 or last FILE;
+			my ($type, $len) = unpack("a4V", $buf);
+			last if $type eq 'data';
+			while($len) {
+				my $r = $len < 4096? $len : 4096;
+				$r = read F, $buf, $r or last FILE;
+				$len -= $r;
+			}
+		}
+
+		push @res, $freq, $chan, int($len / $bytespersec + 0.5);
+	} while 0;
+	close F;
+	return @res;
+}
+
+1;

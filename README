@@ -1,0 +1,27 @@
+
+Soepkip The Next Generation
+---------------------------
+by Eric Lammerts <eric@lammerts.org>
+
+Install procedure:
+* sudo mysql -u root < soepkiptng_create.my
+* cp soepkiptng.conf /etc
+  (or edit all scripts if you want a different location)
+* edit /etc/soepkiptng.conf
+* run soepkiptng_update to add songs to the database
+* run soepkiptngd
+
+TODO
+----
+* silence before random songs
+* fade-out/fade-in in pause/resume
+* release of /dev/dsp during pause
+* ogg-vorbis support
+* reading of samplefreq/channels of lpac files.
+* resampling & mono->stereo conversion
+* smooth transition between 2 songs (interpolation)
+* id3/id3v2 support
+* synchronize update of statusfile with cdrplay
+
+
+

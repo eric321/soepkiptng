@@ -1,0 +1,8 @@
+
+<Files ~ (\.cgi)>
+	SetHandler  perl-script
+	PerlHandler Apache::Registry
+	PerlRequire /disk2/soepkiptng/web/startup.pl
+	PerlSendHeader On
+	Options +ExecCGI
+</Files>
