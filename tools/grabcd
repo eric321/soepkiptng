@@ -25,7 +25,9 @@ my $progdir = abs_path($1);
 require "$progdir/../soepkiptng.lib";
 
 getopts('c:d:hnsweoWXYZ');
-$dev = $opt_d || "/dev/cdrom";
+read_configfile(\%conf, $opt_c);
+
+$dev = $opt_d || $conf{grabcd_dev} || "/dev/cdrom";
 $fake = $opt_n;
 $waitdf = $opt_w;
 $eject = !$opt_e;
@@ -35,14 +37,13 @@ $X = "-X" if $opt_X;
 $Y = "-Y" if $opt_Y;
 $Z = "-Z" if $opt_Z;
 
-read_configfile(\%conf, $opt_c);
 
 $output = "-w";
 $output_ext = "wav";
 $cdparanoia = "cdparanoia";
 
 $opt_h and die <<'EOF';
-Usage: mwgrab [-nqsw] [-d dev] file
+Usage: grabcd [-nqsw] [-d dev] file
 
 	-d	: use 'dev' instead of /dev/cdrom
 	-n	: only write albums info
