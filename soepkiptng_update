@@ -50,7 +50,7 @@ use MP3::Tag;
 use MPEG::MP3Info;
 #use Data::Dumper;
 
-use vars qw/$opt_d $opt_e $opt_f $opt_r $opt_q $opt_v/;
+use vars qw/$opt_c $opt_d $opt_e $opt_f $opt_r $opt_q $opt_v/;
 
 sub get_wav_params($\%;$);
 sub getinfo_mp3($\%);
@@ -62,7 +62,7 @@ sub getinfo_raw($\%);
 sub read_eric_files();
 sub extract_artist_title($\%);
 
-getopts('fredqv');
+getopts('cfredqv');
 $force = 1 if $opt_f;
 $| = 1;
 $do_delete = !$opt_d && !$opt_r;
@@ -231,6 +231,11 @@ EOF
 	delete $filename{$_};
 }
 
+close FILES
+	or die sprintf "find: %s signal %d\n",
+		(($? & 0x7f)? "killed by":"exit status"),
+		(($? & 0x7f)? ($? & 0x7f) : ($? >> 8));
+
 # delete all filenames in database what were not found on disk
 if($do_delete) {
 	$sth = $dbh->prepare("UPDATE song SET present=0 WHERE filename=?");
@@ -270,11 +275,11 @@ sub get_id3($\%) {
 	my ($t, $tr, $a, $alb) = $id3->autoinfo();
 
 	$a =~ s/_/ /g;
-	$a =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g unless $a =~ /[A-Z]/;
+	$a =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g unless $a =~ /[A-Z]/ || $opt_c;
 	$t =~ s/_/ /g;
-	$t =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g unless $t =~ /[A-Z]/;
+	$t =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g unless $t =~ /[A-Z]/ || $opt_c;
 	$alb =~ s/_/ /g;
-	$alb =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g unless $alb =~ /[A-Z]/;
+	$alb =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g unless $alb =~ /[A-Z]/ || $opt_c;
 
 	$a && $t or return undef;
 
