@@ -164,10 +164,12 @@ while(<FILES>) {
 #	warn "a=$artist, t=$title, al=$album, tr=$track, file=$_, len=$len, desc=$desc\n";
 
 	# insert song into database
-	$sth = $dbh->prepare("REPLACE INTO songs" .
-		" (id,artist,title,album,track,filename,length,encoding,last_played)" .
-		" VALUES (?,?,?,?,?,?,?,?,from_unixtime(?));");
-	$sth->execute($filename{$_}, $artist, $title, $album, $track, $_, $len,
+	$q = "REPLACE INTO songs SET id=?, artist=?, title=?, album=?, track=?, " .
+		"filename=?, length=?, encoding=?, last_played=from_unixtime(?)";
+	if(!$filename{$_}) {
+		$q .= ", time_added=NULL";
+	}
+	$dbh->do($q, undef, $filename{$_}, $artist, $title, $album, $track, $_, $len,
 		$desc, $last_played{$_} || 0)
                 or die "can't do sql command: $dbh->errstr";
 	delete $filename{$_};

@@ -16,6 +16,7 @@ CREATE TABLE songs (
   filename varchar(255) DEFAULT '' NOT NULL,
   length smallint DEFAULT '0' NOT NULL,
   last_played timestamp,
+  time_added timestamp,
   PRIMARY KEY (id),
   KEY artist (artist(4)),
   KEY title (title(4)),

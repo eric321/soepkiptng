@@ -122,7 +122,10 @@ EOF
 <a id=a target=_blank href="$self?cmd=maint&t=$t" target=playlist>Maintenance</a>
 </td>
 <td id=az>&nbsp;&nbsp;
-<a id=a href="$self?cmd=shuffle&t=$t" target=playlist>Shuffle queue</a>
+<a id=a href="$self?cmd=shuffle&t=$t" target=playlist>Shuffle</a>
+</td>
+<td id=az>&nbsp;&nbsp;
+<a id=a href="$self?cmd=recent&num=100&t=$t" target=songlist>Recent</a>
 </td>
 </tr></table>
 EOF
@@ -292,13 +295,9 @@ EOF
 }
 
 sub print_songlist_table($@) {
-	my ($dbh, @val) = @_;
+	my ($dbh, $query, @val) = @_;
 	my ($output, $addall, $delete);
 
-	my $query = "SELECT artist,title,id,track,length,encoding".
-			" FROM songs" .
-			" WHERE artist REGEXP ? AND album REGEXP ? AND title REGEXP ?".
-			" ORDER BY track,title";
 	my $sth = $dbh->prepare($query);
 	my $rv = $sth->execute(@val);
 	my @ids;
@@ -463,9 +462,24 @@ elsif($cmd eq 'songlist') {
 		$args{'a'} =~ s/[^-^ _0-9a-z]+/.*/ig;
 		$args{'s'} =~ s/[^-^ _0-9a-z]+/.*/ig;
 		$args{'t'} =~ s/[^-^ _0-9a-z]+/.*/ig;
-		print_songlist_table($dbh, $args{'a'} || "^",
-			$args{'s'} || "^", $args{'t'} || "^");
+		print_songlist_table($dbh, 
+			"SELECT artist,title,id,track,length,encoding" .
+			" FROM songs" .
+			" WHERE artist REGEXP ? AND album REGEXP ? AND title REGEXP ?" .
+			" ORDER BY track,title",
+			$args{'a'} || "^", $args{'s'} || "^", $args{'t'} || "^");
 	}
+	printftr;
+}
+elsif($cmd eq 'recent') {
+	printhtmlhdr;
+	printhdr($slstyle);
+	print "<base target=playlist>\n";
+	print_songlist_table($dbh, 
+		"SELECT artist,title,id,track,length,encoding" .
+		" FROM songs" .
+		" ORDER BY time_added DESC" .
+		" LIMIT ?", (0 + $args{'num'}) || 40);
 	printftr;
 }
 elsif($cmd eq 'maint') {
