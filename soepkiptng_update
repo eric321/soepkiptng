@@ -60,6 +60,7 @@ sub getinfo_wav($\%);
 sub getinfo_pac($\%);
 sub getinfo_flac($\%);
 sub getinfo_raw($\%);
+sub getinfo_video($\%);
 sub read_eric_files();
 sub extract_artist_title($\%);
 sub is_nfs($);
@@ -153,6 +154,7 @@ while(<FILES>) {
 	getinfo_wav($_, %info) ||
 	getinfo_pac($_, %info) ||
 	getinfo_flac($_, %info) ||
+	getinfo_video($_, %info) ||
 	getinfo_raw($_, %info);
 	$/ = "\0";
 
@@ -477,6 +479,19 @@ sub getinfo_raw($\%) {
 	$info->{len} = (-s $file) / 176400;
 	$info->{freq} = 44100;
 	$info->{chan} = 2;
+	return 1;
+}
+
+sub getinfo_video($\%) {
+	my ($file, $info) = @_;
+
+	$file =~ /\.(mpe?g|avi|asx|asf|vob|wmv)$/i
+		or return undef;
+
+	$info->{encoding} = "Video: $1";
+	$info->{freq} = 0;
+	$info->{chan} = 0;
+	$info->{len} = 0;
 	return 1;
 }
 

@@ -1,0 +1,61 @@
+#!/usr/bin/perl
+############################################################################
+# soepkiptngd (Soepkip The Next Generation daemon)
+#
+# (c) copyright 2000 Eric Lammerts <eric@lammerts.org>
+#
+# $Id$
+############################################################################
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License, version 2, as 
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# A copy of the GNU General Public License is available on the World Wide Web
+# at `http://www.gnu.org/copyleft/gpl.html'.  You can also obtain it by
+# writing to the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+# Boston, MA 02111-1307, USA.
+############################################################################
+
+my $configfile = "/etc/soepkiptng.conf";
+
+my $field;
+open F, $configfile
+	or die "$configfile: $!\n";
+while(<F>) {
+	/^#/ and next;
+	s/\s+$//;
+	/./ or next;
+	if(/^(\w+)\s*=\s*(.*?)\s*$/) {
+		$field = $1;
+		$conf{$field} = $2;
+	} elsif(/^\s+(.*?)\s*$/) {
+		# continuation line
+		$conf{$field} .= "\n$1";
+	} else {
+		die "$configfile line $.: invalid format\n";
+	}
+}
+close F;
+
+$ENV{'PATH'} = "$conf{progdir}/bin:$ENV{'PATH'}";
+require "$conf{'progdir'}/soepkiptng.lib";
+
+open STDIN, "/dev/null";
+open STDOUT, ">/dev/null";
+open STDERR, ">/dev/null";
+
+if(fork == 0) {
+	setpgrp; # protect us from kills
+	while(getppid != 1) { select undef, undef, undef, 0.1 };
+	pause(0);
+	exit 0;
+}
+
+pause(1);
+exec "mp", @ARGV;
+die "mp @ARGV: $!\n";

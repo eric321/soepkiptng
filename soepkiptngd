@@ -307,6 +307,8 @@ sub start_play($) {
 			exec "cat", $filename;
 		} elsif($ext eq "flac") {
 			exec "flac", "-d", "-fl", $filename, "-";
+		} elsif($ext =~ /^(mpe?g|avi|asx|asf|vob|wmv)$/i) {
+			exec "soepkiptng_video", $filename;
 		} else {
 			die "no player for .$ext files.\n";
 		}
