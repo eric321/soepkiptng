@@ -204,6 +204,7 @@ $editlistopts
 
  <td id=az>&nbsp;&nbsp;<a id=az href="$self?cmd=shuffle">Shuffle</a></td>
  <td id=az>&nbsp;&nbsp;<a id=az href="$self?cmd=recent&days=7" target=bframe>Recent</a></td>
+ <td id=az>&nbsp;&nbsp;<a id=az href="$self?cmd=alllist&rand=50" target=bframe>Random</a></td>
  <td id=az>&nbsp;&nbsp;<a id=az target=_blank href="$self?cmd=maint">*</a></td>
  <td id=az>&nbsp;&nbsp;<a id=az target=bframe href="$self?cmd=shoutcast">Shoutcast</a></td>
  <td id=az width=100%>&nbsp;&nbsp;<a id=az target=bframe href="$self?cmd=sql">SQL</a></td>
@@ -1191,6 +1192,7 @@ elsif($cmd eq 'alllist') {
 		 " WHERE present");
 	my @qargs;
 	my $cap;
+	my $limit = $conf{alllist_limit};
 	my $s = $args{sort};
 	$s =~ s/\W//g;
 	if($args{any} =~ /\S/) {
@@ -1227,13 +1229,17 @@ elsif($cmd eq 'alllist') {
 		$s = "album.name" unless $s;
 		$cap = sprintf($args{cap}, $args{album_id});
 	}
+	if($args{rand}) {
+		$limit = 0 + $args{rand};
+		$s = "rand()";
+	}
 
 	if($s) {
 		$s =~ s/^r_(.*)/\1 DESC/;
 		$q .= " AND song.artist_id=artist.id AND song.album_id=album.id ".
 		      " AND filename LIKE '/%' ".
 		      " ORDER BY $s,album.name,track,artist.name,title";
-		print_alllist_table($dbh, \%args, \%session, $cap, $q, $conf{alllist_limit}, @qargs);
+		print_alllist_table($dbh, \%args, \%session, $cap, $q, $limit, @qargs);
 	} else {
 		print "Error: No search terms specified.\n";
 	}
