@@ -727,7 +727,7 @@ sub getinfo_soepkip($\%) {
 	open F, "$dir/.soepkiptng_info" or return undef;
 	local $_;
 	FILE: while(<F>) {
-		if(/^\[([^\]]+)\]/ && $1 eq $file) {warn;
+		if(/^\[([^\]]+)\]/ && $1 eq $file) {
 			$info->{info_origin} = ".soepkiptng_info";
 			while(<F>) {
 				last FILE if /^\[/;
