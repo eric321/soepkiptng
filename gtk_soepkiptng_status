@@ -129,7 +129,7 @@ $vbox->pack_start($button_kill, 0, 0, 1);
 $mtime = -1;
 $paused = -1;
 update_song();
-my $id = Gtk->timeout_add(1000, \&update_song);
+my $id = Gtk->timeout_add(250, \&update_song);
 
 $window->signal_connect('destroy', sub { Gtk->exit(0); });
 
