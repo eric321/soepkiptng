@@ -1,0 +1,103 @@
+#!/usr/bin/perl
+############################################################################
+# soepkiptng (c) copyright 2000 Eric Lammerts <eric@lammerts.org>.
+# $Id$
+############################################################################
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License, version 2, as 
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# A copy of the GNU General Public License is available on the World Wide Web
+# at `http://www.gnu.org/copyleft/gpl.html'.  You can also obtain it by
+# writing to the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+# Boston, MA 02111-1307, USA.
+############################################################################
+
+use integer;
+use Cwd 'abs_path';
+use Getopt::Std;
+use IO::Socket;
+use Term::ReadKey;
+
+# find program directory
+$_ = $0;
+while(-l) {
+	my $l = readlink or die "readlink $_: $!\n";
+	if($l =~ m|^/|) { $_ = $l; } else { s|[^/]*$|/$l|; }
+}
+m|(.*)/|;
+my $progdir = abs_path($1);
+
+require "$progdir/soepkiptng.lib";
+
+getopts('c:');
+
+read_configfile(\%conf, $opt_c);
+
+while(!defined($sock = opensocket())) {
+	sleep 1;
+}
+
+ReadMode 3;
+
+print "space=pause n=next\n";
+
+$| = 1;
+$song = -1;
+for(;;) {
+	$sock->print("status\n");
+	$_ = <$sock>;
+	if(length == 0) {
+		while(!defined($sock = opensocket())) {
+			sleep 1;
+		}
+		$song = -1;
+		next;
+	}
+	/song=(\d+)/;
+	if($1 != $song) {
+		$song = $1;
+		printf "     %-74s\r", songinfo();
+	}
+	/time=(\d+)/;
+	printf "\r%2d:%02d\r", $1 / 60, $1 % 60;
+
+	# wait for 0.1s or until a key is pressed
+	while($_ = lc ReadKey 0.1) {
+		if($_ eq "n") {
+			kill_song();
+		} elsif($_ eq " ") {
+			$sock->print("pausetoggle\n");
+		}
+	}
+}
+
+sub songinfo()
+{
+	local *F;
+
+	open F, $conf{statusfile} or return "unknown";
+	<F>; <F>; <F>; <F>; <F>; <F>; <F>; <F>;
+	chop (($ar, $t, $al, $tr, $len) = <F>);
+	close F;
+
+	return sprintf "/%d:%02d %.25s - %.25s (%s%.20s)",
+		$len / 60, $len % 60,
+		$ar, $t, $tr? "[$tr] ":"", $al;
+}
+
+sub opensocket()
+{
+	$s = IO::Socket::INET->new('localhost:2222') or do {
+		warn "localhost:2222: $!\n";
+		return undef;
+	};
+	$s->autoflush(1);
+	$response = <$s>;	#discard greeting
+	return $s;
+}
