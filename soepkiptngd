@@ -101,29 +101,31 @@ warn "cdrplaypid=$cdrplaypid\n" if $debug;
 $SIG{'PIPE'} = 'IGNORE';
 
 for(;;) {
-	my ($qid, $song_id, $filename);
+	my ($song_id, $songtype, $filename);
 
 	# get queued song
 	$dbh->do("LOCK TABLES queue WRITE, songs READ");
-	($qid, $song_id, $song_order, $filename) = $dbh->selectrow_array(
-		"SELECT queue.id,queue.song_id,queue.song_order,songs.filename" .
+	($song_id, $song_order, $filename) = $dbh->selectrow_array(
+		"SELECT queue.song_id,queue.song_order,songs.filename" .
 		" FROM queue,songs" .
 		" WHERE queue.song_id=songs.id" .
 		" ORDER BY queue.song_order" .
 		" LIMIT 1"
 	);
 
-	if($qid) {
+	if($song_id) {
+		$songtype = 'Q';
 		warn "playing queued $filename\n" if $debug;
 
 		# delete it from the queue
-		$dbh->do("DELETE FROM queue WHERE id = $qid");
+		$dbh->do("DELETE FROM queue WHERE song_id = $song_id");
 		$dbh->do("UPDATE queue SET song_order = song_order - $song_order - 1");
 	}
 	$dbh->do("UNLOCK TABLES");
 
 	#  if nothing in queue, get random song
-	if(!$qid) {
+	if(!$song_id) {
+		$songtype = 'R';
 		($song_id, $filename) = $dbh->selectrow_array(
 			"SELECT id,filename FROM songs " .
 			"ORDER BY rand() LIMIT 1"
@@ -138,7 +140,7 @@ for(;;) {
 	}
 
 	# write to log file
-	logprintf("%s %d %s", $qid? "Q":"R", $song_id, $filename);
+	logprintf("%s %d %s", $songtype, $song_id, $filename);
 
 	# write status file
 	if(open ST, ">$statusfile") {

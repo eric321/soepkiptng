@@ -23,8 +23,7 @@ CREATE TABLE songs (
 );
 
 CREATE TABLE queue (
-  id int(11) NOT NULL auto_increment,
-  song_id int(11) DEFAULT '0' NOT NULL,
-  timestamp timestamp(14),
-  PRIMARY KEY (id)
+  song_order int NOT NULL,
+  song_id int NOT NULL,
+  timestamp timestamp
 );
