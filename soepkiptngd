@@ -94,7 +94,7 @@ sub get_song_jingle() {
 			$filename = "$conf{jingledir}/$_";
 			last;
 		}
-		close JINGLEDIR;
+		closedir JINGLEDIR;
 	}
 	$song_id or return undef;
 	return ($song_id, 'J', $filename, '');
