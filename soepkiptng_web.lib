@@ -834,26 +834,26 @@ sub getlyrics($;$) {
 	my ($info, $try) = @_;
 
 	# save artist/title/album
-	my ($ar, $ti, $al) = ($_->{artist}, $_->{title}, $_->{album});
+	my ($ar, $ti, $al) = ($info->{artist}, $info->{title}, $info->{album});
 
 	if($try == 3) {
-		$_->{artist} =~ s/'//g;
-		$_->{title} =~ s/'//g;
-		$_->{album} =~ s/'//g;
+		$info->{artist} =~ s/'//g;
+		$info->{title} =~ s/'//g;
+		$info->{album} =~ s/'//g;
 	}
 	if($try >= 2) {
-		$_->{artist} = lyrics_string_simplify($_->{artist});
-		$_->{title} = lyrics_string_simplify($_->{title});
-		$_->{album} = lyrics_string_simplify($_->{album});
+		$info->{artist} = lyrics_string_simplify($info->{artist});
+		$info->{title} = lyrics_string_simplify($info->{title});
+		$info->{album} = lyrics_string_simplify($info->{album});
 	}
-	print "<!-- try$try '$_->{artist}', '$_->{title}', '$_->{album}' -->\n";
+	print "<!-- try$try '$info->{artist}', '$info->{title}', '$info->{album}' -->\n";
 
-	getlyrics_purelyrics_com($_) || getlyrics_lyricsdomain_com($_);
+	getlyrics_purelyrics_com($info) || getlyrics_lyricsdomain_com($info);
 
-	$_->{lyrics} =~ s/^\s+|\s+$//g;
+	$info->{lyrics} =~ s/^\s+|\s+$//g;
 
 	# restore artist/title/album
-	($_->{artist}, $_->{title}, $_->{album}) = ($ar, $ti, $al);
+	($info->{artist}, $info->{title}, $info->{album}) = ($ar, $ti, $al);
 }
 
 sub print_lyrics_page($$) {
