@@ -5,7 +5,8 @@ use Cwd 'abs_path';
 use DBI;
 use Getopt::Std;
 
-sub encode($);
+sub encode_url($);
+sub encode_html($);
 sub getlyrics_purelyrics_com($$$$$);
 sub getlyrics_lyricsdomain_com($$$$$);
 
@@ -24,8 +25,13 @@ getopts('c:');
 
 read_configfile(\%conf, $opt_c);
 
-
-if(@ARGV == 0) {
+if($ENV{GATEWAY_INTERFACE} =~ /^CGI/) {
+	use CGI;
+	$q = new CGI;
+	$artist = $q->param('ar');
+	$title = $q->param('ti');
+	$album = $q->param('al');
+} elsif(@ARGV == 0) {
 	open F, $conf{statusfile}
 		or die "$conf{statusfile}: $!\n";
 	chop($nowplaying = <F>);
@@ -45,16 +51,51 @@ my $lyrics =
 	or die "no matches\n";
 
 $lyrics =~ s/^\s+|\s+$//g;
-print "$lyrics\n\n[$from]\n";
+
+if($ENV{GATEWAY_INTERFACE} =~ /^CGI/) {
+	$artist = encode_html($artist);
+	$title = encode_html($title);
+	$album = encode_html($album);
+	$lyrics = encode_html($lyrics);
+	$fromstr = encode_html($from);
+	$fromurl = encode_html($from);
+	print $q->header;
+	print <<EOF;
+<html>
+<head>
+<title>Lyrics: $artist - $title ($album)</title>
+</head>
+<body>
+<h1>Lyrics: $artist - $title ($album)</h1>
+<pre>
+$lyrics
+</pre>
+<br>(<a href="$fromurl"><font size=-2><i>$fromstr</i></font></a>)
+</body>
+</html>
+EOF
+
+} else {
+	print "$lyrics\n\n[$from]\n";
+}
 
 
 ##############################################################################
 
-sub encode($) {
+sub encode_url($) {
 	my ($a) = @_;
 
 	$a =~ s|([^- ./\w])|sprintf "%%%02x", ord($1)|ge;
 	$a =~ s| |+|g;
+	$a;
+}
+
+sub encode_html($) {
+	my ($a) = @_;
+
+	$a =~ s/&/&amp;/g;
+	$a =~ s/</&lt;/g;
+	$a =~ s/>/&gt;/g;
 	$a;
 }
 
@@ -64,9 +105,9 @@ sub getlyrics_purelyrics_com($$$$$) {
 	my $baseurl = "http://www.purelyrics.com/index.php";
 
 	my $url = "$baseurl?search_advsubmit2=Search";
-	$url .= "&search_artist=" . encode(lc $artist);
-	$url .= "&search_album=" . encode(lc $album);
-	$url .= "&search_title=" . encode(lc $title);
+	$url .= "&search_artist=" . encode_url(lc $artist);
+	$url .= "&search_album=" . encode_url(lc $album);
+	$url .= "&search_title=" . encode_url(lc $title);
 
 	my $req = HTTP::Request->new(GET => $url);
 	my $res = $ua->request($req);
@@ -108,8 +149,8 @@ sub getlyrics_lyricsdomain_com($$$$$) {
 	my ($ua, $artist, $album, $title, $from) = @_;
 
 	my $url = "http://www.lyricsdomain.com/src.php?action=+++Search+++";
-	$url .= "&artist=" . encode(lc $artist);
-	$url .= "&query=" . encode(lc $title);
+	$url .= "&artist=" . encode_url(lc $artist);
+	$url .= "&query=" . encode_url(lc $title);
 
 	my $req = HTTP::Request->new(GET => $url);
 	my $res = $ua->request($req);
