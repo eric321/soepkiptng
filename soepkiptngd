@@ -308,7 +308,7 @@ sub start_play($) {
 
 		if($filename =~ /^http:/) {
 			playshoutcast($filename);
-		} elsif($filename =~ /^cdda:(\d+)/) {
+		} elsif($filename =~ /^cdda:[^:]*:(\d+)/) {
 			exec "$conf{cdda_prog} $1";
 		} elsif($ext eq "mp2" || $ext eq "mp3") {
 			exec "mp3toraw", $filename;

@@ -1400,7 +1400,7 @@ EOF
 			$dbh->do("REPLACE INTO song SET title=?, filename=?, album_id=?, " .
 				"artist_id=?, present=1, encoding='CD-DA', track=?, " .
 				"length=?, time_added=NULL", undef,
-				$_, "cdda:$nr:$cddbinfo", $alid, $arid, $nr, $len) or die;
+				$_, "cdda:$cddbinfo:$nr", $alid, $arid, $nr, $len) or die;
 			$nr++;
 		}
 		close F;
