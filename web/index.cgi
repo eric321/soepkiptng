@@ -677,10 +677,13 @@ sub print_shoutcast_page($$) {
 
 	$args->{name} =~ s/^\s+|\s+$//g;
 	$args->{url} =~ s/^\s+|\s+$//g;
+	$args->{url} =~ s|^/*(.)|http://$1|;
 	foreach(keys %$args) {
 		if(/^delete_(\d+)$/) {
 			$dbh->do("DELETE FROM song WHERE id=?", undef, $1)
 				or die "can't do sql command: " . $dbh->errstr;
+			delete $args->{editid};
+			delete $args->{url};
 		}
 	}
 	if($args->{editid} && $args->{url}) {
