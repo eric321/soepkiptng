@@ -74,14 +74,10 @@ sub print_frame() {
 <title>$title</title>
 </head>
 <frameset rows="$frameheights" frameborder=yes>
- <frame name=playlist src="$self?cmd=playlist&t=$t" marginheight="$marginheight">
- <frameset cols="$framewidths" frameborder=yes>
-  <frame name=artistlist src="$self?cmd=artistlist&t=$t" marginheight="$marginheight">
-  <frame name=albumlist src="$self?cmd=albumlist&t=$t" marginheight="$marginheight">
-  <frame name=songlist src="$self?cmd=songlist&t=$t" marginheight="$marginheight">
- </frameset>
+ <frame name=tframe src="$self?cmd=playlist" marginheight="$marginheight">
+ <frame name=bframe src="$self?cmd=empty" marginheight="$marginheight">
 </frameset>
-<body bgcolor=white>
+<body $body>
 </body>
 </html>
 EOF
@@ -90,42 +86,42 @@ EOF
 sub print_az_table {
 	print <<EOF;
 <table cellpadding=0 cellspacing=0><tr><td id=az>
-<a id=a href="$self?cmd=playlist&t=$t" target=playlist>Refresh</a>&nbsp;&nbsp;
+<a id=a href="$self?cmd=playlist" target=tframe>Refresh</a>&nbsp;&nbsp;
 EOF
 	$_ = encode("^[^a-zA-Z]");
-	print qq|<a id=a href="$self?cmd=artistlist&a=$_&t=$t" target=artistlist>0-9</a>&nbsp;|;
+	print qq|<a id=a href="$self?cmd=artistlist&a=$_" target=bframe>0-9</a>&nbsp;|;
 	foreach('A'..'Z') {
 		my $e = encode("^$_");
-		print qq|<a id=a href="$self?cmd=artistlist&a=$e&t=$t" target=artistlist>$_</a>&nbsp;|;
+		print qq|<a id=a href="$self?cmd=artistlist&a=$e" target=bframe>$_</a>&nbsp;|;
 	}
 	print <<EOF;
 </td>
 <td id=az>
- <form id=search action="$self" method=get target=artistlist>
+ <form id=search action="$self" method=get target=bframe>
   <input type=hidden name=cmd value=artistlist>
    Artist: <input type=text size=5 name=a>
  </form>
 </td>
 <td id=az>
- <form id=search action="$self" method=get target=albumlist>
- <input type=hidden name=cmd value=albumlist>
-   Album: <input type=text size=5 name=s>
+ <form id=search action="$self" method=get target=bframe>
+ <input type=hidden name=cmd value=alllist><input type=hidden name=f value="album">
+   Album: <input type=text size=5 name=v>
  </form>
 </td>
 <td id=az>
- <form id=search action="$self" method=get target=songlist>
-  <input type=hidden name=cmd value=songlist>
-   Title: <input type=text size=5 name=t>
+ <form id=search action="$self" method=get target=bframe>
+ <input type=hidden name=cmd value=alllist><input type=hidden name=f value="title">
+   Title: <input type=text size=5 name=v>
  </form>
 </td>
 <td id=az>&nbsp;&nbsp;
-<a id=a target=_blank href="$self?cmd=maint&t=$t" target=playlist>Maintenance</a>
+<a id=a target=_blank href="$self?cmd=maint" target=tframe>Maintenance</a>
 </td>
 <td id=az>&nbsp;&nbsp;
-<a id=a href="$self?cmd=shuffle&t=$t" target=playlist>Shuffle</a>
+<a id=a href="$self?cmd=shuffle" target=tframe>Shuffle</a>
 </td>
 <td id=az>&nbsp;&nbsp;
-<a id=a href="$self?cmd=recent&num=100&t=$t" target=songlist>Recent</a>
+<a id=a href="$self?cmd=recent&num=100" target=bframe>Recent</a>
 </td>
 </tr></table>
 EOF
@@ -146,11 +142,11 @@ sub get_playlist_table_entry($$$$$) {
 	$e =~ s/ /&nbsp;/g;
 	my $tr = $_[4]->{track} || "";
 	$tr .= "." if $tr;
-	return sprintf <<EOF, $_[0], $_[1], $_[2], $_[3], $ar, $_[4]->{artist}, $al, $ar, $_[4]->{album}, $tr, $_[4]->{title}, $l, $e;
+	return sprintf <<EOF, $_[0], $_[1], $_[2], $_[3], $ar, $_[4]->{artist}, $al, $_[4]->{album}, $tr, $_[4]->{title}, $l, $e;
  <tr>
-  <td><a id=a href="%s" target=playlist>%s</a> <a id=a href="%s" target=playlist>%s</a></td>
-  <td><a href="$self?cmd=albumlist&a=%s&t=$t" target=albumlist>%s</a></td>
-  <td><a href="$self?cmd=songlist&s=%s&a=%s&t=$t" target=songlist>%s</a></td>
+  <td><a id=a href="%s" target=tframe>%s</a> <a id=a href="%s" target=tframe>%s</a></td>
+  <td><a href="$self?cmd=alllist&f=artist&v=%s" target=bframe>%s</a></td>
+  <td><a href="$self?cmd=alllist&f=album&v=%s" target=bframe>%s</a></td>
   <td>%s&nbsp;</td>
   <td>%s</td>
   <td>%s</td>
@@ -190,7 +186,7 @@ sub print_playlist_table($$) {
 			$_->{encoding} = '?';
 		};
 		$output .= get_playlist_table_entry
-			"$self?cmd=kill&t=$t", $killtext, "", "", $_;
+			"$self?cmd=kill", $killtext, "", "", $_;
 	}
 
 	$query =  "SELECT songs.title,songs.artist,songs.album,songs.id,songs.track,songs.length,songs.encoding" .
@@ -203,13 +199,13 @@ sub print_playlist_table($$) {
 #		next if $_->{id} == $nowplaying;
 		push @ids, $_->{id};
 		$output .= get_playlist_table_entry
-			"$self?cmd=del&id=$_->{id}&t=$t", $deltext,
-			"$self?cmd=up&id=$_->{id}&t=$t", $uptext,
+			"$self?cmd=del&id=$_->{id}", $deltext,
+			"$self?cmd=up&id=$_->{id}", $uptext,
 			$_;
 	}
 	if(@ids) {
 		$delall = sprintf <<EOF, join(",", @ids);
-<a id=a href="$self?cmd=del&id=%s" target=playlist>$delalltext</a>
+<a id=a href="$self?cmd=del&id=%s" target=tframe>$delalltext</a>
 EOF
 	}
 	print <<EOF;
@@ -235,66 +231,40 @@ sub print_artistlist_table($$) {
 <table border=0 cellspacing=0>
 <caption>Artist: $val</caption>
  <tr>
-  <th width=80%>Artist</th>
-  <th width=20%>#&nbsp;Songs</th>
+  <th>Artist</th>
+  <th>#&nbsp;Albums</th>
  </tr>
 EOF
 
-	my $query = "SELECT DISTINCT artist, count(*)" .
+	my $query = "SELECT DISTINCT artist, album, count(*)" .
 			" FROM songs WHERE artist REGEXP ?".
-			" GROUP BY artist ORDER BY artist";
+			" GROUP BY artist,album ORDER BY artist,album";
 	my $sth = $dbh->prepare($query);
 	my $rv = $sth->execute($val);
-	while(@_ = $sth->fetchrow_array) {
-		printf <<EOF, encode("^$_[0]\$"), $_[0], $_[1];
+	my ($a, $al, $c);
+	my @artists;
+	my %al;
+	while(($a, $al, $c) = $sth->fetchrow_array) {
+		$al{$a} or push @artists, $a;
+		$al{$a} .= sprintf(<<EOF, encode($al || '^$'), $al || "?", $c);
+<a id=a href="$self?cmd=alllist&f=album&v=%s">%s (%d)</a>
+EOF
+	}
+	foreach(@artists) {
+		$al{$_} =~ s/, $//;
+		printf <<EOF, encode("^$_\$"), $_, $al{$_};
 <tr>
- <td><a id=a href="$self?cmd=albumlist&a=%s&s=&t=$t">%s</a>&nbsp;&nbsp;</td>
+ <td><a id=a href="$self?cmd=alllist&f=artist&v=%s">%s</a></td>
  <td>%s</td>
 </tr>
 EOF
 	}
-
 	print <<EOF;
 </table>
 EOF
 }
 
-sub print_albumlist_table($@) {
-	my ($dbh, $qart, $qalb) = @_;
-
-	print <<EOF;
-<table border=0 cellspacing=0>
-<caption>Artist: $qart, Album: $qalb</caption>
- <tr>
-  <th width=99%>Album</th>
-  <th width=1%>#&nbsp;Songs</th>
- </tr>
-EOF
-
-	my $query = "SELECT DISTINCT album, artist, count(*)" .
-			" FROM songs WHERE artist REGEXP ? AND album REGEXP ?".
-			" GROUP BY album,artist ORDER BY album";
-	my $sth = $dbh->prepare($query);
-	my $rv = $sth->execute($qart, $qalb);
-	while(@_ = $sth->fetchrow_array) {
-		my ($al, $ar, $count) = @_;
-		my $newqal = $al;
-		$al = "?" unless $al;
-		if($qart eq '^') { $al .= " [$ar]"; }
-		printf <<EOF, encode("^$ar\$"), encode("^$newqal\$"), $al, $count;
-<tr>
- <td><a id=a href="$self?cmd=songlist&a=%s&s=%s&t=$t">%s</a>&nbsp;&nbsp;</td>
- <td>%s</td>
-</tr>
-EOF
-	}
-
-	print <<EOF;
-</table>
-EOF
-}
-
-sub print_songlist_table($@) {
+sub print_alllist_table($@) {
 	my ($dbh, $query, @val) = @_;
 	my ($output, $addall, $delete);
 
@@ -308,15 +278,13 @@ sub print_songlist_table($@) {
 		$e =~ s/ /&nbsp;/g;
 		my $tr = $_->{track} || "";
 		$tr .= "." if $tr;
-		my $esca = $_->{artist};
-		$esca =~ s/(['"<>])/sprintf "\\x%02x", ord($1)/ge;
-		$output .= sprintf <<EOF, $tr, $_->{id}, $esca, $_->{title}, $l, $e;
+		$output .= sprintf <<EOF, $_->{id}, $_->{artist}, $_->{album}, $tr, $_->{title}, $l, $e;
  <tr>
+  <td><a id=a href="$self?cmd=add&id=%d">$addtext</a></td>
+  <td>%s</td>
+  <td>%s</td>
   <td>%s&nbsp;</td>
-  <td><a id=a href="$self?cmd=add&id=%d&t=$t"
-       onMouseOver="window.status='%s';return true"
-       onMouseOut="window.status=''; return true"
-      >%s</a></td>
+  <td>%s</td>
   <td>%s</td>
   <td>%s</td>
  </tr>
@@ -324,10 +292,10 @@ EOF
 	}
 	if(@ids) {
 	$addall = sprintf <<EOF, join(",", @ids);
-   <a id=a href="$self?cmd=add&id=%s&t=$t">$addalltext</a>
+   <a id=a href="$self?cmd=add&id=%s">$addalltext</a>
 EOF
 	$delete = sprintf <<EOF, join(",", @ids);
-   <a id=a href="$self?cmd=delfiles&id=%s&t=$t" target=songlist>$delfiletext</a>
+   <a id=a href="$self?cmd=delfiles&id=%s" target=bframe>$delfiletext</a>
 EOF
 	}
 
@@ -335,13 +303,16 @@ EOF
 <table border=0 cellspacing=0>
 <caption>Artist: $val[0], Album: $val[1]</caption>
 <tr>
- <td colspan=4>$addall &nbsp;&nbsp; $delete</td>
+ <td colspan=4>$delete</td>
 </tr>
  <tr>
-  <th width=1%>#</th>
-  <th>Song</th>
-  <th width=1%>Time&nbsp;</th>
-  <th width=1%>Encoding</th>
+  <th width=$width_left>$addall</th>
+  <th width=$width_artist>Artist</th>
+  <th width=$width_album>Album</th>
+  <th width=$width_num>#</th>
+  <th width=$width_song>Song</th>
+  <th width=$width_time>Time&nbsp;</th>
+  <th width=$width_enc>Encoding</th>
  </tr>
 $output
 </table>
@@ -388,12 +359,16 @@ foreach($q->param) { $args{$_} = $q->param($_); }
 my $dbh = DBI->connect("DBI:mysql:$db_name:$db_host",$db_user,$db_pass, {mysql_client_found_rows =>1 })
 	or die "can't connect to database...$!\n";
 
-my $t = 0;#time;
-	
 my $cmd = $args{'cmd'};
 
 my $r = $refreshtime;
 my $nowplaying;
+
+if($cmd eq 'empty') {
+	printhtmlhdr;
+	print "<body $body></body>\n";
+	exit;
+}
 
 if($cmd eq 'add') {
 	add_song($dbh, split(/,/, $args{'id'}));
@@ -427,7 +402,7 @@ if($cmd eq '') {
 elsif($cmd eq 'playlist') {
 	printhtmlhdr;
 	print <<EOF;
-<META HTTP-EQUIV="Refresh" CONTENT="$r;URL=$self?cmd=playlist&s=$args{'s'}&t=$t">
+<META HTTP-EQUIV="Refresh" CONTENT="$r;URL=$self?cmd=playlist&s=$args{'s'}">
 EOF
 	printhdr($plstyle);
 	print $topwindow_title;
@@ -437,48 +412,30 @@ EOF
 }
 elsif($cmd eq 'artistlist') {
 	printhtmlhdr;
-	printhdr($alstyle);
-	print "<base target=albumlist>\n";
-	if($args{'a'}) {
-		print_artistlist_table($dbh, $args{'a'});
-	}
+	printhdr($artiststyle);
+	print "<base target=bframe>\n";
+	print_artistlist_table($dbh, $args{'a'});
 	printftr;
 }
-elsif($cmd eq 'albumlist') {
+elsif($cmd eq 'alllist') {
 	printhtmlhdr;
-	printhdr($abstyle);
-	print "<base target=songlist>\n";
-	if($args{'a'} || $args{'s'}) {
-		print_albumlist_table($dbh, $args{'a'} || "^", $args{'s'} || "^");
-	}
-	printftr;
-}
-elsif($cmd eq 'songlist') {
-	printhtmlhdr;
-	printhdr($slstyle);
-	print "<base target=playlist>\n";
-	if($args{'a'} || $args{'s'} || $args{'t'}) {
-		$args{'a'} =~ s/[^-^\$ _0-9a-z]+/.*/ig;
-		$args{'s'} =~ s/[^-^\$ _0-9a-z]+/.*/ig;
-		$args{'t'} =~ s/[^-^\$ _0-9a-z]+/.*/ig;
-		print_songlist_table($dbh, 
-			"SELECT artist,title,id,track,length,encoding" .
-			" FROM songs" .
-			" WHERE artist REGEXP ? AND album REGEXP ? AND title REGEXP ?" .
-			" ORDER BY track,title",
-			$args{'a'} || "^", $args{'s'} || "^", $args{'t'} || "^");
-	}
+	printhdr($allstyle);
+	print "<base target=tframe>\n";
+	$args{'f'} =~ /^\w*$/ or die;
+	my $v = $args{'v'};
+	$v =~ s/[^-^\$ _0-9a-z]+/.*/ig;
+	print_alllist_table($dbh, 
+		"SELECT * FROM songs WHERE $args{'f'} REGEXP ?" .
+		" ORDER BY $args{'f'},album,track,artist,title", $v);
 	printftr;
 }
 elsif($cmd eq 'recent') {
 	printhtmlhdr;
 	printhdr($slstyle);
-	print "<base target=playlist>\n";
-	print_songlist_table($dbh, 
-		"SELECT artist,title,id,track,length,encoding" .
-		" FROM songs" .
-		" ORDER BY time_added DESC" .
-		" LIMIT ?", (0 + $args{'num'}) || 40);
+	print "<base target=tframe>\n";
+	print_alllist_table($dbh, 
+		"SELECT * FROM songs ORDER BY time_added DESC LIMIT ?",
+		(0 + $args{'num'}) || 40);
 	printftr;
 }
 elsif($cmd eq 'maint') {
@@ -508,7 +465,7 @@ elsif($cmd eq 'delfiles') {
 		);
 		$filename =~ m|([^/]*)$|;
 		printf <<EOF, encode($filename), $1;
-<tr><td><a id=a href="$self?cmd=delfile&file=%s" target=albumlist>%s</a></td></tr>
+<tr><td><a id=a href="$self?cmd=delfile&file=%s" target=bframe>%s</a></td></tr>
 EOF
 	}
 	print "</table>\n";
