@@ -26,6 +26,7 @@
 
 use Cwd 'abs_path';
 use DBI;
+use Errno;
 use Getopt::Std;
 use IO::Handle;
 use IO::Socket;
@@ -95,31 +96,47 @@ sub child_reaper {
 	}
 };
 
-sub get_song_jingle() {
-	my $s = undef;
-	local *JINGLEDIR;
+BEGIN {
+	my %delete;
 
-	if($conf{jingledir} && opendir JINGLEDIR, $conf{jingledir}) {
-		foreach(sort readdir JINGLEDIR) {
-			next if /^\./;
+	sub get_song_jingle() {
+		my $s = undef;
+		local *JINGLEDIR;
 
-			warn "playing jingle $conf{jingledir}/$_\n";
+		if($conf{jingledir} && opendir JINGLEDIR, $conf{jingledir}) {
+			foreach(sort readdir JINGLEDIR) {
+				next if /^\./;
+				next if $delete{"$conf{jingledir}/$_"};
 
-			$s->{id} = -1;
-			$s->{type} = 'J';
-			$s->{filename} = "$conf{jingledir}/$_";
-			$s->{artist} = '** Jingle **';
-			$s->{album} = '';
-			$s->{track} = 0;
-			$s->{title} = $_;
-			$s->{user} = '';
-			$s->{length} = 0;
-			$s->{encoding} = '';
-			last;
+				warn "playing jingle $conf{jingledir}/$_\n";
+
+				$s->{id} = -1;
+				$s->{type} = 'J';
+				$s->{filename} = "$conf{jingledir}/$_";
+				$s->{artist} = '** Jingle **';
+				$s->{album} = '';
+				$s->{track} = 0;
+				$s->{title} = $_;
+				$s->{user} = '';
+				$s->{length} = 0;
+				$s->{encoding} = '';
+				last;
+			}
+			closedir JINGLEDIR;
 		}
-		closedir JINGLEDIR;
+		$delete{$s->{filename}} = 1 if $s;
+		return $s;
 	}
-	return $s;
+
+	sub delete_jingles() {
+		foreach(keys %delete) {
+			if(unlink $_ or $!{ENOENT}) {
+				delete $delete{$_};
+			} else {
+				warn "unlink $_: $!\n";
+			}
+		}
+	}
 }
 
 sub get_song_queued() {
@@ -667,9 +684,7 @@ EOF
 	}
 
 	# delete jingle files
-	if($song->{type} eq 'J') {
-		unlink "$song->{filename}" or warn "unlink $song->{filename}: $!\n";
-	}
+	delete_jingles();
 
 	# prevent us from eating 100% cpu time in case of misconfiguration
 	time == $starttime and $num_errors++;
