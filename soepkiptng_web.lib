@@ -1249,6 +1249,7 @@ EOF
 
 		if($s) {
 			$s =~ s/^r_(.*)/\1 DESC/;
+			if($s eq "encoding") { $s = "substring_index(encoding, '(', 1)"; }
 			$q .= " AND song.artist_id=artist.id AND song.album_id=album.id ".
 			      " AND filename LIKE ? ".
 			      " ORDER BY $s,album.name,track,artist.name,title,time_added";
