@@ -59,7 +59,7 @@ for(;; sleep 1) {
 	next if $newmtime == $mtime;
 	$mtime = $newmtime;
 	if(open F, $statusfile) {
-		$nowplaying = <F>;
+		chop($nowplaying = <F>);
 		close F;
 
 		my $query = "SELECT song.title,artist.name,album.name,song.id,song.track" .

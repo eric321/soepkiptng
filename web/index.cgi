@@ -571,8 +571,7 @@ elsif($cmd eq 'alllist') {
 	my $q = "SELECT artist.name as artist,album.name as album,song.*," .
 		"song.artist_id as arid, song.album_id as alid" .
 		" FROM song,artist,album" .
-		" WHERE song.artist_id=artist.id AND song.album_id=album.id" .
-		" AND present";
+		" WHERE present";
 	my @qa;
 	my $cap;
 	my $s = $args{'sort'};
@@ -592,10 +591,10 @@ elsif($cmd eq 'alllist') {
 		$cap = sprintf($args{'cap'}, $args{'album'});
 	}
 	if($args{'title'}) {
-		$q .= " AND title.name REGEXP ?";
+		$q .= " AND title REGEXP ?";
 		push @qa, $args{'title'};
 		$qa[$#qa] =~ s/[^-^\$_0-9a-z]+/.*/ig;
-		$s = "title.name" unless $s;
+		$s = "title" unless $s;
 		$cap = sprintf($args{'cap'}, $args{'title'});
 	}
 
