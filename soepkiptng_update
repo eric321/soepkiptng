@@ -74,9 +74,8 @@ read_eric_files();
 
 # get existing filenames in database
 if($ARGV[0]) {
-	$paths[0] = $ARGV[0];
-	$paths[0] =~ s|^([^/])|cwd . "/$1"|e;
-	$paths[0] =~ s|/\./*$||;
+	chdir $ARGV[0] or die "$ARGV[0]: $!\n";
+	@paths = (cwd);
 	$sth = $dbh->prepare("SELECT id,filename FROM songs WHERE filename LIKE ?");
 	$sth->execute("$paths[0]/%");
 } else {
