@@ -253,7 +253,7 @@ sub print_albumlist($$$$) {
 	foreach(@$albumlist) {
 		next if $_->{al_len} == -1;
 		print $sep if $_ != $albumlist->[0];
-		$_->{album} =~ /^(.?)(.*)/;
+		$_->{album} =~ /^(I+\b|IJ|.?)(.*)/;
 		printf(qq|<a id=a href="%s?cmd=alllist| .
 			qq|&artist_id=%d&album_id=%d&cap=%s"><b>%s</b>%s</a> (%d)|,
 			$req->{self}, $_->{arid}, $_->{alid},
@@ -262,7 +262,7 @@ sub print_albumlist($$$$) {
 	}
 	if($more) {
 		printf <<EOF,
-&nbsp; <a id=a href="%s?cmd=albumlist&artist_id=%d&cap=%s">[%d more...].</a>
+&nbsp; <a id=a href="%s?cmd=albumlist&artist_id=%d&cap=%s">[%d&nbsp;more...].</a>
 EOF
 			$req->{self}, $albumlist->[0]->{arid},
 			encurl("Artist: $albumlist->[0]->{artist}"), $more;
@@ -341,8 +341,11 @@ EOF
 		$killline,
 		join("", map { table_entry($req, $_, sprintf(
 			qq|<a id=a href="%s?cmd=del&ids=%s">%s</a> | .
-			qq|<a id=a href="%s?cmd=up&id=%s">%s</a>|,
-			$req->{self}, $_->{id}, $conf{deltext}, $req->{self}, $_->{id}, $conf{uptext}),
+			qq|<a id=a href="%s?cmd=up&id=%s">%s</a> | .
+			qq|<a id=a href="%s?cmd=down&id=%s">%s</a>|,
+			$req->{self}, $_->{id}, $conf{deltext},
+			$req->{self}, $_->{id}, $conf{uptext},
+			$req->{self}, $_->{id}, $conf{downtext}),
 			undef, $_->{f} eq '/'? $ids : "",
 			($conf{show_user} && $_->{user})? "<td>&nbsp;(".$_->{user}.")</td>":"")
 			} @records),
@@ -450,7 +453,8 @@ sub print_albums_row($$$$;$) {
 		return undef;
 	}
 	printf "$label$sep";
-	print_albumlist($req, $albumlist, $expand? "<br>\n" : ",&nbsp; ", !$expand);
+	print_albumlist($req, $albumlist, $expand? "<br>\n" : ",&nbsp;\n", !$expand);
+	print "\n";
 	return 1;
 }
 
@@ -567,15 +571,6 @@ EOF
 sub print_edit_page($) {
 	my ($req) = @_;
 
-	my $sth = $req->{dbh}->prepare("SELECT artist.name as artist,album.name as album," .
-		" reverse(bin(song.sets)) as setbin,song.*," .
-		" unix_timestamp(last_played) as lp," .
-		" unix_timestamp(time_added) as ta" .
-		" FROM song,artist,album WHERE song.id=$req->{args}->{id}" .
-		" AND song.artist_id=artist.id AND song.album_id=album.id");
-	$sth->execute();
-	$_ = $sth->fetchrow_hashref() or die "id $req->{args}->{id} not found.\n";
-
 	my $i = 0;
 	my @ids = ids_decode($req->{args}->{ids});
 	foreach(@ids) {
@@ -596,6 +591,27 @@ sub print_edit_page($) {
 		$next = "<input type=submit name=go_$ids[$#ids] value=Next disabled>";
 	}
 
+	my $sth = $req->{dbh}->prepare("SELECT artist.name as artist,album.name as album," .
+		" reverse(bin(song.sets)) as setbin,song.*," .
+		" unix_timestamp(last_played) as lp," .
+		" unix_timestamp(time_added) as ta" .
+		" FROM song,artist,album WHERE song.id=$req->{args}->{id}" .
+		" AND song.artist_id=artist.id AND song.album_id=album.id");
+	$sth->execute();
+	$_ = $sth->fetchrow_hashref()
+		or die sprintf <<EOF,
+id %d not found.<br>
+<form action="%s" method=get>
+ <input type=hidden name=id value="%d">
+ <input type=hidden name=cmd value=changefile>
+ <input type=hidden name=ids value="%s">
+
+%s %s</form>
+EOF
+			$req->{args}->{id}, $req->{self},
+			$req->{args}->{id}, $req->{args}->{ids},
+			$prev, $next;
+
 	my $f = $_->{filename};
 	my ($dir, $file);
 	if($f =~ m|^(/.*)/(.*?)$|) {
@@ -603,10 +619,11 @@ sub print_edit_page($) {
 		($dir, $dir2, $file) = ($1, $1, $2);
 		$dir2 =~ s/ /_/g;
 		$dir2 =~ s/\\/\\\\/g;
-		$dir = sprintf qq|<a href="%s?cmd=alllist&sort=artist&filename=%s">$dir</a>|,
+		$dir = sprintf qq|<a href="%s?cmd=alllist&sort=artist&filename=%s">%s</a>|,
 			$req->{self}, encurl($dir2), enchtml($dir);
-		$file = sprintf qq|<a href="%s/%s?cmd=download&id=%d">%s</a>|,
-			$req->{self}, encurl($file), $req->{args}->{id}, enchtml($file);
+		(my $furl = $req->{self} . "/" . encurl($file)) =~ s|//+|/|g;
+		$file = sprintf qq|<a href="%s?cmd=download&id=%d">%s</a>|,
+			$furl, $req->{args}->{id}, enchtml($file);
 	} else {
 		$file = enchtml($f);
 		$dir = "";
@@ -955,7 +972,7 @@ sub print_lyrics_page($) {
 	}
 
 	printf <<EOF,
-<form action="%s" method=get>
+<form action="%s" method=post>
  <input type=hidden name=id value="%d">
  <input type=hidden name=cmd value=lyrics>
  <input type=hidden name=update value=1>
@@ -975,7 +992,7 @@ sub print_lyrics_page($) {
   <td>Language:</td>
   <td><select name=language>%s</select></td></tr>
  </tr>
- <tr><td colspan=2><textarea name=lyrics cols=80 rows=%d>%s</textarea></td></tr>
+ <tr><td colspan=2><textarea name=lyrics cols=90 rows=%d>%s</textarea></td></tr>
  <tr>
   <td colspan=2>%s %s
    <input type=submit name=action_update value="Update">
@@ -992,7 +1009,7 @@ sub print_lyrics_page($) {
  <tr>
   <td colspan=2>
    <form action="%s" method=get target=_blank>
-    <input type=submit name=action_google value="Google for lyrics">
+    <input type=submit value="Google for lyrics">
     <input type=hidden name=id value="%d">
     <input type=hidden name=cmd value=googlelyrics>
    </form>
@@ -1271,6 +1288,11 @@ sub handle_request($) {
 	}
 	elsif($cmd eq 'up') {
 		foreach(reverse split /,/, $args{id}) { move_song_to_top($req->{dbh}, $_); }
+	 	printredir($req, 'playlist', undef);
+		return;
+	}
+	elsif($cmd eq 'down') {
+		foreach(reverse split /,/, $args{id}) { move_song_to_bottom($req->{dbh}, $_); }
 	 	printredir($req, 'playlist', undef);
 		return;
 	}
@@ -1619,17 +1641,23 @@ EOF
 
 		if($args{sql}) {
 			if($args{limit} == 0) {
-				my ($count) = $req->{dbh}->selectrow_array("SELECT COUNT(*)".
-					" FROM song,artist,album WHERE present " .
-					" AND song.artist_id=artist.id AND song.album_id=album.id AND " .
+				my ($count) = $req->{dbh}->selectrow_array("SELECT COUNT(*) ".
+					"FROM song " .
+					"LEFT JOIN artist ON artist.id=song.artist_id " .
+					"LEFT JOIN album ON album.id=song.album_id " .
+					"LEFT JOIN lyrics ON lyrics.id=song.id " .
+					"WHERE present AND " .
 					$args{sql});
 				print "Count: $count\n";
 			} else {
 				print_alllist_table($req, \%session, "User SQL-query",
 					"SELECT artist.name as artist,album.name as album,song.*," .
-					"song.artist_id as arid, song.album_id as alid" .
-					" FROM song,artist,album WHERE present " .
-					" AND song.artist_id=artist.id AND song.album_id=album.id AND " .
+					"song.artist_id as arid, song.album_id as alid " .
+					"FROM song " .
+					"LEFT JOIN artist ON artist.id=song.artist_id " .
+					"LEFT JOIN album ON album.id=song.album_id " .
+					"LEFT JOIN lyrics ON lyrics.id=song.id " .
+					"WHERE present AND " .
 					$args{sql} . " LIMIT $args{limit}");
 			}
 		}
