@@ -53,7 +53,7 @@ use DBI;
 use MP3::Tag;
 #use Data::Dumper;
 
-use vars qw/$opt_r $opt_h $opt_q/;
+use vars qw/$opt_r $opt_h $opt_q $opt_t/;
 
 %latin1_to_ascii = (
 	192 => "A", 193 => "A", 194 => "A", 195 => "A", 196 => "A", 197 => "A",
@@ -190,7 +190,8 @@ sub do_mp3($$) {
 		$buf =~ /^TAG/ or last;
 		warn "$f: removed ID3 tag\n";
 		seek F, -128, 2;
-		truncate F, tell F or warn "truncate $f: $!\n";
+		truncate F, tell F or warn "truncate $f: $!\n"
+			unless $opt_t;
 	}
 	close F;
 
@@ -206,7 +207,8 @@ sub do_mp3($$) {
 		$newtag->add_frame('TRCK', $tr) if $tr;
 		$newtag->add_frame('TLEN', 1000 * $len) if $len;
 		warn "$f: updating ID3v2 tag\n";
-		$newtag->write_tag();
+		$newtag->write_tag()
+			unless $opt_t;
 	}
 
 	if($opt_r) {
@@ -254,12 +256,17 @@ sub do_ogg($$) {
 }
 
 
-getopts('rhq');
+getopts('rhqt');
 
 ($prog = $0) =~ s|.*/||;
 if($opt_h || !@ARGV) {
 	print <<EOF;
-Usage: $prog [-r] mp3files...
+Usage: $prog [-qrt] mp3files...
+
+Options:
+       -r : rename files.
+       -q : don't warn about partial/failed filename matches.
+       -t : testmode, don't actually write any tags.
 
 $prog reads Artist/Title/Album/Track info from the SoepkipTNG
 database and writes it to the specified files using ID3v2 (unless the files
