@@ -14,11 +14,13 @@ static char rcsid[] = "$Id$";
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <sys/resource.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <sys/ioctl.h>
 #include <linux/soundcard.h>
 
 #define BLKSIZE 4096
@@ -37,6 +39,14 @@ void perr(char *s)
 	exit(1);
 }
 
+int ischardev(int fd)
+{
+	struct stat st;
+	
+	if(fstat(fd, &st) == -1) return 0;
+	return S_ISCHR(st.st_mode);
+}
+
 void sighandler(int s)
 {
 	if(pid1) kill(pid1, s);
@@ -44,7 +54,7 @@ void sighandler(int s)
 		short buf[2];
 
 		signal(SIGINT, sighandler);
-		ioctl(fd2, SNDCTL_DSP_SYNC, 0);
+		ioctl(fd2, SNDCTL_DSP_RESET, 0); 
 		buf[0] = buf[1] = 0;
 		write(fd2, buf, sizeof(buf));
 		pos = len = maywrite = 0;
@@ -101,7 +111,7 @@ Usage:   cdrplay [-dvMR] [-b bufsize_kb] [-k n] [-D file] [command args...]\n\
 \n\
          -b bufsize_kb   : set buffer size\n\
          -d              : enable debugging output\n\
-         -k n            : skip first n bytes (only works on seekable files)\n\
+         -k n            : skip first n bytes (works only on seekable files)\n\
          -v              : verbose status output\n\
          -D file         : send output to file instead of /dev/dsp\n\
          -M              : disable use of mlockall(2)\n\
@@ -112,12 +122,13 @@ Usage:   cdrplay [-dvMR] [-b bufsize_kb] [-k n] [-D file] [command args...]\n\
 int main(int argc, char **argv)
 {
 	char *buf, *p, c;
-	int bufsize, l, minlen = 0, status, i, r, w, iseek = 0;
+	int bufsize, l, minlen = 0, status, i, r, w, iseek = 0, retval;
 	int maxfd;
 	fd_set rfds, wfds;
 	int debug = 0, do_mlockall = 1, verbose = 0;
 	time_t starttime = 0;
 	char *snddev = "/dev/dsp";
+	int s_minflt = 0, s_majflt = 0, s_nswap = 0, s_nivcsw = 0;
 
 	bufsize = 500 * 1024;
 	while((c = getopt(argc, argv, "+b:dhk:vD:RM")) != EOF) {
@@ -166,13 +177,16 @@ int main(int argc, char **argv)
 
 	fd2 = open(snddev, O_WRONLY | O_CREAT | O_TRUNC, 0666);
 	if(fd2 < 0) { perror(snddev); exit(1); }
-	ioctl(fd2, SNDCTL_DSP_SYNC, 0);
+
+	retval = ioctl(fd2, SNDCTL_DSP_SYNC, 0);
 	i = 44100;
-	ioctl(fd2, SNDCTL_DSP_SPEED, &i);
+	if(retval != -1) retval = ioctl(fd2, SNDCTL_DSP_SPEED, &i);
 	i = AFMT_S16_LE;
-	ioctl(fd2, SNDCTL_DSP_SETFMT, &i);
+	if(retval != -1) retval = ioctl(fd2, SNDCTL_DSP_SETFMT, &i);
 	i = 1;
-	ioctl(fd2, SNDCTL_DSP_STEREO, &i);
+	if(retval != -1) retval = ioctl(fd2, SNDCTL_DSP_STEREO, &i);
+
+	if(retval == -1 && ischardev(fd2)) fprintf(stderr, "warning: sound ioctls failed\n");
 	
 	maxfd = fd1 > fd2? fd1 : fd2;
 	
@@ -197,7 +211,9 @@ int main(int argc, char **argv)
 			perc = 100 * len / bufsize;
 			
 			if(t != displayed_t || perc != displayed_perc) {
-				printf("time [%02u:%02u] fill %d%%      \r", t / 60, t % 60, perc);
+				printf(" [%02u:%02u]", t / 60, t % 60);
+				if(perc <= 90) printf(" fill %d%%", perc);
+				printf("               \r");
 				fflush(stdout);
 				displayed_t = t;
 				displayed_perc = perc;
@@ -209,7 +225,7 @@ int main(int argc, char **argv)
 		if((!mayread || len == bufsize) && !maywrite) {  /* off we go! */
 			if(do_realtime) {
 				struct sched_param sp;
-			
+
 				sp.sched_priority = 3;
 				if(sched_setscheduler(getpid(), SCHED_FIFO, &sp) < 0)
 					perror("sched_setscheduler");
@@ -221,10 +237,25 @@ int main(int argc, char **argv)
 				}
 			}
 
+			/* don't let verbose/debug output block the audio output */
+			fcntl(1, F_SETFL, O_NONBLOCK);
+
 			maywrite = 1;
 			minlen = len;
 			time(&starttime);
+
+			if(debug) {			
+				struct rusage ru;
+			
+				getrusage(RUSAGE_SELF, &ru);
+				s_minflt = ru.ru_minflt;
+				s_majflt = ru.ru_majflt;
+				s_nswap = ru.ru_nswap;
+				s_nivcsw = ru.ru_nivcsw;
+			}
 		}
+		/* flush data in soundcard driver if we are out of data */
+		if(maywrite && len == 0) ioctl(fd2, SNDCTL_DSP_POST, 0);
 
 		FD_ZERO(&rfds);
 		if(mayread && len < bufsize) FD_SET(fd1, &rfds);
@@ -254,9 +285,13 @@ int main(int argc, char **argv)
 		if(FD_ISSET(fd1, &rfds)) {
 			p = buf + (pos + len) % bufsize;
 			l = (bufsize - len) < BLKSIZE? (bufsize - len) : BLKSIZE;
-			while((w = read(fd1, p, l)) == -1 && errno == EINTR) ;
-			if(w == -1 && errno != EAGAIN) { perror("read"); break; }
-			if(w == 0) mayread = 0;
+			w = read(fd1, p, l);
+			if(w == -1) {
+				if(errno == EINTR) continue;
+				perror("read");
+				break;
+			}
+			if(w == 0) mayread = 0; /* end-of-file */
 			if(w > 0) len += w;
 		}
 	}
@@ -265,15 +300,26 @@ int main(int argc, char **argv)
 	buf[0] = buf[1] = buf[2] = buf[3] = 0;
 	write(fd2, buf, 4);
 	close(fd2);
+
+	if(debug) {			
+		struct rusage ru;
+			
+		getrusage(RUSAGE_SELF, &ru);
+		printf("minflt=%ld, majflt=%ld, nswap=%ld, nivcsw=%ld\n",
+			 ru.ru_minflt - s_minflt,
+			ru.ru_majflt - s_majflt,
+			ru.ru_nswap - s_nswap,
+			ru.ru_nivcsw - s_nivcsw);
+	}
 	
 	if(pid1) {
 		waitpid(pid1, &status, 0);
 		if(WIFSIGNALED(status)) {
-			fprintf(stderr,"cmd1 killed by signal %d.\n", WTERMSIG(status));
+			fprintf(stderr,"command killed by signal %d.\n", WTERMSIG(status));
 			exit(1);
 		}
 		if(WIFEXITED(status) && WEXITSTATUS(status) != 0) {
-			fprintf(stderr,"cmd1 exited with error code %d.\n", WEXITSTATUS(status));
+			fprintf(stderr,"command exited with error code %d.\n", WEXITSTATUS(status));
 			exit(1);
 		}
 	}
