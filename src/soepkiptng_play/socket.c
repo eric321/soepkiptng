@@ -10,10 +10,13 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
+#include "buffer.h"
 #include "debug.h"              
 #include "polllib.h"
 #include "socket.h"
 #include "output_oss.h"
+
+static int waitbufferempty;
 
 struct socket_t {
 	char inbuf[256];
@@ -73,13 +76,8 @@ static void handle_cmd(int fd, struct socket_t *p, char *s)
 		}
 	}
 
-	else if(strcasecmp(cmd, "pause0") == 0) {
-		if(output_oss_running()) {
-			sockprintf(p, "+OK\n");
-			output_oss_stop0();
-		} else {
-			sockprintf(p, "-Not running\n");
-		}
+	else if(strcasecmp(cmd, "waitbufferempty") == 0) {
+		waitbufferempty = 1;
 	}
 
 	else if(strcasecmp(cmd, "resume") == 0) {
@@ -112,6 +110,15 @@ static void handle_cmd(int fd, struct socket_t *p, char *s)
 static void socket_pre(int fd, long cookie)
 {
 	struct socket_t *p = (struct socket_t *)cookie;
+
+	if(waitbufferempty) {
+		if(buffer_length == 0) {
+			sockprintf(p, "+OK\n");
+			waitbufferempty = 0;
+		} else {
+			return;
+		}
+	}
 
 	if(p->outlen > 0) {
 		set_fd_mask(fd, POLLOUT);
