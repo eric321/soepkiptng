@@ -366,7 +366,9 @@ sub print_alllist_table($$$$@) {
 		or die "can't do sql command: " . $dbh->errstr . "\n";
 	my @ids;
 	my %artistids;
+	my $numresults = 1;
 	while($_ = $sth->fetchrow_hashref) {
+		$numresults++;
 		push @ids, $_->{id};
 		$artistids{$_->{arid}}++;
 		my $l = sprintf "%d:%02d", $_->{length} / 60, $_->{length} % 60;
@@ -472,6 +474,7 @@ EOF
  </tr>
  <tr><td colspan=7></td></tr>
 $output
+<tr><td colspan=8>$numresults search results.</td></tr>
 </table>
 EOF
 }
@@ -492,6 +495,9 @@ sub print_edit_page($$) {
 <!--
 function verifydelete() {
    return confirm("Are you sure you want to delete this file?");
+}
+function closethis() {
+   window.close(self);
 }
 // -->
 </script>
@@ -554,8 +560,8 @@ EOF
   </td></tr>
   <tr><td>&nbsp;</td></tr>
   <tr><td>
-   <form action="javascript:window.close()">
-    <input type=submit value="Close">
+   <form>
+    <input type=submit value="Close" onClick="javascript:window.close();">
    </form>
   </td></tr>
 </table>
