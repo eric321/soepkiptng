@@ -20,6 +20,11 @@ if(@ARGV) {
 
 use FreeDB::FreeDB;
 
+# in case FreeDB has more than 1 match
+if(open(STDIN, "-|") == 0) {
+	print "1\n";
+	exit;
+}
 # shut up FreeDB
 open STDERR, ">/dev/null";
 
