@@ -29,7 +29,7 @@ static void initsock(struct socket_t *p)
 	p->inlen = 0;
 
 	p->outoff = 0;
-	p->outlen = sprintf(p->outbuf, "welkom; zeg na\n");
+	p->outlen = sprintf(p->outbuf, "+This is soepkiptng_play.\n");
 }
 
 static void closesock(int fd, struct socket_t *p)
