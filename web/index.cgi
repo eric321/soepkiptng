@@ -267,7 +267,7 @@ sub albumlist_entry($) {
 
 sub print_playlist_table($) {
 	my ($dbh) = @_;
-	my ($nowplaying, $nowfile, $nowtype, $nowuser, $newtitle);
+	my ($nowplaying, $nowfile, $nowtype, $nowuser);
 	my $killline;
 
 	$query =  "SELECT title,artist.name as artist,album.name as album," .
@@ -285,12 +285,6 @@ sub print_playlist_table($) {
 		push @records, $_;
 	}
 	my $fmt = <<EOF;
-<script language="Javascript">
-<!--
-parent.document.title="%s";
-// -->
-</script>
-
 <table border=0 cellspacing=0>
  <tr>
   <th %s>&nbsp;%s&nbsp;</th>
@@ -351,16 +345,22 @@ EOF
 			$self, $_->{id}, $killtext), undef,
 			ids_encode(@ids), ($show_user && $nowuser)? "<td>&nbsp;($nowuser)</td>":"");
 
-		my $alb = $_->{album};
-		if($alb && $_->{track}) { $alb .= "/$_->{track}"; }
-		if($alb) { $alb = " [$alb]"; }
-		$newtitle = "$_->{artist} - $_->{title}$alb";
-	} else {
-		$newtitle = $title;
+		if($title_song) {
+			my $alb = $_->{album};
+			if($alb && $_->{track}) { $alb .= "/$_->{track}"; }
+			if($alb) { $alb = " [$alb]"; }
+			printf <<EOF, enchtml("$_->{artist} - $_->{title}$alb");
+<script language="Javascript">
+<!--
+  parent.document.title="%s";
+// -->
+</script>
+EOF
+		}
 	}
 
 	my $ids = ids_encode(@ids);
-	printf $fmt, enchtml($newtitle),
+	printf $fmt,
 		$th_left, @ids? sprintf(qq|<a id=a href="%s?cmd=del&ids=%s">| .
 			qq|$delalltext</a>|, $self, ids_encode(@ids)) : "",
 		$th_artist,
@@ -447,6 +447,13 @@ EOF
 	}
 	my $ids = ids_encode(@ids);
 
+	my $baseurl = "$self?";
+	foreach(keys %$argsref) {
+		next if $_ eq "cmd";
+		next if /^add_/;
+		$baseurl .= "$_=" . encurl($$argsref{$_}) . "&";
+	}
+
 	my %artistids;
 	foreach $id (@ids) {
 		$_ = $records{$id};
@@ -463,12 +470,6 @@ EOF
 				"Song", $_->{id},
 				"Artist", $_->{arid},
 				"Album", $_->{alid}) < 1) {
-				my $baseurl = "$self?";
-				foreach(keys %$argsref) {
-					next if $_ eq "cmd";
-					next if /^add_/;
-					$baseurl .= "$_=" . encurl($$argsref{$_}) . "&";
-				}
 				$listch = <<EOF;
 &nbsp;<a href="${baseurl}cmd=addtolist&add_list=$el&add_type=song&add_id=$_->{id}" target=bframe>+</a>
 EOF
@@ -481,19 +482,43 @@ EOF
 	}
 
 	if(scalar keys %artistids == 1) {
-		my @al;
-
 		my $query = "SELECT DISTINCT album.name as album, artist.name as artist," .
 			" count(*) as c, song.artist_id as arid, song.album_id as alid " .
 			" FROM song,artist,album WHERE present AND song.artist_id = ?".
 			" AND song.artist_id=artist.id AND song.album_id=album.id".
-			" GROUP BY album_id ORDER BY album.name";
+			" GROUP BY album ORDER BY album";
 		my $sth = $dbh->prepare($query);
 		my $rv = $sth->execute(keys %artistids);
+		my %al;
+		my @alids;
+		my $al_len_tot = 0;
+		my %al_len;
 		while($_ = $sth->fetchrow_hashref()) {
-			push @al, albumlist_entry($_);
+			push @alids, $_->{alid};
+			$al{$_->{alid}} = albumlist_entry($_);
+			$al_len_tot += $al_len{$_->{alid}} = length($_->{album});
 		}
-		printf "Albums: %s.\n", join(",&nbsp; ", @al);
+		if($albumlist_length_threshold == 0 ||
+		   $al_len_tot < $albumlist_length_threshold ||
+		   $$argsref{'expanded_albumlist'}) {
+			printf "Albums: %s.\n", join(",&nbsp; ",
+				map { $al{$_} } @alids);
+		} else {
+			my $len_left = $albumlist_length_threshold;
+			my %alids_shortlist;
+			foreach(sort { $al_len{$a} <=> $al_len{$b} } @alids) {
+				last if $al_len{$_} > $len_left;
+				$len_left -= $al_len{$_};
+				$alids_shortlist{$_} = 1;
+			}
+			my @alids2 = grep { $alids_shortlist{$_} } @alids;
+			printf "Albums: %s", join(",&nbsp; ",
+				map { $al{$_} } @alids2);
+			
+			printf <<EOF, $baseurl, $$argsref{'cmd'}, $#alids - $#alids2;
+&nbsp; <a id=a href="%scmd=%s&expanded_albumlist=1">[%d more...].</a>
+EOF
+		}
 	}
 
 	print "<table border=0 cellspacing=0>\n";
@@ -589,7 +614,7 @@ function closethis() {
      <input type=submit name=action_all_album value="Set Entire List"
       onClick="return verifyall();">
   </td></tr>
-  <tr><td>Track:</td> <td><input type=text size=3 name=track  value="%s" maxlength=2></td></tr>
+  <tr><td>Track:</td> <td><input type=text size=3 name=track  value="%s" maxlength=3></td></tr>
   <tr><td>Time:</td>  <td>%d:%02d</td></tr>
   <tr><td>Encoding:</td>        <td>%s</td></tr>
   <tr><td>Time Added:</td><td>%s</td></tr>
