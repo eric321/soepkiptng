@@ -1,0 +1,144 @@
+#!/usr/bin/perl
+
+############################################################################
+# soepkiptng (c) copyright 2000 Eric Lammerts <eric@lammerts.org>.
+# $Id$
+############################################################################
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# A copy of the GNU General Public License is available on the World Wide Web
+# at `http://www.gnu.org/copyleft/gpl.html'.  You can also obtain it by
+# writing to the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+# Boston, MA 02111-1307, USA.
+############################################################################
+
+# CONFIG
+
+$bitrate = 192;
+
+my $progdir;
+BEGIN {
+	use Cwd qw'cwd abs_path';
+
+	# find program directory
+	$_ = $0;
+	while(-l) {
+		my $l = readlink or die "readlink $_: $!\n";
+		if($l =~ m|^/|) { $_ = $l; } else { s|[^/]*$|/$l|; }
+	}
+	m|(.*)/|;
+	$progdir = abs_path($1);
+
+	unshift @INC, "$progdir/lib";
+}
+use Getopt::Std;
+use DBI;
+use MP3::Tag;
+
+require "$progdir/soepkiptng.lib";
+
+$ENV{PATH} = "$progdir/bin:$ENV{PATH}";
+use lib "$progdir/lib";
+
+getopts('dc:p:b:h');
+
+$opt_h and die <<EOF;
+
+Usage: flac2ogg [-d] [-p flac_binary] [-b bitrate] [-c configfile] file...
+
+-d            : delete original after successful conversion
+-b bitrate    : kbitrate to encode to (default 192)
+-c configfile : override soepkiptng config file
+
+EOF
+
+read_configfile(\%conf, $opt_c);
+
+$bitrate = $opt_b || 192;
+$flac = $opt_p || "flac";
+$cwd = cwd;
+
+$| = 1;
+
+$dbh = DBI->connect("DBI:$conf{'db_type'}:$conf{'db_name'}:$conf{'db_host'}",
+	$conf{'db_user'}, $conf{'db_pass'})
+	or die "can't connect to database";
+
+foreach $flacfile (@ARGV) {
+	next if -d $flacfile;
+
+	if($flacfile !~ m|^/|) { $flacfile = "$cwd/$flacfile"; }
+	$flacfile =~ s!(^|/)(\./)+!\1!g;
+
+	$q = "SELECT title,artist.name,album.name,track" .
+	     " FROM song,artist,album" .
+	     " WHERE song.artist_id=artist.id AND song.album_id=album.id" .
+	     " AND present AND filename=?";
+	$sth = $dbh->prepare($q);
+	$sth->execute($flacfile)
+		or die "can't do sql command: " . $dbh->errstr;
+
+	my ($ti, $ar, $al, $tr) = $sth->fetchrow_array or do {
+		warn "$flacfile: not found in dbase\n";
+	};
+
+	my $oggfile = $flacfile;
+	$oggfile =~ s|.*/||;
+	$oggfile =~ s/\.\w+//;
+	$oggfile .= ".ogg";
+
+	if(-e $oggfile) {
+		warn "$oggfile exists, skipping.\n";
+		next;
+	}
+
+	my @oggcmd = ('oggenc', '-r', '-b', $bitrate, '-o', "$oggfile.tmp");
+	if($ti) { push @oggcmd, "-t", $ti; }
+	if($ar) { push @oggcmd, "-a", $ar; }
+	if($al) { push @oggcmd, "-l", $al; }
+	if($tr) { push @oggcmd, "-N", $tr; }
+
+	if(open(STDIN, "-|") == 0) {
+		exec $flac, qw/-sdc --endian=little --sign=signed --force-raw-format/,
+			$flacfile;
+	}
+
+	system @oggcmd, '-';
+
+	if($?) {
+		warn "$flacfile: oggenc failed.\n";
+		close STDIN;
+		unlink "$oggfile.tmp" or warn "delete $oggfile.tmp: $!\n";
+                if(($? & 0x7f) == 2) { die "aborted.\n"; }
+		next;
+	}
+	close STDIN;
+	if($?) {
+		warn "$flacfile: $flac -d failed.\n";
+		unlink "$oggfile.tmp" or warn "delete $oggfile.tmp: $!\n";
+                if(($? & 0x7f) == 2) { die "aborted.\n"; }
+		next;
+	}
+
+	if(-e $oggfile) {
+		warn "$oggfile exists, skipping.\n";
+		unlink "$oggfile.tmp" or warn "delete $oggfile.tmp: $!\n"; 
+		next;
+	}
+	rename "$oggfile.tmp", $oggfile or do {
+		warn "rename $oggfile.tmp -> $oggfile: $!\n";
+		unlink "$oggfile.tmp" or warn "delete $oggfile.tmp: $!\n"; 
+		next;
+	};
+	if($opt_d) {
+		unlink $flacfile or warn "unlink $flacfile: $!\n";
+	}
+}
