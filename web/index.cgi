@@ -599,7 +599,7 @@ EOF
 sub printredirexit($$$) {
 	my ($q, $cmd, $argsref) = @_;
 	$$argsref{'cmd'} = $cmd;
- 	print $q->redirect(construct_url($q->url(-relative=>1), $argsref));
+ 	print $q->redirect(construct_url($q->url(-full=>1), $argsref));
 	exit;
 }
 
@@ -607,7 +607,7 @@ sub printredirexit($$$) {
 # MAIN
 
 my $q = new CGI;
-$self = $q->url(-relative=>1);
+$self = $q->url(-absolute=>1);
 my %args;
 foreach($q->param) { $args{$_} = $q->param($_); }
 
