@@ -4,7 +4,7 @@
 CC=gcc
 CFLAGS=-O2 -Wall
 LDFLAGS=-s
-DSTDIR=/usr/local/bin
+DSTDIR=../../bin
 
 SRC=buffer.c debug.c input.c output_oss.c polllib.c \
 	realtime.c signals.c socket.c soepkiptng_play.c
