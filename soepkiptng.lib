@@ -83,8 +83,21 @@ sub shuffle_queue($) {
 	$db->do("UNLOCK TABLES");
 }
 
-
 sub kill_song() {
+	if($kill_song_external) {
+		system $kill_song_external;
+
+		open F, $statusfile
+			or die "$statusfile: $!\n";
+		my @lines;
+		chop(@lines = <F>);
+		close F;
+		return @lines;
+	}
+	return kill_song_internal();
+}
+
+sub kill_song_internal() {
 	local *F;
 
 	open F, $statusfile

@@ -265,10 +265,6 @@ EOF
 		undef $killsock_conn;
 	}
 
-	# get file type
-	$filename =~ /([^.]*)$/;
-	$ext = lc($1);
-
 	# launch player
 	$starttime = time;
 	if($debug) {
@@ -337,6 +333,7 @@ sub logprintf($@) {
 
 sub start_play($) {
 	my ($filename) = @_;
+
 	if(($pid = fork) == 0) {
 		# damn! a race condition occurs: the program can terminate and
 		# SIGCHLD be delivered to the parent _before_ $pid was set!
@@ -345,6 +342,11 @@ sub start_play($) {
 
 		$SIG{'PIPE'} = 'DEFAULT';
 		setpgrp;
+
+		# get file type
+		$filename =~ /([^.]*)$/;
+		my $ext = lc($1);
+
 		if($ext eq "mp2" || $ext eq "mp3") {
 			exec "mp3toraw", $filename;
 		} elsif($ext eq "ogg") {
