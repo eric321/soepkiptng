@@ -285,8 +285,8 @@ EOF
 EOF
 }
 
-sub print_alllist_table($@) {
-	my ($dbh, $caption, $query, @val) = @_;
+sub print_alllist_table($$@) {
+	my ($dbh, $caption, $url, $query, @val) = @_;
 	my ($output, $addall);
 
 	my $sth = $dbh->prepare($query);
@@ -555,33 +555,39 @@ elsif($cmd eq 'alllist') {
 		$q .= " AND artist REGEXP ?";
 		push @qa, $args{'artist'};
 		$qa[$#qa] =~ s/[^-^\$_0-9a-z]+/.*/ig;
-		$order = "artist";
+		$args{'sort'} = "artist" unless $args{'sort'};
 		$cap = sprintf($args{'cap'}, $args{'artist'});
 	}
 	if($args{'album'}) {
 		$q .= " AND album REGEXP ?";
 		push @qa, $args{'album'};
 		$qa[$#qa] =~ s/[^-^\$_0-9a-z]+/.*/ig;
-		$order = "album";
+		$args{'sort'} = "album" unless $args{'sort'};
 		$cap = sprintf($args{'cap'}, $args{'album'});
 	}
 	if($args{'title'}) {
 		$q .= " AND title REGEXP ?";
 		push @qa, $args{'title'};
 		$qa[$#qa] =~ s/[^-^\$_0-9a-z]+/.*/ig;
-		$order = "title";
+		$args{'sort'} = "title" unless $args{'sort'};
 		$cap = sprintf($args{'cap'}, $args{'title'});
 	}
-	$q .= " ORDER BY $order,album,track,artist,title";
-	print_alllist_table($dbh, $cap, $q, @qa);
+	$q .= " ORDER BY ?,album,track,artist,title";
+	my @args;
+	foreach(keys %args) { push @args, "$_=" . $args{$_}; }
+	print_alllist_table($dbh, $cap, "$self?" . join("&", @args),
+		$q, @qa, $args{'sort'});
 	printftr;
 }
 elsif($cmd eq 'recent') {
 	printhtmlhdr;
 	printhdr($allstyle);
 	my $n = (0 + $args{'num'}) || 40;
-	print_alllist_table($dbh, "Most recent $n songs",
-		"SELECT * FROM songs WHERE present ORDER BY time_added DESC LIMIT ?", $n);
+	my $s = $args{'sort'} || "time_added";
+	delete $args{'sort'};
+	print_alllist_table($dbh, "Most recent $n songs", "$self?cmd=recent&num=$n",
+		"SELECT * FROM songs WHERE present ORDER BY ? DESC LIMIT ?",
+		$s, $n);
 	printftr;
 }
 elsif($cmd eq 'maint') {
