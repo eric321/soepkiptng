@@ -1195,10 +1195,12 @@ sub delete_file($$) {
 }
 
 sub get_user($) {
-	my ($req) = @_;
+	my ($host) = @_;
 	my $user = '';
 
-	$host = get_host($req);
+	if($host =~ /^\d+\.\d+\.\d+\.\d+$/) {
+		$host = gethostbyaddr(inet_aton($host), AF_INET) || $host;
+	}
 	if($host) {
 		$host =~ /^([-a-z0-9]*)/;
 		$user = $conf{"user_from_$1"} || $conf{"user_from_$host"} || $host;
@@ -1207,7 +1209,7 @@ sub get_user($) {
 }
 
 sub handle_request($$$$) {
-	my ($dbh, $cgiquery, $self, $r) = @_;
+	my ($dbh, $cgiquery, $self, $host) = @_;
 	my $pathinfo = $cgiquery->path_info();
 
 	my %args;
@@ -1232,7 +1234,7 @@ sub handle_request($$$$) {
 	}
 
 	if($cmd eq 'add') {
-		add_song($dbh, get_user($r), ids_decode($args{ids}));
+		add_song($dbh, get_user($host), ids_decode($args{ids}));
 	 	printredir($cgiquery, $self, 'playlist', undef);
 		return;
 	}
@@ -1247,12 +1249,12 @@ sub handle_request($$$$) {
 		return;
 	}
 	elsif($cmd eq 'kill') {
-		kill_song(get_user($r));
+		kill_song(get_user($host));
 	 	printredir($cgiquery, $self, 'playlist', undef);
 		return;
 	}
 	elsif($cmd eq 'addnext') {
-		add_song_next($dbh, $args{id}, get_user($r));
+		add_song_next($dbh, $args{id}, get_user($host));
 		printredir($cgiquery, $self, 'playlist', undef);
 		return;
 	}

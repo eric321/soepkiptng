@@ -48,12 +48,6 @@ my $cgiquery;
 ############################################################################
 # SUBROUTINES
 
-sub get_host($) {
-	my ($req) = @_;
-
-	return scalar gethostbyaddr($req->peeraddr, AF_INET);
-}
-
 sub printhttphdr() {
 	print $cgiquery->header(-type=>"text/html; charset=ISO-8859-15");
 }
@@ -103,7 +97,7 @@ sub run_instance() {
 		}
 		$cgiquery = new CGI($content);
 		open STDOUT, ">&=" . $conn->fileno;
-		handle_request($dbh, $cgiquery, "/", $conn);
+		handle_request($dbh, $cgiquery, "/", inet_ntoa($conn->peeraddr));
 		close STDOUT;
 		$conn = undef;
 	}

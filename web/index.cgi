@@ -37,17 +37,6 @@ BEGIN {
 ############################################################################
 # SUBROUTINES
 
-sub get_host($) {
-	my ($req) = @_;
-
-	my $host = $req->header_in('X-Forwarded-For')
-		|| $req->get_remote_host();
-	if($host =~ /^\d+\.\d+\.\d+\.\d+$/) {
-		$host = gethostbyaddr(inet_aton($host), AF_INET) || $host;
-	}
-	return $host;
-}
-
 sub printhttphdr() {
 	my $r = Apache->request;
 	$r->content_type("text/html; charset=ISO-8859-15");
@@ -80,8 +69,8 @@ my $cgiquery = new CGI;
 
 my $r = Apache->request;
 $r->no_cache(1);
-my $self = $cgiquery->script_name();
-handle_request($dbh, $cgiquery, $self, $r);
+handle_request($dbh, $cgiquery, $cgiquery->script_name(),
+	$r->header_in('X-Forwarded-For') || $r->get_remote_host());
 
 untie %session;
 
