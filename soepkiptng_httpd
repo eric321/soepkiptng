@@ -120,6 +120,12 @@ sub run_instance() {
 	for($i = 0; $i < $lifetime; $i++) {
 		$conn = $daemon->accept or die "accept: $!\n";
 		reloadlib();
+		if(!$dbh->ping) {
+			$dbh->disconnect;
+			$dbh = DBI->connect("DBI:$conf{db_type}:$conf{db_name}:$conf{db_host}",
+			        $conf{db_user}, $conf{db_pass}) or die "can't connect to database";
+		}
+
 		my $r = $conn->get_request or next;
 		warn "\n=====pid$$->$i===== r->uri=[" . $r->uri . "]===\n";
 		my $content;
