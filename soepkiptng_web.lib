@@ -894,8 +894,8 @@ sub print_lyrics_page($$) {
 		if($_->{lyrics} eq "") {
 			$downloaded .= "No lyrics found";
 		} else {
-			$downloaded .= sprintf "Downloaded lyrics from <a href=\"%s\">%s</a>%s",
-				$_->{source}, enchtml($_->{source}), $try > 1? $try : "";
+			$downloaded .= sprintf "Downloaded lyrics from <a href=\"%s\">%s</a>",
+				$_->{source}, enchtml($_->{source});
 		}
 		$downloaded .= ")</b></td></tr>";
 	}
