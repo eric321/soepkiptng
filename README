@@ -41,6 +41,7 @@ Features:
 * lyrics support; Lyrics can be entered manually or downloaded automatically
   from http://www.purelyrics.com and http://www.lyricsdomain.com.
   They can be read from and written to mp3 files using id3v2 tags.
+* volume correction to avoid clipping
 * plays from request queue; plays random songs if nothing is on the request
   queue
 * versatile web interface:

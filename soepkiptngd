@@ -371,6 +371,20 @@ sub play_mplayer(@) {
 }
 
 
+sub play_mp3($) {
+	no integer;
+	my ($song) = @_;
+
+	my @madplay = qw"madplay --ignore-crc -SQoraw:- -R44100";
+	my $gainrec = $dbh->selectrow_hashref("SELECT gain FROM song WHERE id=$song->{id}");
+	if($gainrec->{gain}) {
+		push @madplay, "-a", ($gainrec->{gain} / 1000);
+	}
+	push @madplay, $song->{filename};
+	exec_prog \@madplay;
+}
+
+
 sub start_play($) {
 	my ($song) = @_;
 	my $filename = $song->{filename};
@@ -379,20 +393,18 @@ sub start_play($) {
 	$filename =~ /([^.]*)$/;
 	my $ext = lc($1);
 
-	if($filename =~ /^http:/ || $ext eq "wma" || $song->{encoding} =~ /RealAudio/) {
+	if($filename =~ /^http:/ || $ext =~ /^(wma|wav)$/ || $song->{encoding} =~ /RealAudio/) {
 		play_mplayer($filename);
 	} elsif($filename =~ /^cdda:[^:]*:(\d+)/) {
 		exec_prog ["$conf{cdda_prog} $1"];
 	} elsif($ext eq "mp2" || $ext eq "mp3") {
-		exec_prog ["mp3toraw", $filename];
+		play_mp3($song);
 	} elsif($ext eq "ogg") {
 		#this does not handle mono->stereo, resampling:
 		#exec_prog [qw/oggdec -Q -b16 -e0 -R1 -s1 -o-/, $filename];
 		exec_prog ["ogg2raw", $filename];
 	} elsif($ext =~ /^(mid|rcp|r36|g18|g36|mod)$/) {
 		exec_prog ["midi2raw", $filename];
-	} elsif($ext eq "wav") {
-		exec_prog ["wav2raw", $filename];
 	} elsif($ext eq "pac") {
 		exec_prog ["lpac2raw", $filename];
 	} elsif($ext eq "raw") {

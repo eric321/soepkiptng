@@ -1,0 +1,112 @@
+#!/usr/bin/perl
+############################################################################
+# soepkiptng (c) copyright 2000 Eric Lammerts <eric@lammerts.org>.
+# $Id$
+############################################################################
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License, version 2, as 
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# A copy of the GNU General Public License is available on the World Wide Web
+# at `http://www.gnu.org/copyleft/gpl.html'.  You can also obtain it by
+# writing to the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+# Boston, MA 02111-1307, USA.
+############################################################################
+
+use Cwd 'abs_path';
+use DBI;
+use Getopt::Std;
+
+
+# try with att==0
+# try with att=1, double att until clipping=0
+# successive approximation
+
+sub clip($) {
+	my ($gain) = @_;
+
+	sysseek STDIN, 0, 0;
+	my $clipped = undef;
+	open M, "madplay --ignore-crc -a $gain -owav:/dev/null - 2>&1 |";
+	while(<M>) {
+		 /(\d+) clipped sample/ and $clipped = $1;
+	}
+	close M;
+	warn "trying $gain -> $clipped\n";
+	return $clipped;
+}
+
+sub doit($) {
+	my ($f) = @_;
+
+	warn "testing $f\n";
+	my $gain_min = -1;
+	my $gain_max = 1;
+	while(clip($gain_max) == 0) {
+		if($gain_max > 18) {
+			return;
+		}
+		$gain_min = $gain_max;
+		$gain_max *= 2;
+	}
+	if($gain_min < 0) {
+		while(clip($gain_min) > 0) {
+			if($gain_min < -175) {
+				return;
+			}
+			$gain_min *= 2;
+		}
+	}
+
+	while(($gain_max - $gain_min) > 0.05) {
+		$gain = ($gain_min + $gain_max) / 2;
+		if(clip($gain)) {
+			$gain_max = $gain;
+		} else {
+			$gain_min = $gain;
+		}
+	}
+	printf "%f %s\n", $gain_min, $f;
+	my $g = int($gain_min * 1000 + 0.5);
+	if($g < -32768) { $g = 32768; }
+	elsif($g > 32767) { $g = 32767; }
+	$dbh->do("UPDATE song SET gain=? WHERE filename=?", undef, $g, $f);
+}
+
+
+# find program directory
+$_ = $0;
+while(-l) {
+	my $l = readlink or die "readlink $_: $!\n";
+	if($l =~ m|^/|) { $_ = $l; } else { s|[^/]*$|/$l|; }
+}
+m|(.*)/|;
+my $progdir = abs_path($1);
+
+require "$progdir/soepkiptng.lib";
+
+getopts('c:');
+
+read_configfile(\%conf, $opt_c);
+
+$| = 1;
+
+$dbh = DBI->connect("DBI:$conf{db_type}:$conf{db_name}:$conf{db_host}",
+	$conf{db_user}, $conf{db_pass}) or die "can't connect to database";
+
+$sth = $dbh->prepare("SELECT filename FROM song WHERE present AND gain IS NULL AND filename LIKE '/%'");
+$sth->execute();
+while($_ = $sth->fetchrow_hashref) {
+	-e $_->{filename} or next;
+	open STDIN, $_->{filename} or do {
+		warn "$_->{filename}: $!\n";
+		next;
+	};
+	doit($_->{filename});
+	close STDIN;
+}
