@@ -366,8 +366,8 @@ EOF
 		$al{$_} =~ s/,&nbsp;$//;
 		printf <<EOF, encurl("Artist: $artistname{$_}"), $artistname{$_}, $al{$_};
 <tr>
- <td>&nbsp;<a id=a href="$self?cmd=alllist&artist_id=$_&cap=%s">%s</a>&nbsp;</td>
- <td>&nbsp;%s&nbsp;</td>
+ <td valign=top>&nbsp;<a id=a href="$self?cmd=alllist&artist_id=$_&cap=%s">%s</a>&nbsp;</td>
+ <td valign=top>&nbsp;%s&nbsp;</td>
 </tr>
 EOF
 		$res++;
