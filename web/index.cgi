@@ -216,6 +216,9 @@ $editlistopts
  <td id=az>&nbsp;&nbsp;
    <a id=a target=_blank href="$self?cmd=maint">*</a>
  </td>
+ <td id=az>&nbsp;&nbsp;
+   <a id=a target=bframe href="$self?cmd=sql">SQL</a>
+ </td>
 
 </tr></table>
 EOF
@@ -792,7 +795,7 @@ elsif($cmd eq 'changefile') {
 
 	if($args{'action_clear_artist'})   { $args{'artist'} = '' }
 	elsif($args{'action_clear_title'}) { $args{'title'} = '' }
-	elsif($args{'action_clear_album'}) { $args{'album'} = $args{'track'} = '' }
+	elsif($args{'action_clear_album'}) { $args{'album'} = '' }
 	elsif($args{'action_fix_artist'}) { $args{'artist'} = cleanup_name(lc($args{'artist'})); }
 	elsif($args{'action_fix_title'}) { $args{'title'} = cleanup_name(lc($args{'title'})); }
 	elsif($args{'action_fix_album'}) { $args{'album'} = cleanup_name(lc($args{'album'})); }
@@ -935,6 +938,31 @@ elsif($cmd eq 'alllist') {
 		print_alllist_table($dbh, \%args, \%session, $cap, @q);
 	} else {
 		print "Error: No search terms specified.\n";
+	}
+	printftr;
+}
+elsif($cmd eq 'sql') {
+	printhtmlhdr;
+	printhdr($allstyle);
+
+	printf <<EOF, enchtml($args{'sql'});
+SQL-query:<br>
+<form action="$self" method=get>
+  <input type=hidden name=cap value="SQL-query">
+  <input type=hidden name=cmd value=sql>
+<code>
+SELECT ... FROM ... WHERE ... AND <input type=text size=80 name=sql value="%s">
+</code>
+</form>
+EOF
+
+	if($args{'sql'}) {
+		print_alllist_table($dbh, \%args, \%session, "User SQL-query",
+			"SELECT artist.name as artist,album.name as album,song.*," .
+			"song.artist_id as arid, song.album_id as alid" .
+			" FROM song,artist,album WHERE present " .
+			" AND song.artist_id=artist.id AND song.album_id=album.id AND " .
+			$args{'sql'});
 	}
 	printftr;
 }
