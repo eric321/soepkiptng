@@ -224,7 +224,7 @@ unless($debug) {
 }
 sleep $opt_s if $opt_s;
 
-warn "********** starting (pid=$$) **********\n";
+warn sprintf "*** starting soepkiptngd (pid=$$) %s ***\n", '$Id$';
 warn "PATH=$ENV{'PATH'}\n";
 
 $SIG{'TERM'} = sub {
