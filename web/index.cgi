@@ -148,6 +148,7 @@ EOF
 </td>
 <td id=az nowrap>
   <select name=stype style="$searchformstyle" onChange="form.submit()">
+   <option value="">
    <option value=any>Any
    <option value=artist>Artist
    <option value=title>Title
@@ -685,7 +686,6 @@ foreach($q->param) { $args{$_} = $q->param($_); }
 $SIG{__DIE__} = sub {
 	printhtmlhdr;
 	print "<p><p>$_[0]\n";
-	printhtmlftr;
 	exit 0;
 };
 
@@ -800,6 +800,13 @@ elsif($cmd eq 'changefile') {
 }
 
 if($cmd eq 'search') {
+	if(!$args{'stype'}) {
+		printhtmlhdr;
+		printhdr($allstyle);
+		print "Error: No search type specified.\n";
+		printftr;
+		exit;
+	}
 	$args{$args{'stype'}} = $args{'sval'};
 	if($args{'stype'} eq 'artist') {
 		$cmd = 'artistlist';
