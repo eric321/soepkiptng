@@ -57,6 +57,16 @@ while(<F>) {
 }
 close F;
 
+if(open ST, $statusfile) {
+	my ($s, $f, $pid) = <ST>;
+	close ST;
+	$pid = 0 + $pid;
+	if($pid) {
+		kill 0, $pid
+			and die "Another copy of soepkiptngd is already running! (pid $pid)\n";
+	}
+}
+
 $killsock = IO::Socket::INET->new(Listen => 5)
 	or die "cannot create listening TCP socket: $!\n";
 $killhost = hostname;
@@ -65,15 +75,16 @@ $killport = $killsock->sockport();
 $dbh = DBI->connect("DBI:mysql:$db_name:$db_host", $db_user, $db_pass)
 	or die "Can't connect to database $db_name\@$db_host as user $db_user\n";
 
-sub rotatelog() {
-	return if -s STDERR < 65000;
-	rename $errfile, "$errfile.old" or do {
-		warn "rename $errfile -> $errfile.old: $!\n";
-		return;
-	};
-	close STDERR;
-	open STDERR, ">$errfile";
-	STDERR->autoflush(1);
+sub rotatelog(;$) {
+	if($_[0] or -s STDERR > 65000) {
+		rename $errfile, "$errfile.old" or do {
+			warn "rename $errfile -> $errfile.old: $!\n";
+			return;
+		};
+		close STDERR;
+		open STDERR, ">$errfile";
+		STDERR->autoflush(1);
+	}
 }
 
 sub warnrotate {
@@ -94,7 +105,11 @@ unless($debug) {
 		setpgrp();
 	}
 	open STDIN, "</dev/null";
-	open STDERR, ">>$errfile";
+	open STDERR, ">>$errfile" or do {
+		rotatelog(1);
+		open STDERR, ">$errfile" or die "$errfile: $!\n";
+		warn "logs rotated prematurely because of permission problems.\n";
+	};
 	STDERR->autoflush(1);
 	$SIG{__DIE__} = \&dierotate;
 	$SIG{__WARN__} = \&warnrotate;
