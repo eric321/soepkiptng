@@ -225,7 +225,7 @@ EOF
 }
 
 sub table_entry($;$$$$) {
-	my ($q, $col1, $title_href, $idsref) = @_;
+	my ($q, $col1, $title_href, $ids) = @_;
 	my $fmt = <<EOF;
  <tr>
   <td %s>&nbsp;%s&nbsp;</td>
@@ -247,7 +247,7 @@ EOF
 		$td_song, $title_href, enchtml($q->{title}), $title_href? "</a>":"",
 		$td_time, $q->{length} / 60, $q->{length} % 60,
 		$td_enc, enchtml($q->{encoding}, 1),
-		$td_edit, $self, $q->{id}, ids_encode(@$idsref),
+		$td_edit, $self, $q->{id}, $ids,
 		$edit_target || 'bframe', $listch;
 }
 
@@ -326,9 +326,10 @@ EOF
 		unshift @ids, $_->{id};
 		$killline = table_entry($_,
 			sprintf(qq|<a id=a href="%s?cmd=kill&id=%s">%s</a>|,
-			$self, $_->{id}, $killtext), undef, \@ids);
+			$self, $_->{id}, $killtext), undef, ids_encode(@ids));
 	}
 
+	my $ids = ids_encode(@ids);
 	printf $fmt,
 		$th_left, @ids? sprintf(qq|<a id=a href="%s?cmd=del&ids=%s">| .
 			qq|$delalltext</a>|, $self, ids_encode(@ids)) : "",
@@ -344,7 +345,7 @@ EOF
 			qq|<a id=a href="%s?cmd=del&ids=%s">%s</a> | .
 			qq|<a id=a href="%s?cmd=up&id=%s">%s</a>|,
 			$self, $_->{id}, $deltext, $self, $_->{id}, $uptext),
-			undef, \@ids) } @records);
+			undef, $ids) } @records);
 }
 
 sub print_artistlist_table($$$@) {
@@ -412,6 +413,7 @@ EOF
 		print "No search results.\n";
 		return;
 	}
+	my $ids = ids_encode(@ids);
 
 	my %artistids;
 	foreach $id (@ids) {
@@ -443,7 +445,7 @@ EOF
 
 		my $thref = sprintf(qq|<a id=a href="%s?cmd=add&ids=%d" target=tframe>|,
 			$self, $_->{id});
-		$output .= table_entry($_, "$thref$addtext</a>", $thref, \@ids);
+		$output .= table_entry($_, "$thref$addtext</a>", $thref, $ids);
 	}
 
 	if(scalar keys %artistids == 1) {
