@@ -108,7 +108,7 @@ sub do_dir($$) {
 
 sub do_file($$) {
 	my ($dbh, $f) = @_;
-	my ($id, $ti, $ar, $al, $tr, $len, $lyrics, $description, $language);
+	my ($id, $ti, $ar, $al, $tr, $len, $lyrics, $description, $language, $uuid);
 
 	$f =~ s|^\./+||;
 
@@ -123,7 +123,7 @@ sub do_file($$) {
 
 	my $sth = $dbh->prepare(
 		"SELECT song.id,title,artist.name,album.name,track,length," .
-		"lyrics,language,description FROM song " .
+		"lyrics,language,description,uuid FROM song " .
 		"LEFT JOIN album ON album.id=song.album_id " .
 		"LEFT JOIN artist ON artist.id=song.artist_id " . 
 		"LEFT JOIN lyrics ON lyrics.id=song.id " .
@@ -133,7 +133,7 @@ sub do_file($$) {
 	for(;;) {
 		$sth->execute($filename_noext)
 			or die "can't do sql command: " . $dbh->errstr;
-		($id, $ti, $ar, $al, $tr, $len, $lyrics, $language, $description) =
+		($id, $ti, $ar, $al, $tr, $len, $lyrics, $language, $description, $uuid) =
 			$sth->fetchrow_array and last;
 
 		$partial++;
@@ -154,7 +154,7 @@ sub do_file($$) {
 	next unless -s $f;
 
 	if($f =~ /\.mp[123]$/i) {
-		do_mp3($dbh, $f, $ar, $ti, $al, $tr, $len, $lyrics, $description, $language);
+		do_mp3($dbh, $f, $ar, $ti, $al, $tr, $len, $lyrics, $description, $language, $uuid);
 	} elsif($f =~ /\.flac$/i) {
 		do_flac($dbh, $f, $ar, $ti, $al, $tr, $len);
 	} elsif($f =~ /\.ogg$/i) {
@@ -201,7 +201,7 @@ sub do_file($$) {
 }
 
 sub do_mp3($$$$$$$$$) {
-	my ($dbh, $f, $ar, $ti, $al, $tr, $len, $lyrics, $lyrdesc, $lyrlang) = @_;
+	my ($dbh, $f, $ar, $ti, $al, $tr, $len, $lyrics, $lyrdesc, $lyrlang, $uuid) = @_;
 
 	if(!$opt_1) {
 		local *F;
@@ -228,6 +228,7 @@ sub do_mp3($$$$$$$$$) {
 	$mp3->config("autoinfo", "ID3v2");
 	my ($p_ti, $p_tr, $p_ar, $p_al) = $mp3->autoinfo();
 	my $p_uslt;
+	my ($p_ufidname, $p_uuid);
 	my $p_len = 0;
 	my $newtag = $mp3->{ID3v2};
 	if(defined($newtag)) {
@@ -239,6 +240,9 @@ sub do_mp3($$$$$$$$$) {
 		$newtag->remove_frame('TLEN');
 		$p_uslt = $mp3->{ID3v2}->getFrame('USLT');
 		$newtag->remove_frame('USLT');
+		($p_ufid) = $mp3->{ID3v2}->getFrame('UFID');
+		if($p_ufid->{Text} eq "UUID") { $p_uuid = $p_ufid->{_Data}; }
+		$newtag->remove_frame('UFID');
 		#warn Dumper($p_uslt);
 	} else {
 		$newtag = $mp3->newTag('ID3v2');
@@ -246,7 +250,7 @@ sub do_mp3($$$$$$$$$) {
 	if($opt_f || $p_ti ne $ti || $p_tr != $tr || $p_ar ne $ar || $p_al ne $al ||
 		$p_len != 1000 * $len || $p_uslt->{Description} ne $lyrdesc || 
 		($lyrics && $p_uslt->{Language} ne $lyrlang) ||
-		$p_uslt->{Text} ne $lyrics) {
+		$p_uslt->{Text} ne $lyrics || $p_uuid ne $uuid) {
 
 		$newtag->add_frame('TIT2', $ti) if $ti;
 		$newtag->add_frame('TPE1', $ar) if $ar;
@@ -257,6 +261,9 @@ sub do_mp3($$$$$$$$$) {
 		}
 		if($lyrics) {
 			$newtag->add_frame('USLT', 0, $lyrlang, $lyrdesc, $lyrics);
+		}
+		if($uuid) {
+			$newtag->add_frame('UFID', "UUID", $uuid);
 		}
 		warn "$f: updating ID3v2 tag\n";
 		$newtag->write_tag()
