@@ -122,7 +122,8 @@ $w_t = $screen_width * 45 / 100;
 $w_al = $screen_width - $w_a - $w_t - 7;
 $w_a > 0 && $w_t > 0 && $w_al > 0 or die "screen size too small.\n";
 
-if(@ARGV) {
+if($0 =~ /qr$/ || @ARGV) {
+	my @a;
 	foreach(@ARGV) {
 		$q = '';
 		if(s/^-//) { $q = " NOT"; }
@@ -145,6 +146,9 @@ if(@ARGV) {
 	}
 	if($opt_g) {
 		push @q, "track > 0";
+	}
+	if($0 =~ /qr$/) {
+		push @q, " last_played=0 AND (unix_timestamp(now()) - unix_timestamp(time_added)) < 7*86400";
 	}
 	$q = "SELECT title,artist.name as artist,album.name as album,song.id as id,track,filename,length,encoding" .
 	     " FROM song,artist,album" .
