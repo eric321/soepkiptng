@@ -264,38 +264,6 @@ sub print_playlist_table($$) {
 	my $nowfile;
 	my $killline;
 
-	if(!$nowplaying) {
-		local *F;
-		if(open F, $statusfile) {
-			$nowplaying = <F>;
-			$nowfile = <F>;
-			close F;
-		}
-	}
-	if($nowplaying) {
-		my $query =  "SELECT title,artist.name as artist,album.name as album," .
-			"song.id as id,track,length,encoding," .
-			"song.artist_id as arid,song.album_id as alid" .
-			" FROM song,artist,album" .
-			" WHERE song.artist_id=artist.id AND song.album_id=album.id" .
-			" AND song.id = $nowplaying";
-		my $sth = $dbh->prepare($query);
-		my $rv = $sth->execute;
-		$_ = $sth->fetchrow_hashref or do {
-			$nowfile =~ m|(.*/)?(.*)|;
-			$_->{artist} = 'ERROR: Not in database';
-			$_->{album} = $1;
-			$_->{title} = $2;
-			$_->{id} = $nowplaying;
-			$_->{track} = '';
-			$_->{length} = 0;
-			$_->{encoding} = '?';
-		};
-		my $col1 = sprintf(qq|<a id=a href="%s?cmd=kill&id=%s">%s</a>|,
-			$self, $_->{id}, $killtext);
-		$killline = table_entry($_, $col1);
-	}
-
 	$query =  "SELECT title,artist.name as artist,album.name as album,song.id as id,track,length,encoding," .
 		"song.artist_id as arid,song.album_id as alid" .
 		" FROM song,queue,artist,album" .
@@ -324,6 +292,40 @@ sub print_playlist_table($$) {
  <tr><td colspan=7></td></tr>
 %s%s</table>
 EOF
+
+	if(!$nowplaying) {
+		local *F;
+		if(open F, $statusfile) {
+			$nowplaying = <F>;
+			$nowfile = <F>;
+			close F;
+		}
+	}
+	if($nowplaying) {
+		my $query =  "SELECT title,artist.name as artist,album.name as album," .
+			"song.id as id,track,length,encoding," .
+			"song.artist_id as arid,song.album_id as alid" .
+			" FROM song,artist,album" .
+			" WHERE song.artist_id=artist.id AND song.album_id=album.id" .
+			" AND song.id = $nowplaying";
+		my $sth = $dbh->prepare($query);
+		my $rv = $sth->execute;
+		$_ = $sth->fetchrow_hashref or do {
+			$nowfile =~ m|(.*/)?(.*)|;
+			$_->{artist} = 'ERROR: Not in database';
+			$_->{album} = $1;
+			$_->{title} = $2;
+			$_->{id} = $nowplaying;
+			$_->{track} = '';
+			$_->{length} = 0;
+			$_->{encoding} = '?';
+		};
+		unshift @ids, $_->{id};
+		$killline = table_entry($_,
+			sprintf(qq|<a id=a href="%s?cmd=kill&id=%s">%s</a>|,
+			$self, $_->{id}, $killtext), undef, \@ids);
+	}
+
 	printf $fmt,
 		$th_left, @ids? sprintf(qq|<a id=a href="%s?cmd=del&ids=%s">| .
 			qq|$delalltext</a>|, $self, ids_encode(@ids)) : "",
