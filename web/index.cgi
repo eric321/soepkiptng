@@ -364,8 +364,8 @@ EOF
 EOF
 }
 
-sub print_albums_row($$$$) {
-	my ($dbh, $argsref, $caption, $artistid) = @_;
+sub print_albums_row($$$$$) {
+	my ($dbh, $baseurl, $argsref, $caption, $artistid) = @_;
 	
 	my $query = "SELECT seealso.id1 AS id1, seealso.id2 AS id2, ".
 		" artist.name AS artist FROM seealso,artist,song WHERE ".
@@ -498,7 +498,7 @@ EOF
 	}
 
 	if(scalar keys %artistids == 1) {
-		print_albums_row($dbh, $argsref, $cap, (keys %artistids)[0]);
+		print_albums_row($dbh, $baseurl, $argsref, $cap, (keys %artistids)[0]);
 	}
 
 	print "<table border=0 cellspacing=0>\n";
@@ -1222,7 +1222,12 @@ elsif($cmd eq 'seealso') {
 	print <<EOF;
 <center id=hdr>$args{cap}</center>
 EOF
-	print_albums_row($dbh, \%args, $args{cap}, $args{artist_id});
+	my $baseurl = "$self?";
+	foreach(keys %args) {
+		next if $_ eq "cmd";
+		$baseurl .= "$_=" . encurl($args{$_}) . "&";
+	}
+	print_albums_row($dbh, $baseurl, \%args, $args{cap}, $args{artist_id});
 	printftr;
 }
 elsif($cmd eq 'sql') {
