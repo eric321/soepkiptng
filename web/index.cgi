@@ -267,7 +267,7 @@ sub albumlist_entry($) {
 
 sub print_playlist_table($) {
 	my ($dbh) = @_;
-	my ($nowplaying, $nowfile, $nowtype, $nowuser);
+	my ($nowplaying, $nowfile, $nowtype, $nowuser, $newtitle);
 	my $killline;
 
 	$query =  "SELECT title,artist.name as artist,album.name as album," .
@@ -285,6 +285,12 @@ sub print_playlist_table($) {
 		push @records, $_;
 	}
 	my $fmt = <<EOF;
+<script language="Javascript">
+<!--
+parent.document.title="%s";
+// -->
+</script>
+
 <table border=0 cellspacing=0>
  <tr>
   <th %s>&nbsp;%s&nbsp;</th>
@@ -344,10 +350,17 @@ EOF
 			sprintf(qq|<a id=a href="%s?cmd=kill&id=%s">%s</a>|,
 			$self, $_->{id}, $killtext), undef,
 			ids_encode(@ids), ($show_user && $nowuser)? "<td>&nbsp;($nowuser)</td>":"");
+
+		my $alb = $_->{album};
+		if($alb && $_->{track}) { $alb .= "/$_->{track}"; }
+		if($alb) { $alb = " [$alb]"; }
+		$newtitle = "$_->{artist} - $_->{title}$alb";
+	} else {
+		$newtitle = $title;
 	}
 
 	my $ids = ids_encode(@ids);
-	printf $fmt,
+	printf $fmt, enchtml($newtitle),
 		$th_left, @ids? sprintf(qq|<a id=a href="%s?cmd=del&ids=%s">| .
 			qq|$delalltext</a>|, $self, ids_encode(@ids)) : "",
 		$th_artist,
@@ -702,7 +715,6 @@ sub printhdr($) {
 	print <<EOF;
 <html>
 <head>
-<title>$title</title>
 <style type="text/css">
 <!--
 $_[0]
@@ -931,7 +943,6 @@ elsif($cmd eq 'playlist') {
 <META HTTP-EQUIV="Refresh" CONTENT="$rt;URL=$s?cmd=playlist&s=$args{'s'}">
 EOF
 	printhdr($plstyle);
-	print $topwindow_title;
 	print_az_table($dbh, \%session);
 	print_playlist_table($dbh);
 	printftr;
