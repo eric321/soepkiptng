@@ -59,3 +59,10 @@ void input_start()
 		exit(1);
 	}
 }
+
+void input_flush()
+{
+	buffer_start = 0;
+	buffer_length = 0;
+	while(read(0, buffer, 4096) > 0) { }
+}

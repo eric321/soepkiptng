@@ -3,6 +3,7 @@
 #include "output_oss.h"
 #include "polllib.h"
 #include "buffer.h"
+#include "input.h"
 
 static void sighup(int s)
 {
@@ -15,8 +16,7 @@ static void sighup(int s)
 
 static void sigusr1(int s)
 {
-	buffer_start = 0;
-	buffer_length = 0;
+	input_flush();
 }
 
 static void sigusr2(int s)

@@ -113,6 +113,11 @@ static void handle_cmd(int fd, struct socket_t *p, char *s)
 		   (byte_counter * 100 / 44100 / 4) % 100);
 	}
 
+	else if(strcasecmp(cmd, "dump") == 0) {
+		sockprintf(p, "+running=%d start=%d length=%d song_counter=%d byte_counter=%d byte_counter_resetcountdown=%d\n",
+		   output_oss_running(), buffer_start, buffer_length, song_counter, byte_counter, byte_counter_resetcountdown);
+	}
+
 	else {
 		sockprintf(p, "-Unknown command\n");
 	}
