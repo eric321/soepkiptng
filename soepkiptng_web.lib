@@ -122,11 +122,15 @@ EOF
 </td>
 <td id=az nowrap>&nbsp;&nbsp;Search:</td>
 <td id=az nowrap>
+EOF
+	print <<EOF unless $req->{args}->{nofocus};
  <script>
  <!--
  function do_onload(){document.search.sval.focus();}
  // -->
  </script>
+EOF
+	print <<EOF;
  <form id=search name=search action="$req->{self}" method=get target=bframe>
   <input type=hidden name=cmd value=search>
   <input type=text size=$sz name=sval style="$conf{searchformstyle}">
@@ -1516,7 +1520,7 @@ sub handle_request($) {
 	elsif($cmd eq 'playlist') {
 		printhtmlhdr;
 		print <<EOF;
-<META HTTP-EQUIV="Refresh" CONTENT="$rt;URL=$req->{self}?cmd=playlist&s=$args{s}">
+<META HTTP-EQUIV="Refresh" CONTENT="$rt;URL=$req->{self}?cmd=playlist&s=$args{s}&nofocus=1">
 EOF
 		printhdr($conf{plstyle}, "onLoad=do_onload()");
 		print_az_table($req, \%session);
