@@ -261,8 +261,7 @@ sub print_playlist_table($) {
 	$query =  "SELECT title,artist.name as artist,album.name as album," .
 		"song.id as id, track, length, encoding, queue.user as user," .
 		"song.artist_id as arid, song.album_id as alid" .
-		" FROM song,queue,artist,album" .
-		" WHERE (present OR filename like \"http:%\")" .
+		" FROM song,queue,artist,album WHERE present" .
 		" AND song.artist_id=artist.id AND song.album_id=album.id" .
 		" AND song.id = queue.song_id ORDER BY queue.song_order";
 	$sth = $dbh->prepare($query);
@@ -289,13 +288,14 @@ sub print_playlist_table($) {
 			$_->{artist} = '** Jingle **';
 			$_->{album} = '';
 			($_->{title} = $nowfile) =~ s|.*/||;
+			$_->{filename} = $nowfile;
 			$_->{id} = -1;
 			$_->{track} = '';
 			$_->{length} = 0;
 			$_->{encoding} = '?';
 		} else {
 			my $query = "SELECT title,artist.name as artist,album.name as album," .
-				"song.id as id,track,length,encoding," .
+				"song.id as id,track,length,encoding,filename," .
 				"song.artist_id as arid,song.album_id as alid" .
 				" FROM song,artist,album" .
 				" WHERE song.artist_id=artist.id AND song.album_id=album.id" .
@@ -303,22 +303,25 @@ sub print_playlist_table($) {
 
 			my $sth = $dbh->prepare($query);
 			my $rv = $sth->execute($nowplaying);
-			$_ = $sth->fetchrow_hashref or do {
+			if($_ = $sth->fetchrow_hashref) {
+				unshift @ids, $_->{id};
+			} else {
 				$nowfile =~ m|(.*/)?(.*)|;
 				$_->{artist} = 'ERROR: Not in database';
 				$_->{album} = $1;
 				$_->{title} = $2;
+				$_->{filename} = '';
 				$_->{id} = $nowplaying;
 				$_->{track} = '';
 				$_->{length} = 0;
 				$_->{encoding} = '?';
-			};
+			}
 		}
-		unshift @ids, $_->{id};
 		$killline = table_entry($_,
 			sprintf(qq|<a id=a href="%s?cmd=kill&id=%s">%s</a>|,
 			$self, $_->{id}, $killtext), undef,
-			ids_encode(@ids), ($show_user && $nowuser)? "<td>&nbsp;($nowuser)</td>":"");
+			$_->{filename} =~ m|^/|? ids_encode(@ids) : "",
+			($show_user && $nowuser)? "<td>&nbsp;($nowuser)</td>":"");
 
 		if($title_song) {
 			my $alb = $_->{album};
@@ -359,7 +362,7 @@ EOF
 			qq|<a id=a href="%s?cmd=del&ids=%s">%s</a> | .
 			qq|<a id=a href="%s?cmd=up&id=%s">%s</a>|,
 			$self, $_->{id}, $deltext, $self, $_->{id}, $uptext),
-			undef, $ids,
+			undef, $_->{filename} =~ m|^/|? $ids : "",
 			($show_user && $_->{user})? "<td>&nbsp;(".$_->{user}.")</td>":"")
 			} @records);
 }
