@@ -216,7 +216,7 @@ sub getinfo_ogg($) {
 	$_[0] =~ /\.ogg$/i
 		or return undef;
 	if(open(F, "-|") == 0) {
-		exec "ogg2raw", $_[0], 1;
+		exec "ogg2raw", "-i", $_[0];
 		die;
 	}
 	my ($sfreq, $chan, $sec, $br) = split(/,/, <F>);
@@ -236,7 +236,7 @@ sub getinfo_pac($) {
 	$_[0] =~ /\.pac$/i
 		or return undef;
 	if(open(F, "-|") == 0) {
-		exec "lpac2raw", $_[0], 1;
+		exec "lpac2raw", "-i", $_[0];
 		die;
 	}
 	my ($sfreq, $chan, $sec) = split(/,/, <F>);
