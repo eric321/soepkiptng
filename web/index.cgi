@@ -342,10 +342,10 @@ sub print_alllist_table($$$@) {
 	my $sth = $dbh->prepare($query);
 	my $rv = $sth->execute(@val);
 	my @ids;
-	my %artists;
+	my %artistids;
 	while($_ = $sth->fetchrow_hashref) {
 		push @ids, $_->{id};
-		$artists{$_->{artist}}++;
+		$artistids{$_->{arid}}++;
 		my $l = sprintf "%d:%02d", $_->{length} / 60, $_->{length} % 60;
 		my $e = $_->{encoding};
 		$e =~ s/ /&nbsp;/g;
@@ -394,14 +394,14 @@ EOF
 	print <<EOF;
 <center id=hdr>$caption</center>
 EOF
-	if(scalar keys %artists == 1) {
+	if(scalar keys %artistids == 1) {
 		my $query = "SELECT DISTINCT album.name as album, artist.name as artist, count(*)," .
 				"song.artist_id, song.album_id" .
-				" FROM song,artist,album WHERE present AND artist.name = ?".
+				" FROM song,artist,album WHERE present AND song.artist_id = ?".
 				" AND song.artist_id=artist.id AND song.album_id=album.id".
 				" GROUP BY album.name ORDER BY album.name";
 		my $sth = $dbh->prepare($query);
-		my $rv = $sth->execute(keys %artists);
+		my $rv = $sth->execute(keys %artistids);
 		my ($al, $a, $c, $arid, $alid, @al);
 		while(($al, $a, $c, $arid, $alid) = $sth->fetchrow_array) {
 			if($al) {
