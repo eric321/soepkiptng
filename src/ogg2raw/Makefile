@@ -12,4 +12,5 @@ ogg2raw: ogg2raw.c
 install: ogg2raw
 	install ogg2raw /usr/local/bin
 
-
+clean:
+	-rm -rf ogg2raw *.o

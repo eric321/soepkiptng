@@ -1,4 +1,5 @@
 
+#include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -11,17 +12,26 @@
 int main(int argc, char **argv)
 {
 	OggVorbis_File vf;
+	char c;
+	int info_only = 0;
 	int len;
 	int current_section;
 	char pcmout[4096];
 	FILE *input;
 	vorbis_info *vi;
 
-	if(argc < 2) {
-		fprintf(stderr, "usage: ogg2raw file [x]\n");
+	while((c = getopt(argc, argv, "i")) != EOF) {
+		switch(c) {
+			case 'i':
+				info_only = 1;
+				break;
+		}
+	}
+	if(optind != argc - 1) {
+		fprintf(stderr, "usage: ogg2raw [-i] file\n");
 		exit(1);
 	}
-	input = fopen(argv[1], "r");
+	input = fopen(argv[optind], "r");
 	if(input == NULL) {
 		perror(argv[1]);
 		exit(1);
@@ -33,7 +43,7 @@ int main(int argc, char **argv)
 	}
 
 	vi = ov_info(&vf, -1);
-	if(argc > 2) {
+	if(info_only) {
 		int br = ov_bitrate(&vf, -1);
 		len = 0;
 		if(ov_seekable(&vf)) len = ov_time_total(&vf, -1);
