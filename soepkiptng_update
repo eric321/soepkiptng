@@ -92,6 +92,7 @@ while(($id, $f, $l, $pres) = $sth->fetchrow_array) {
 	$last_played{$f} = $l;
 	$f =~ m|([^/]*)$|;
 	$longname{$1} = $f;
+	$longname_id{$1} = $id;
 }
 
 # scan mp3 directories
@@ -147,8 +148,13 @@ while(<FILES>) {
 		/([^\/]*)$/;
 		my $oldname = $longname{$1};
 		if($oldname && ($oldname eq $_ || ! -e $oldname)) {
-			$dbh->do("UPDATE song SET filename=?, present=1 WHERE filename=?",
-				undef, $_, $oldname) or die "can't do sql command: " . $dbh->errstr . "\n";
+			$dbh->do("DELETE FROM song WHERE present=0 AND id!=? AND " .
+				"filename=?", undef, $longname_id{$1}, $_)
+				or die "can't do sql command: " . $dbh->errstr . "\n";
+			$dbh->do("UPDATE song SET present=1, filename=?, " .
+				"length=?, encoding=? WHERE id=?", undef,
+				$_, $len, $desc, $longname_id{$1})
+				or die "can't do sql command: " . $dbh->errstr . "\n";
 			delete $filename{$oldname};
 			$num_moved++;
 			$oldname =~ s|[^/]+$||;
@@ -301,6 +307,7 @@ sub getinfo_pac($) {
 		die;
 	}
 	my ($sfreq, $chan, $sec, $bytes) = split(/,/, <F>);
+	return undef unless $sfreq && $chan && $sec && $bytes;
 	my $percent = int((-s $_[0]) / ($bytes / 100));
 	
 	close F;
