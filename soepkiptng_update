@@ -24,6 +24,7 @@ $configfile = "/etc/soepkiptng.conf";
 use Cwd;
 use DBI;
 use Getopt::Std;
+use MP3::Tag;
 #use Data::Dumper;
 
 #eval "
@@ -308,15 +309,28 @@ sub getinfo_pac($) {
 sub getinfo_flac($) {
 	$_[0] =~ /\.flac$/i
 		or return undef;
-#	if(open(F, "-|") == 0) {
-#		exec "lpac2raw", "-i", $_[0];
-#		die;
-#	}
-#	my ($sfreq, $chan, $sec, $bytes) = split(/,/, <F>);
-#	my $percent = int((-s $_[0]) / ($bytes / 100));
-#	
-#	close F;
-	return ("Flac $percent%", 0 + $sec, $sfreq / 1000, 0 + $chan);
+	open F, $_[0] or return undef;
+
+	my $buf;
+	read F, $buf, 26;
+	close F;
+
+	length($buf) == 26 or return undef;
+	my ($magic, $l1, $num) = unpack "a4x14NN", $buf;
+	$magic eq "fLaC" or return undef;
+
+	my $sr = $l1 >> 12;
+	my $ch = 1 + (($l1 >> 9) & 7);
+	my $bt = 1 + (($l1 >> 4) & 0x1f);
+	$num += ($l1 & 0xf) << 32;
+#warn "flac($magic, $sr, $ch, $bt, $num)\n";
+
+	my $percent = '';
+	if($num && $ch && $bt) {
+		$percent = sprintf " %d%%",
+			(-s $_[0]) / ($num * $ch * $bt / 8 / 100);
+	}
+	return ("flac$percent", $num / $sr, $sr / 1000, $ch);
 }
 
 # returns (samplefreq, channels, seconds)
@@ -435,23 +449,19 @@ sub extract_artist_title {
 	my $p = $1;
 
 	if(!$omitmp3info && ! -e "$p/.noid3" && "$p/$f" =~ /\.mp3$/i) {
-		my $tag = get_mp3tag("$p/$f", 1);
-#		warn Dumper($tag);
-
-		$a = $tag->{ARTIST};
-		$t = $tag->{TITLE};
-		$alb = $tag->{ALBUM};
+		my $mp3 = MP3::Tag->new("$p/$f");
+		($t, $tr, $a, $alb) = $mp3->autoinfo();
 
 		$a =~ s/_/ /g;
-		$a =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g;
+		$a =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g unless $a =~ /[A-Z]/;
 		$t =~ s/_/ /g;
-		$t =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g;
+		$t =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g unless $t =~ /[A-Z]/;
 		$alb =~ s/_/ /g;
-		$alb =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g;
+		$alb =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g unless $alb =~ /[A-Z]/;
 
 		if($a && $t) {
-			print STDERR "id3";
-			return ($a, $t, undef, $alb);
+			print STDERR "id3/id3v2";
+			return ($a, $t, $tr, $alb);
 		}
 	}
 
