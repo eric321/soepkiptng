@@ -889,7 +889,7 @@ elsif($cmd eq 'changefile') {
 		my @ids = ids_decode($args{'ids'});
 
 		while(@ids) {
-			my @ids2 = splice(@ids, 0, 4);
+			my @ids2 = splice(@ids, 0, 50);
 			$dbh->do("UPDATE song SET ${all_field}_id=? WHERE " .
 				join(" OR ", map { "id=$_" }  @ids2),
 				undef, $all_field_arg, @ids2)
