@@ -2,6 +2,7 @@
                   Soepkip The Next Generation
      ----------------------------------------------------
              by Eric Lammerts <eric@lammerts.org>
+              http://www.lammerts.org/software/
 
 
 Features:
@@ -11,7 +12,7 @@ Features:
 * nice web interface
 * commandline interface
 
-Requirements:
+Requirements: (you can get things with (*) from my homepage)
 -------------
 * perl5
 * mysql 3.22
@@ -24,28 +25,26 @@ Requirements:
   - ApacheDBI
   - Msql-Mysql-modules
   - TermReadKey (optional)
-* program that can play raw pcm data from standard input
-  (for instance splay, bplay or cdrplay)
+* cdrplay(*)
+* resample(*)
 * programs that decode the various sound formats to standard output:
-  - mp3: for instance mpg123 or splay
+  - mp3: get mp3toraw(*) and (for instance) mpg123 or splay
   - wav: for instance splay
   - lpac:
     LPAC is a lossless compression algorithm. You can get a linux binary
-    from http://www-ft.ee.tu-berlin.de/~liebchen/lpac.html.
-    (no source available AFAIK) 
+    from http://www-ft.ee.tu-berlin.de/~liebchen/lpac.html. No source
+    is available :-(.
+    Also get lpac2raw(*)
   - Ogg-Vorbis:
     Unfortunately ogg123 cannot play to standard output.
-    Get the libraries from http://www.xiph.org and compile
-    the supplied ogg2raw.c:
-    gcc -O2 -Wall -s -o ogg2raw ogg2raw.c /usr/lib/vorbisfile.a -lm -lvorbis
-    Put ogg2raw somewhere in your $PATH. Ogg2raw is also used to get
-    file info for the database.
+    Get the libraries from http://www.xiph.org and ogg2raw(*)
+
 
 On a Debian system,
    apt-get install libapache-dbi-perl libdbd-mysql-perl \
       mysql-server libmpeg-mp3info-perl libterm-readkey-perl \
       splay libvorbis-dev
-will install all the necessary software.
+will install all the necessary software (except the programs marked with (*)).
 
 
 Installation:
@@ -69,8 +68,12 @@ Installation:
   </Directory>
 
 * run soepkiptng_update to add songs to the database
-* run soepkiptngd
-
+* run soepkiptngd -d to start playing with debugging on.
+  If everything works alright, start it without -d to run it in the
+  background. Debugging output is then sent to
+  /var/local/soepkiptng/soepkiptng.err, which is automatically
+  rotated if the size reaches 64Kbyte.
+ 
 
 TODO:
 -----
