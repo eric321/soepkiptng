@@ -51,7 +51,7 @@ use MP3::Tag;
 use MPEG::MP3Info;
 #use Data::Dumper;
 
-use vars qw/$opt_d $opt_e $opt_f $opt_r/;
+use vars qw/$opt_d $opt_e $opt_f $opt_r $opt_q/;
 
 sub get_wav_params($\%;$);
 sub getinfo_mp3($\%);
@@ -63,13 +63,18 @@ sub getinfo_raw($\%);
 sub read_eric_files();
 sub extract_artist_title($\%);
 
-getopts('fred');
+getopts('fredq');
 $force = 1 if $opt_f;
 $| = 1;
 $do_delete = !$opt_d && !$opt_r;
 
 # for the web interface (stupid browsers/users)
 $SIG{'PIPE'} = 'IGNORE';
+
+# disable warnings (to make MP3::Tag shut up)
+if($opt_q) {
+	$SIG{__WARN__} = sub { };
+}
 
 $dbh = DBI->connect("DBI:$conf{'db_type'}:$conf{'db_name'}:$conf{'db_host'}", $conf{'db_user'}, $conf{'db_pass'})
 	or die "can't connect to database";
@@ -114,6 +119,11 @@ while(<FILES>) {
 	m|(.*?)[^/]*$|;
 	next if -e "$1/.nosoepkiptng";
 
+	if(length($_) > 255) {
+		print STDERR "Skipping $_, filename >255 chars.\n" unless $opt_q;
+		next;
+	}
+
 #	if(++$num % 10 == 0) { print STDERR "."; }
 
 	# get file encoding; skip if unknown
@@ -129,7 +139,7 @@ while(<FILES>) {
 
 	$info{len} = 0 + $info{len};
 	$info{encoding} or do {
-		warn "Filetype of $_ unknown\n";
+		print STDERR "Filetype of $_ unknown\n" unless $opt_q;
 		next;
 	};
 	if($info{freq} && ($info{freq} < 44090 || $info{freq} > 44110)) {
@@ -174,7 +184,7 @@ while(<FILES>) {
 
 	# get artist/title/track/album info
 	m|([^/]+/+[^/]+)\.\w+$|;
-#warn "1=$1\n";
+#print STDERR "1=$1\n";
 	if($track{$1}) {
 		$info{info_origin} = "ericfile";
 		$info{artist} = $artist{$1};
@@ -230,20 +240,23 @@ if($do_delete) {
 	}
 }
 
-print "Optimizing Tables.\n";
+print "Optimizing Tables.\n" unless $opt_q;
 $dbh->do("optimize table song");
 $dbh->do("optimize table album");
 $dbh->do("optimize table artist");
 
 $dbh->disconnect();
 
-printf <<EOF, $num_added, $num_updated, $num_deleted, $num_moved, $num_skipped;
+printf <<EOF,
 %4d songs added.
 %4d songs updated.
 %4d songs deleted.
 %4d songs moved.
 %4d songs skipped.
 EOF
+	$num_added, $num_updated, $num_deleted, $num_moved, $num_skipped
+		unless $opt_q && $num_added == 0 && $num_updated == 0
+			&& $num_deleted == 0 && $num_moved == 0;
 
 
 sub get_id3($\%) {
@@ -283,7 +296,7 @@ sub getinfo_mp3($\%) {
 
 	# open file to check Xing VBR tag
 	open F, $file or do {
-		warn "$file: $!\n";
+		print STDERR "$file: $!\n";
 		return "?";
 	};
 
@@ -453,7 +466,7 @@ sub get_wav_params($\%;$) {
 		read(F, $buf, $len)  or last;
 		my ($fmt, $chan, $freq, $bytespersec, $align, $bitspersample) =
 			unpack("vvVVvv", $buf);
-#warn "		my ($fmt, $chan, $freq, $bytespersec, $align, $bitspersample) =\n";
+#print STDERR "		my ($fmt, $chan, $freq, $bytespersec, $align, $bitspersample) =\n";
 		last if $fmt != 1;
 
 		# find 'data' chunk
@@ -499,7 +512,7 @@ sub read_eric_files() {
 						$filename = $1;
 						$a =~ s/^(\d+)-([^-]+)-.*/\2/;
 						$tracknr{"$dirname/$filename"} = $1;
-#warn "a=$a artist_s=$artist_s artist=$artist realartist=$realartist\n";
+#print STDERR "a=$a artist_s=$artist_s artist=$artist realartist=$realartist\n";
 						if($realartist) {
 							$artist{"$dirname/$filename"} = $realartist;
 							$realartist = undef;
@@ -518,7 +531,7 @@ sub read_eric_files() {
 							s/\b(\w)/\U\1/g; 
 						}
 						$track{"$dirname/$filename"} = $_;
-#warn "{$dirname/$filename} = $_\n";
+#print STDERR "{$dirname/$filename} = $_\n";
 	#print qq~\$track{"$dirname/$filename"} = $_;\n~ if /magic/i;
 	#print STDERR "$dirname/$filename $album\n";
 					}
@@ -567,7 +580,6 @@ sub extract_artist_title($\%) {
 		$tr = $1;
 	}
 	$file =~ s/^[^a-z]+//i;
-#warn $file;
 
 	$pp =~ s|/+$||;
 	$pp =~ s|.*/||;
