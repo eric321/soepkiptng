@@ -151,14 +151,14 @@ sub get_playlist_table_entry($$$$$) {
 	$tr .= "." if $tr;
 	my $fmt = <<EOF;
  <tr>
-  <td $td_left><a id=a href="%s">%s</a> <a id=a href="%s">%s</a></td>
-  <td $td_artist><a href="$self?cmd=alllist&f=artist&v=%s&cap=%s" target=bframe>%s</a></td>
-  <td $td_album><a href="$self?cmd=alllist&f=album&v=%s&cap=%s" target=bframe>%s</a></td>
-  <td $td_track>%s</td>
-  <td $td_song>%s</td>
-  <td $td_time>%s</td>
-  <td $td_enc>%s</td>
-  <td $td_edit><a id=a href="$self?cmd=edit&id=%d" target=bframe>*</a></td>
+  <td $td_left>&nbsp;<a id=a href="%s">%s</a> <a id=a href="%s">%s</a>&nbsp;</td>
+  <td $td_artist>&nbsp;<a href="$self?cmd=alllist&f=artist&v=%s&cap=%s" target=bframe>%s</a>&nbsp;</td>
+  <td $td_album>&nbsp;<a href="$self?cmd=alllist&f=album&v=%s&cap=%s" target=bframe>%s</a>&nbsp;</td>
+  <td $td_track>&nbsp;%s&nbsp;</td>
+  <td $td_song>&nbsp;%s&nbsp;</td>
+  <td $td_time>&nbsp;%s&nbsp;</td>
+  <td $td_enc>&nbsp;%s&nbsp;</td>
+  <td $td_edit>&nbsp;<a id=a href="$self?cmd=edit&id=%d" target=bframe>*</a></td>
  </tr>
 EOF
 	return sprintf $fmt, $_[0], $_[1], $_[2], $_[3],
@@ -223,14 +223,14 @@ EOF
 	print <<EOF;
 <table border=0 cellspacing=0>
  <tr>
-  <th $th_left>$delall</th>
-  <th $th_artist>Artist</th>
-  <th $th_album>Album</th>
-  <th $th_track>#</th>
-  <th $th_song>Song</th>
-  <th $th_time>Time&nbsp;</th>
-  <th $th_enc>Encoding</th>
-  <th $th_edit></th>
+  <th $th_left>&nbsp;$delall&nbsp;</th>
+  <th $th_artist>&nbsp;Artist&nbsp;</th>
+  <th $th_album>&nbsp;Album&nbsp;</th>
+  <th $th_track>&nbsp;#&nbsp;</th>
+  <th $th_song>&nbsp;Song&nbsp;</th>
+  <th $th_time>&nbsp;Time&nbsp;&nbsp;</th>
+  <th $th_enc>&nbsp;Encoding&nbsp;</th>
+  <th $th_edit>&nbsp;&nbsp;</th>
  </tr>
  <tr><td colspan=7></td></tr>
 $output
@@ -245,8 +245,8 @@ sub print_artistlist_table($$) {
 <center id=hdr>Artist: $val</center>
 <table border=0 cellspacing=0>
  <tr>
-  <th>Artist</th>
-  <th>Albums</th>
+  <th>&nbsp;Artist&nbsp;</th>
+  <th>&nbsp;Albums&nbsp;</th>
  </tr>
 EOF
 
@@ -261,15 +261,15 @@ EOF
 	while(($a, $al, $c) = $sth->fetchrow_array) {
 		$al{$a} or push @artists, $a;
 		$al{$a} .= sprintf(<<EOF, encode("^$al\$"), encode("Album: $al"), $al || "?", $c);
-<a id=a href="$self?cmd=alllist&f=album&v=%s&cap=%s">%s (%d)</a>&nbsp;
+<a id=a href="$self?cmd=alllist&f=album&v=%s&cap=%s">%s (%d)</a>&nbsp;&nbsp;
 EOF
 	}
 	foreach(@artists) {
 		$al{$_} =~ s/, $//;
 		printf <<EOF, encode("^$_\$"), encode("Artist: $_"), $_, $al{$_};
 <tr>
- <td><a id=a href="$self?cmd=alllist&f=artist&v=%s&cap=%s">%s</a></td>
- <td>%s</td>
+ <td>&nbsp;<a id=a href="$self?cmd=alllist&f=artist&v=%s&cap=%s">%s</a>&nbsp;</td>
+ <td>&nbsp;%s&nbsp;</td>
 </tr>
 EOF
 	}
@@ -296,14 +296,14 @@ sub print_alllist_table($@) {
 		$tr .= "." if $tr;
 		my $fmt = <<EOF;
  <tr>
-  <td $td_left><a id=a href="$self?cmd=add&id=%d" target=tframe>$addtext</a></td>
-  <td $td_artist><a id=a href="$self?cmd=alllist&f=artist&v=%s&cap=%s">%s</a></td>
-  <td $td_album><a id=a href="$self?cmd=alllist&f=album&v=%s&cap=%s">%s</a></td>
-  <td $td_track>%s</td>
-  <td $td_song><a id=a href="$self?cmd=add&id=%d" target=tframe>%s</a></td>
-  <td $td_time>%s</td>
-  <td $td_enc>%s</td>
-  <td $td_edit><a id=a href="$self?cmd=edit&id=%d">*</a></td>
+  <td $td_left>&nbsp;<a id=a href="$self?cmd=add&id=%d" target=tframe>$addtext</a>&nbsp;</td>
+  <td $td_artist>&nbsp;<a id=a href="$self?cmd=alllist&f=artist&v=%s&cap=%s">%s</a>&nbsp;</td>
+  <td $td_album>&nbsp;<a id=a href="$self?cmd=alllist&f=album&v=%s&cap=%s">%s</a>&nbsp;</td>
+  <td $td_track>&nbsp;%s&nbsp;</td>
+  <td $td_song>&nbsp;<a id=a href="$self?cmd=add&id=%d" target=tframe>%s</a>&nbsp;</td>
+  <td $td_time>&nbsp;%s&nbsp;</td>
+  <td $td_enc>&nbsp;%s&nbsp;</td>
+  <td $td_edit> <a id=a href="$self?cmd=edit&id=%d">*</a></td>
  </tr>
 EOF
 		$output .= sprintf $fmt, $_->{id},
@@ -339,14 +339,14 @@ EOF
 
 	print <<EOF;
  <tr>
-  <th $th_left>$addall</th>
-  <th $th_artist>Artist</th>
-  <th $th_album>Album</th>
-  <th $th_track>#</th>
-  <th $th_song>Song</th>
-  <th $th_time>Time</th>
-  <th $th_enc>Encoding</th>
-  <th $th_edit></th>
+  <th $th_left>&nbsp;$addall&nbsp;</th>
+  <th $th_artist>&nbsp;Artist&nbsp;</th>
+  <th $th_album>&nbsp;Album&nbsp;</th>
+  <th $th_track>&nbsp;#&nbsp;</th>
+  <th $th_song>&nbsp;Song&nbsp;</th>
+  <th $th_time>&nbsp;Time&nbsp;</th>
+  <th $th_enc>&nbsp;Encoding&nbsp;</th>
+  <th $th_edit>&nbsp;&nbsp;</th>
  </tr>
  <tr><td colspan=7></td></tr>
 $output
