@@ -862,6 +862,7 @@ sub print_lyrics_page($$) {
 	if($argsref->{action_clear}) {
 		$argsref->{lyrics} = $argsref->{source} = "";
 	}
+	$argsref->{lyrics} =~ s/\r\n?/\n/g;
 	if($argsref->{update}) {
 		$dbh->do("REPLACE INTO lyrics SET id=?, source=?, language=?, lyrics=?",
 			undef, $argsref->{id}, $argsref->{source},
@@ -906,7 +907,7 @@ sub print_lyrics_page($$) {
 	my $i = 0;
 	my @ids = ids_decode($argsref->{ids});
 	foreach(@ids) {
-		last if $f == $argsref->{id};
+		last if $_ == $argsref->{id};
 		$i++;
 	}
 	my $prev = '&nbsp;&nbsp;&nbsp;&nbsp;';
