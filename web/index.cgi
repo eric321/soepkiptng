@@ -193,6 +193,7 @@ sub get_playlist_table_entry($$$$$) {
 	$e =~ s/ /&nbsp;/g;
 	my $tr = $_[4]->{track} || "";
 	$tr .= "." if $tr;
+	my $edittarget = $edit_target || 'bframe';
 	my $fmt = <<EOF;
  <tr>
   <td $td_left>&nbsp;<a id=a href="%s">%s</a> <a id=a href="%s">%s</a>&nbsp;</td>
@@ -202,7 +203,7 @@ sub get_playlist_table_entry($$$$$) {
   <td $td_song>&nbsp;%s&nbsp;</td>
   <td $td_time>&nbsp;%s&nbsp;</td>
   <td $td_enc>&nbsp;%s&nbsp;</td>
-  <td $td_edit>&nbsp;<a id=a href="$self?cmd=edit&id=%d" target=bframe>*</a></td>
+  <td $td_edit>&nbsp;<a id=a href="$self?cmd=edit&id=%d" target=$edittarget>*</a></td>
  </tr>
 EOF
 	return sprintf $fmt, $_[0], $_[1], $_[2], $_[3],
@@ -354,6 +355,7 @@ sub print_alllist_table($$$@) {
 		$e =~ s/ /&nbsp;/g;
 		my $tr = $_->{track} || "";
 		$tr .= "." if $tr;
+		my $edittarget = $edit_target || 'bframe';
 		my $fmt = <<EOF;
  <tr>
   <td $td_left>&nbsp;<a id=a href="$self?cmd=add&id=%d" target=tframe>$addtext</a>&nbsp;</td>
@@ -363,7 +365,7 @@ sub print_alllist_table($$$@) {
   <td $td_song>&nbsp;<a id=a href="$self?cmd=add&id=%d" target=tframe>%s</a>&nbsp;</td>
   <td $td_time>&nbsp;%s&nbsp;</td>
   <td $td_enc>&nbsp;%s&nbsp;</td>
-  <td $td_edit> <a id=a href="$self?cmd=edit&id=%d" title="Edit">*</a>%s</td>
+  <td $td_edit> <a id=a href="$self?cmd=edit&id=%d" title="Edit" target=$edittarget>*</a>%s</td>
  </tr>
 EOF
 		my $el = $$session{'editlist'};
@@ -489,9 +491,9 @@ function verifydelete() {
   <input type=hidden name=id value="$id">
     <input type=hidden name=cmd value=changefile>
   <tr><td>Present:</td><td>$pr</td></tr>
-  <tr><td>Artist:</td><td><input type=text size=60 name=artist value="$_->{artist}"></td></tr>
-  <tr><td>Title:</td> <td><input type=text size=60 name=title  value="$_->{title}"></td></tr>
-  <tr><td>Album:</td> <td><input type=text size=60 name=album  value="$_->{album}"></td></tr>
+  <tr><td>Artist:</td><td><input type=text size=60 name=artist value="$_->{artist}"><input type=submit name=action_clear_artist value="Clear"><input type=submit name=action_fix_artist value="Fix"><input type=submit name=action_swap value="Swap Artist/Title"></td></tr>
+  <tr><td>Title:</td> <td><input type=text size=60 name=title  value="$_->{title}"><input type=submit name=action_clear_title value="Clear"><input type=submit name=action_fix_title value="Fix"></td></tr>
+  <tr><td>Album:</td> <td><input type=text size=60 name=album  value="$_->{album}"><input type=submit name=action_clear_album value="Clear"><input type=submit name=action_fix_album value="Fix"></td></tr>
   <tr><td>Track:</td> <td><input type=text size=3 name=track  value="$t" maxlength=2></td></tr>
   <tr><td>Time:</td>  <td>$l</td></tr>
   <tr><td>Encoding:</td>        <td>$_->{encoding}</td></tr>
@@ -696,6 +698,15 @@ elsif($cmd eq 'shuffle') {
  	printredirexit($q, 'playlist', \%args);
 }
 elsif($cmd eq 'changefile') {
+	if($args{'action_clear_artist'})   { $args{'artist'} = '' }
+	elsif($args{'action_clear_title'}) { $args{'title'} = '' }
+	elsif($args{'action_clear_album'}) { $args{'album'} = '' }
+	elsif($args{'action_fix_artist'}) { $args{'artist'} = cleanup_name(lc($args{'artist'})); }
+	elsif($args{'action_fix_title'}) { $args{'title'} = cleanup_name(lc($args{'title'})); }
+	elsif($args{'action_fix_album'}) { $args{'album'} = cleanup_name(lc($args{'album'})); }
+	elsif($args{'action_swap'}) {
+		($args{'title'}, $args{'artist'}) = ($args{'artist'}, $args{'title'});
+	}
 	my $arid = get_id($dbh, "artist", $args{'artist'}) or die;
 	my $alid = get_id($dbh, "album", $args{'album'}) or die;
 

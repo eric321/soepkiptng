@@ -211,4 +211,18 @@ sub construct_url($@) {
 	return $baseurl;
 }
 
+sub cleanup_name {
+	my ($s) = @_;
+	$s =~ s/_/ /g;
+	$s =~ s/([^'\w\xc0-\xff]|^)(\w)/\1\U\2/g;
+	$s =~ s/n T\b/n't/g;
+	$s =~ s/ S\b/'s/g;
+	$s =~ s/\bI M\b/I'm/g;
+	$s =~ s/ ll\b/'ll/ig;
+	$s =~ s/\b(i+)\b/\U\1/ig;
+	$s =~ s/([eiuy]) ([rv]e)\b/\1'\L\2/ig;
+	$s =~ s/-/ - /g;
+	$s;
+}
+
 1;
