@@ -145,7 +145,7 @@ while(<FILES>) {
 		/([^\/]*)$/;
 		my $oldname = $longname{$1};
 		if($oldname && ($oldname eq $_ || ! -e $oldname)) {
-			$dbh->do("UPDATE song SET filename=?, time_added=NULL, present=1 WHERE filename=?",
+			$dbh->do("UPDATE song SET filename=?, present=1 WHERE filename=?",
 				undef, $_, $oldname) or die "can't do sql command: " . $dbh->errstr . "\n";
 			delete $filename{$oldname};
 			$num_moved++;
@@ -195,8 +195,10 @@ while(<FILES>) {
 	if(!$albumid_cache{$album}) {
 		$albumid_cache{$album} = get_id($dbh, "album", $album);
 	}
-	$q = "REPLACE INTO song SET id=?, artist_id=?, title=?, album_id=?, track=?, present=1, " .
-		"filename=?, length=?, encoding=?, last_played=from_unixtime(?), time_added=NULL";
+	$q = "REPLACE INTO song SET id=?, artist_id=?, title=?, album_id=?, " .
+		"track=?, present=1, filename=?, length=?, encoding=?, " .
+		"last_played=from_unixtime(?)";
+	if(!$filename{$_}) { $q .= ', time_added=NULL'; }
 	$dbh->do($q, undef, $filename{$_}, $artistid_cache{$artist},
 		$title, $albumid_cache{$album}, $track || 0, $_, $len,
 		$desc, $last_played{$_} || 0)
