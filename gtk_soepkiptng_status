@@ -57,6 +57,18 @@ $SIG{'HUP'} = sub {
 	die;
 };
 
+sub is_paused($) {
+	my ($pid) = @_;
+
+	local *ST;
+	open ST,"/proc/$pid/stat" or next;
+	$_ = <ST>;
+	close ST;
+	if(/^\d+\s+\S+\s+(\w)/) {
+		return 1 if $1 eq "T";
+	}
+	return 0;
+};
 
 my $pause_xpm = (
 "16 16 4 1",
@@ -107,30 +119,33 @@ $button_pause = Gtk::Widget->new("GtkButton",
  -label   => "Pause",
  -border_width => 1,
  -clicked => sub {
-	my $pid = get_player_pid();
-	if($pid) {
-		local *ST;
-
-		open ST,"/proc/$pid/stat" or next;
-		$_ = <ST>;
-		close ST;
-		if(/^\d+\s+\S+\s+(\w)/) {
-			if($1 eq "T") {
-				kill "CONT", $pid;
-			} else {
-				kill "STOP", $pid;
-			}
+	if($playerpid) {
+		if(is_paused($playerpid)) {
+			kill "CONT", $playerpid;
+		} else {
+			kill "STOP", $playerpid;
 		}
 	}
   },
-  -visible=>1
+  -visible=>1,
+#  -height=>15,
 );
+#$button_resume = Gtk::Widget->new("GtkButton",
+# -label   => "Resume",
+# -border_width => 1,
+# -clicked => sub {
+#	$playerpid and kill "CONT", $playerpid;
+#  },
+#  -visible=>1,
+#  -height=>15,
+#);
 
 $button_kill = Gtk::Widget->new("GtkButton",
  -label   => "Kill",
  -border_width => 1,
  -clicked => \&kill_song,
- -visible=>1
+ -visible=>1,
+#  -height=>15,
 );
 
 
@@ -144,12 +159,14 @@ $hbox->pack_start($label, 1, 1, 3);
 $hbox->pack_start($vbox, 0, 0, 0);
 
 $vbox->pack_start($button_pause, 0, 0, 1);
+#$vbox->pack_start($button_resume, 0, 0, 1);
 $vbox->pack_start($button_kill, 0, 0, 1);
 
 
 #$splashimage = new Gtk::Pixmap($p,$pause_xpm)
 
 $mtime = -1;
+$paused = -1;
 update_song();
 my $id = Gtk->timeout_add(1000, \&update_song);
 
@@ -167,28 +184,48 @@ sub update_song() {
 	if($newmtime != $mtime) {
 		$mtime = $newmtime;
 		if(open F, $statusfile) {
-			my $nowplaying;
+			my ($nowplaying, $filename);
 			chop($nowplaying = <F>);
+			chop($filename = <F>);
+			<F>;
+			$playerpid = 0 + <F>;
 			close F;
 
-			my $query = "SELECT song.title as title,artist.name as artist,album.name as album,song.id,song.track" .
-				 " FROM song,artist,album" .
-				 " WHERE song.id=?" .
-				 " AND song.artist_id=artist.id AND song.album_id=album.id";
-			my $sth = $dbh->prepare($query);
-			my $rv = $sth->execute($nowplaying);
-			if($now_playing = $sth->fetchrow_hashref) {
-				$label->set_text(sprintf("%s\n%s\n[%02d] %s\r",
-					$now_playing->{artist},
-					$now_playing->{title},
-					$now_playing->{track},
-					$now_playing->{album}));
+			if($nowplaying > 0) {
+				my $query = "SELECT song.title as title,artist.name as artist,album.name as album,song.id,song.track" .
+					 " FROM song,artist,album" .
+					 " WHERE song.id=?" .
+					 " AND song.artist_id=artist.id AND song.album_id=album.id";
+				my $sth = $dbh->prepare($query);
+				my $rv = $sth->execute($nowplaying);
+				if($now_playing = $sth->fetchrow_hashref) {
+					$label->set_text(sprintf("%s\n%s\n[%02d] %s\r",
+						$now_playing->{artist},
+						$now_playing->{title},
+						$now_playing->{track},
+						$now_playing->{album}));
+				} else {
+					$label->set_text("\n\n\n");
+				}
 			} else {
-				$label->set_text("\n\n\n");
+				$filename =~ /^(.*)\/(.*?)$/;
+				$label->set_text("$1\n$2\n");
 			}
 		} else {
 			$label->set_text("** soepkiptngd not running!\n\n");
 		}
 	}
+
+#	if($playerpid) {
+#		my $p = is_paused($playerpid);
+#		if($p != $paused) {
+#			if($p) {
+#				$button_pause->set_title("Resume");
+#			} else {
+#				$button_pause->set_title("Pause");
+#			}
+#			$paused = $p;
+#		}
+#	}
 	return 1;
 };
