@@ -29,9 +29,10 @@ int fd1, fd2;
 int pid1 = 0;
 int pos = 0;
 int len = 0;
-int mayread = 1;
+int readeof = 0;
 int maywrite = 0;
 int do_realtime = 1;
+int debug = 0;
 
 void perr(char *s)
 {
@@ -47,6 +48,34 @@ int ischardev(int fd)
 	return S_ISCHR(st.st_mode);
 }
 
+void realtime(int on)
+{
+	struct sched_param sp;
+
+	if(debug) printf("realtime(%s)\n", on? "on":"off");
+	if(on) {
+		sp.sched_priority = 3;
+		if(sched_setscheduler(getpid(), SCHED_FIFO, &sp) < 0)
+			perror("sched_setscheduler");
+	
+		if(pid1) {
+			sp.sched_priority = 2;
+			if(sched_setscheduler(pid1, SCHED_FIFO, &sp) < 0)
+				perror("sched_setscheduler");
+		}
+	} else {
+		sp.sched_priority = 0;
+		if(sched_setscheduler(getpid(), SCHED_OTHER, &sp) < 0)
+			perror("sched_setscheduler");
+
+		if(pid1) {
+			sp.sched_priority = 0;
+			if(sched_setscheduler(pid1, SCHED_OTHER, &sp) < 0)
+				perror("sched_setscheduler");
+		}
+	}
+}
+
 void sighandler(int s)
 {
 	if(pid1) kill(pid1, s);
@@ -58,22 +87,9 @@ void sighandler(int s)
 		buf[0] = buf[1] = 0;
 		write(fd2, buf, sizeof(buf));
 		pos = len = maywrite = 0;
-		mayread = 1;
+		readeof = 0;
 
-		if(do_realtime) {
-			struct sched_param sp;
-
-			sp.sched_priority = 0;
-			if(sched_setscheduler(getpid(), SCHED_OTHER, &sp) < 0)
-				perror("sched_setscheduler");
-
-			if(pid1) {
-				sp.sched_priority = 0;
-				if(sched_setscheduler(pid1, SCHED_OTHER, &sp) < 0)
-					perror("sched_setscheduler");
-			}
-		}
-
+		if(do_realtime) realtime(0);
 		return;
 	}
 	fprintf(stderr,"Signal %d received, exiting.\n",s);
@@ -109,6 +125,10 @@ void usage(FILE *f)
 	fprintf(f, "\
 Usage:   cdrplay [-dvMR] [-b bufsize_kb] [-k n] [-D file] [command args...]\n\
 \n\
+         Cdrplay plays the stdout of 'command' (or stdin if command is omitted)\n\
+         to /dev/dsp. 'Command' should deliver 44.1kHz 16-bit signed\n\
+         little-endian audio data.
+
          -b bufsize_kb   : set buffer size\n\
          -d              : enable debugging output\n\
          -k n            : skip first n bytes (works only on seekable files)\n\
@@ -116,7 +136,14 @@ Usage:   cdrplay [-dvMR] [-b bufsize_kb] [-k n] [-D file] [command args...]\n\
          -D file         : send output to file instead of /dev/dsp\n\
          -M              : disable use of mlockall(2)\n\
          -R              : disable use of real-time scheduling\n\
-\n");
+\n\
+example: cdrplay -v -b 1000 splay -v -d - mp3files...\n\
+         (works only with 44.1kHz mp3s)\n\
+
+example: cdrplay -v -b 1000 mpg123 -r 44100 -s mp3files...\n\
+         (use mpg123-0.59o or higher, should work with all mp3s)\n\
+\n\
+Report bugs to eric@scintilla.utwente.nl.\n");
 }
 
 int main(int argc, char **argv)
@@ -125,7 +152,7 @@ int main(int argc, char **argv)
 	int bufsize, l, minlen = 0, status, i, r, w, iseek = 0, retval;
 	int maxfd;
 	fd_set rfds, wfds;
-	int debug = 0, do_mlockall = 1, verbose = 0;
+	int do_mlockall = 1, verbose = 0;
 	time_t starttime = 0;
 	char *snddev = "/dev/dsp";
 	int s_minflt = 0, s_majflt = 0, s_nswap = 0, s_nivcsw = 0;
@@ -213,6 +240,7 @@ int main(int argc, char **argv)
 			if(t != displayed_t || perc != displayed_perc) {
 				printf(" [%02u:%02u]", t / 60, t % 60);
 				if(perc <= 90) printf(" fill %d%%", perc);
+				if(readeof) printf(" EOF");
 				printf("               \r");
 				fflush(stdout);
 				displayed_t = t;
@@ -220,22 +248,10 @@ int main(int argc, char **argv)
 			}
 		}		
 	
-		if(!mayread && len == 0) break;
+		if(readeof && len == 0) break;
 
-		if((!mayread || len == bufsize) && !maywrite) {  /* off we go! */
-			if(do_realtime) {
-				struct sched_param sp;
-
-				sp.sched_priority = 3;
-				if(sched_setscheduler(getpid(), SCHED_FIFO, &sp) < 0)
-					perror("sched_setscheduler");
-
-				if(pid1) {
-					sp.sched_priority = 2;
-					if(sched_setscheduler(pid1, SCHED_FIFO, &sp) < 0)
-						perror("sched_setscheduler");
-				}
-			}
+		if((readeof || len == bufsize) && !maywrite) {  /* off we go! */
+			if(do_realtime) realtime(1);
 
 			/* don't let verbose/debug output block the audio output */
 			fcntl(1, F_SETFL, O_NONBLOCK);
@@ -254,45 +270,45 @@ int main(int argc, char **argv)
 				s_nivcsw = ru.ru_nivcsw;
 			}
 		}
-		/* flush data in soundcard driver if we are out of data */
-		if(maywrite && len == 0) ioctl(fd2, SNDCTL_DSP_POST, 0);
 
 		FD_ZERO(&rfds);
-		if(mayread && len < bufsize) FD_SET(fd1, &rfds);
+		if(!readeof && len < bufsize) FD_SET(fd1, &rfds);
 		FD_ZERO(&wfds);
 		if(maywrite && len > 0) FD_SET(fd2, &wfds);
-		select(maxfd + 1, &rfds, &wfds, NULL, NULL);	
+		select(maxfd + 1, &rfds, &wfds, NULL, NULL);
 
 		/* try writing... */
 		if(FD_ISSET(fd2, &wfds)) {
 			l = len < BLKSIZE? len : BLKSIZE;
 			if(l + pos > bufsize) l = bufsize - pos;
-			while((r = write(fd2, buf + pos, l)) == -1 && errno == EINTR) {
-				if(!maywrite) {
-					r = 0;
-					break;
-				}
+
+			if((w = write(fd2, buf + pos, l)) == -1) {
+				if(errno == EINTR) continue;
+				perror("write");
+				break;
 			}
-			if(r == -1 && errno != EAGAIN) { perror("write"); break; }
-			if(r >= 0) {
-				len -= r;
-				pos = (pos + r) % bufsize;
-				continue;
-			}
+			len -= w;
+			pos = (pos + w) % bufsize;
+
+			/* flush data in soundcard driver if we are out of data */
+			if(len == 0) ioctl(fd2, SNDCTL_DSP_POST, 0);
+
+			if(!readeof) continue;
 		}
 
 		/* try reading... */
-		if(FD_ISSET(fd1, &rfds)) {
+		if(readeof || FD_ISSET(fd1, &rfds)) {
 			p = buf + (pos + len) % bufsize;
 			l = (bufsize - len) < BLKSIZE? (bufsize - len) : BLKSIZE;
-			w = read(fd1, p, l);
-			if(w == -1) {
+			
+			if((r = read(fd1, p, l)) == -1) {
 				if(errno == EINTR) continue;
 				perror("read");
 				break;
 			}
-			if(w == 0) mayread = 0; /* end-of-file */
-			if(w > 0) len += w;
+			len += r;
+			readeof = (r == 0); /* end-of-file */
+			if(debug && readeof) printf("readeof ");
 		}
 	}
 	if(verbose) printf("\n");
