@@ -1,0 +1,143 @@
+#!/usr/bin/perl
+
+############################################################################
+# soepkiptng (c) copyright 2000 Eric Lammerts <eric@lammerts.org>.
+# $Id$
+############################################################################
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# A copy of the GNU General Public License is available on the World Wide Web
+# at `http://www.gnu.org/copyleft/gpl.html'.  You can also obtain it by
+# writing to the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+# Boston, MA 02111-1307, USA.
+############################################################################
+
+my $progdir;
+BEGIN {
+	use Cwd qw'cwd abs_path';
+
+	# find program directory
+	$_ = $0;
+	while(-l) {
+		my $l = readlink or die "readlink $_: $!\n";
+		if($l =~ m|^/|) { $_ = $l; } else { s|[^/]*$|/$l|; }
+	}
+	m|(.*)/|;
+	$progdir = abs_path($1);
+
+	unshift @INC, "$progdir/lib";
+}
+use Getopt::Std;
+use DBI;
+use MP3::Tag;
+
+require "$progdir/soepkiptng.lib";
+
+getopts('b:dc:h');
+
+$opt_h and die <<EOF;
+
+Usage: raw2ogg [-d] [-b bitrate] [-c configfile] file...
+
+-d            : delete original after successful conversion
+-b bitrate    : kbitrate to encode to (default 192)
+-c configfile : override soepkiptng config file
+
+EOF
+
+read_configfile(\%conf, $opt_c);
+
+$ENV{PATH} = "$progdir/bin:$ENV{PATH}";
+
+
+$bitrate = $opt_b || 192;
+$cwd = cwd;
+
+$| = 1;
+
+sub latin1_to_utf($) {
+	my ($s) = @_;
+
+	$s =~ s/(.)/pack("U", ord $1)/ge;
+	return $s;
+}
+
+$dbh = DBI->connect("DBI:$conf{db_type}:$conf{db_name}:$conf{db_host}",
+	$conf{db_user}, $conf{db_pass})
+	or die "can't connect to database";
+
+foreach $rawfile (@ARGV) {
+	next if -d $rawfile;
+
+	if($rawfile !~ m|^/|) { $rawfile = "$cwd/$rawfile"; }
+	$rawfile =~ s!(^|/)(\./)+!\1!g;
+
+	($qfile = $rawfile) =~ s/(.*)\.\w+?$/\1.%/;
+	$q = "SELECT title,artist.name,album.name,track" .
+	     " FROM song,artist,album" .
+	     " WHERE song.artist_id=artist.id AND song.album_id=album.id" .
+	     " AND present AND filename LIKE ?";
+	$sth = $dbh->prepare($q);
+	$sth->execute($qfile)
+		or die "can't do sql command: " . $dbh->errstr;
+
+	my ($ti, $ar, $al, $tr);
+	($ti, $ar, $al, $tr) = $sth->fetchrow_array or do {
+		$qfile =~ s|.*/|%/|;
+		$sth->execute($qfile)
+			or die "can't do sql command: " . $dbh->errstr;
+
+		($ti, $ar, $al, $tr) = $sth->fetchrow_array or do {
+			warn "$rawfile: not found in dbase\n";
+		};
+	};
+
+	my $oggfile = $rawfile;
+	$oggfile =~ s|.*/||;
+	$oggfile =~ s/\.\w+//;
+	$oggfile .= ".ogg";
+
+	if(-e $oggfile) {
+		warn "$oggfile exists, skipping.\n";
+		next;
+	}
+
+	my @oggargs;
+	if($ti) { push @oggargs, "-t", latin1_to_utf($ti); }
+	if($ar) { push @oggargs, "-a", latin1_to_utf($ar); }
+	if($al) { push @oggargs, "-l", latin1_to_utf($al); }
+	if($tr) { push @oggargs, "-N", $tr; }
+
+	system 'oggenc', '-r', '-b', $bitrate, @oggargs,
+		'-o', "$oggfile.tmp", $rawfile;
+
+	if($?) {
+		warn "$rawfile: oggenc failed.\n";
+		close STDIN;
+		unlink "$oggfile.tmp" or warn "delete $oggfile.tmp: $!\n";
+                if(($? & 0x7f) == 2) { die "aborted.\n"; }
+		next;
+	}
+
+	if(-e $oggfile) {
+		warn "$oggfile exists, skipping.\n";
+		unlink "$oggfile.tmp" or warn "delete $oggfile.tmp: $!\n"; 
+		next;
+	}
+	rename "$oggfile.tmp", $oggfile or do {
+		warn "rename $oggfile.tmp -> $oggfile: $!\n";
+		unlink "$oggfile.tmp" or warn "delete $oggfile.tmp: $!\n"; 
+		next;
+	};
+	if($opt_d) {
+		unlink $rawfile or warn "unlink $rawfile: $!\n";
+	}
+}
