@@ -43,11 +43,22 @@ CREATE TABLE queue (
   timestamp timestamp
 );
 
+CREATE TABLE list (
+  id int(11) NOT NULL auto_increment,
+  name varchar(255) DEFAULT '' NOT NULL,
+  UNIQUE(name),
+  PRIMARY KEY (id)
+);
 
 CREATE TABLE list_contents (
   song_order int NOT NULL,
   list_id int NOT NULL,
   type ENUM("artist", "album", "song", "list") NOT NULL,
-  content_id int NOT NULL
+  entity_id int NOT NULL,
+  UNIQUE (list_id,type,entity_id)
 );
 
+CREATE TABLE sessions (
+  id char(32) not null primary key,
+  a_session text
+);

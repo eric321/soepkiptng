@@ -122,28 +122,93 @@ sub kill_song_internal() {
 sub get_id($$$) {
 	my ($db, $table, $value) = @_;
 
-	my $sth = $db->prepare("SELECT id,name FROM $table WHERE name=?");
+	my $sth = $db->prepare("SELECT id,name FROM $table WHERE binary name=?");
 	if($sth->execute($value) >= 1) {
 		my ($id, $v) = $sth->fetchrow_array;
 
-		# "gt" works case-insensitively !@#!@#%$@#, compare byte-by-byte
-		my ($vvalue, $vv) = ($value, $v);
-		while($vvalue) {
-			last if ord($vvalue) > ord($vv);
-			if(ord($vvalue) < ord($vv)) {
-				$db->do("UPDATE $table SET name=? WHERE id=?", undef, $value, $id)
-					or die;
-				last;
-			}
-			$vvalue =~ s/.//;
-			$vv =~ s/.//;
-		}
+#		# "gt" works case-insensitively !@#!@#%$@#, compare byte-by-byte
+#		my ($vvalue, $vv) = ($value, $v);
+#		while($vvalue) {
+#			last if ord($vvalue) > ord($vv);
+#			if(ord($vvalue) < ord($vv)) {
+#				$db->do("UPDATE $table SET name=? WHERE id=?", undef, $value, $id)
+#					or die;
+#				last;
+#			}
+#			$vvalue =~ s/.//;
+#			$vv =~ s/.//;
+#		}
 		return $id;
 	} else {
 		$db->do("REPLACE INTO $table SET name=?", undef, $value)
 			or die;
 		return $db->{'mysql_insertid'};
 	}
+}
+
+sub get_playlist_contents($$) {
+	my ($dbh, $list) = @_;
+	my %songids;
+	my %artistids, %albumsids, %listids;
+	my %artistids_done, %albumsids_done, %listids_done;
+
+	my $sth_list = $dbh->prepare("SELECT type,entity_id" .
+		" FROM list_contents WHERE list_id=?");
+	my $sth_artist = $dbh->prepare("SELECT id FROM song WHERE artist_id=?");
+	my $sth_album = $dbh->prepare("SELECT id FROM song WHERE album_id=?");
+	
+	$listids{$list} = 1;
+	while(%artistids || %albumsids || %listids) {
+		foreach(keys %listids) {
+			$listids_done{$_} = 1;
+			delete $listids{$_};
+
+			$sth_list->execute($_);
+			while($_ = $sth_list->fetchrow_hashref) {
+				if($_->{'type'} eq 'list') {
+					next if $listids_done{$_->{'entity_id'}};
+					$listids{$_->{'entity_id'}} = 1;
+				} elsif($_->{'type'} eq 'artist') {
+					next if $artistids_done{$_->{'entity_id'}};
+					$artistids{$_->{'entity_id'}} = 1;
+				} elsif($_->{'type'} eq 'album') {
+					next if $albumids_done{$_->{'entity_id'}};
+					$albumids{$_->{'entity_id'}} = 1;
+				} elsif($_->{'type'} eq 'song') {
+					$songids{$_->{'entity_id'}} = 1;
+				}
+			}
+		}
+		foreach(keys %artistids) {
+			$artistids_done{$_} = 1;
+			delete $artistids{$_};
+
+			$sth_artist->execute($_);
+			while($_ = $sth_artist->fetchrow_hashref) {
+				$songids{$_->{'id'}} = 1;
+			}
+		}
+		foreach(keys %albumids) {
+			$albumids_done{$_} = 1;
+			delete $albumids{$_};
+
+			$sth_album->execute($_);
+			while($_ = $sth_album->fetchrow_hashref) {
+				$songids{$_->{'id'}} = 1;
+			}
+		}
+	}
+	return keys %songids;
+}
+
+sub construct_url($@) {
+	my ($baseurl, $argsref) = @_;
+	my $sep = "?";
+	foreach(keys %$argsref) {
+		$baseurl .= "$sep$_=" . encode($$argsref{$_});
+		$sep = "&";
+	}
+	return $baseurl;
 }
 
 1;

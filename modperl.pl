@@ -2,6 +2,9 @@
 # $Id$
 
 use Apache::DBI;
+use Apache::Session::MySQL;
+use Apache;
+
 use CGI; CGI->compile(':all');
 use Socket;
 
