@@ -206,6 +206,17 @@ EOF
 		$td_edit, $self, $q->{id}, $edit_target || 'bframe', $listch;
 }
 
+sub albumlist_entry($) {
+	my ($res) = @_; 
+
+	$res->{album} =~ /^(.?)(.*)/;
+	return sprintf(qq|<a id=a href="%s?cmd=alllist| .
+		qq|&artist_id=%d&album_id=%d&cap=%s"><b>%s</b>%s</a> (%d)|,
+		$self, $res->{arid}, $res->{alid},
+		encurl("Artist: $res->{artist}; Album: $res->{album}"),
+		enchtml($1 || "?"), enchtml($2), $res->{c});
+}
+
 sub print_playlist_table($$) {
 	my ($dbh, $nowplaying) = @_;
 	my $nowfile;
@@ -290,20 +301,11 @@ sub print_artistlist_table($$$@) {
 	my $sth = $dbh->prepare($query);
 	my $rv = $sth->execute(@val)
 		or die "can't do sql command: " . $dbh->errstr;
-	my ($ar, $al, $c, $arid, $alid);
 	my %artistname;
 	my %al;
-	while(($ar, $al, $c, $arid, $alid) = $sth->fetchrow_array) {
-		$artistname{$arid} = $ar;
-		if($al =~ /^(.)(.*)/) {
-			$al{$arid} .= sprintf(<<EOF, encurl("Album: $al"), enchtml($1), enchtml($2), $c);
-<a id=a href="$self?cmd=alllist&album_id=$alid&cap=%s"><b>%s</b>%s</a> (%d)&nbsp;&nbsp;
-EOF
-		} else {
-			$al{$arid} .= sprintf(<<EOF, encurl("Artist: $a; Album: ?"), $c);
-<a id=a href="$self?cmd=alllist&artist_id=$arid&album_id=$alid&cap=%s"><b>?</b></a> (%d)&nbsp;&nbsp;
-EOF
-		}
+	while($_ = $sth->fetchrow_hashref()) {
+		$artistname{$_->{arid}} = $_->{artist};
+		$al{$_->{arid}} .= albumlist_entry($_) . ",&nbsp;";
 	}
 
 
@@ -316,7 +318,7 @@ EOF
  </tr>
 EOF
 	foreach(sort {lc($artistname{$a}) cmp lc($artistname{$b})} keys %artistname) {
-		$al{$_} =~ s/, $//;
+		$al{$_} =~ s/,&nbsp;$//;
 		printf <<EOF, encurl("Artist: $artistname{$_}"), $artistname{$_}, $al{$_};
 <tr>
  <td>&nbsp;<a id=a href="$self?cmd=alllist&artist_id=$_&cap=%s">%s</a>&nbsp;</td>
@@ -375,25 +377,17 @@ EOF
 <center id=hdr>$caption</center>
 EOF
 	if(scalar keys %artistids == 1) {
-		my $query = "SELECT DISTINCT album.name as album, artist.name as artist, count(*)," .
-				"song.artist_id, song.album_id" .
-				" FROM song,artist,album WHERE present AND song.artist_id = ?".
-				" AND song.artist_id=artist.id AND song.album_id=album.id".
-				" GROUP BY binary album.name ORDER BY album.name";
+		my @al;
+
+		my $query = "SELECT DISTINCT album.name as album, artist.name as artist," .
+			" count(*) as c, song.artist_id as arid, song.album_id as alid " .
+			" FROM song,artist,album WHERE present AND song.artist_id = ?".
+			" AND song.artist_id=artist.id AND song.album_id=album.id".
+			" GROUP BY binary album.name ORDER BY album.name";
 		my $sth = $dbh->prepare($query);
 		my $rv = $sth->execute(keys %artistids);
-		my ($al, $a, $c, $arid, $alid, @al);
-		while(($al, $a, $c, $arid, $alid) = $sth->fetchrow_array) {
-			if($al =~ /^(.)(.*)/) {
-				push @al, sprintf(qq|<a id=a href="%s?cmd=alllist| .
-					qq|&album_id=$alid&cap=%s"><b>%s</b>%s</a> (%d)|,
-					$self, encurl("Album: $al"), enchtml($1), enchtml($2), $c);
-			} else {
-				push @al, sprintf(qq|<a id=a href="%s?cmd=alllist| .
-					qq|&artist_id=$arid&album_id=$alid&cap=%s">| .
-					qq|<b>?</b></a> (%d)|,
-					$self, encurl("Artist: $a; Album: ?"), $c);
-			}
+		while($_ = $sth->fetchrow_hashref()) {
+			push @al, albumlist_entry($_);
 		}
 		printf "Albums: %s.\n", join(",&nbsp; ", @al);
 	}
@@ -504,6 +498,8 @@ EOF
 	}
 	my $f = $_->{'filename'};
 	$f =~ s|.*/||;
+	$f =~ s|\\|_|g;
+	$f = encurl($f);
 	print <<EOF;
   <tr><td>
    <form action="$self/$f" method=post>
@@ -757,7 +753,7 @@ elsif($cmd eq 'artistlist') {
 	my $s = $args{'sort'};
 	$s =~ s/\W//g;
 	my @q = ("SELECT DISTINCT artist.name as artist, album.name as album," .
-		 " count(*), song.artist_id, song.album_id," .
+		 " count(*) as c, song.artist_id as arid, song.album_id as alid," .
 		 " UCASE(album.name) as sort" .
 		 " FROM song,artist,album WHERE present");
 
