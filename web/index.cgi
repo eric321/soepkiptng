@@ -130,6 +130,7 @@ EOF
    <option value=artist>Artist
    <option value=title>Title
    <option value=album>Album
+   <option value=filename>Filename
   </select>
   <noscript><input type=submit value="Go"></noscript>
  </form>
