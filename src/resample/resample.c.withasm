@@ -1,0 +1,94 @@
+
+#include <stdio.h>
+#include <stdlib.h>
+
+struct sample {
+	short l;
+	short r;
+};
+
+#define MULT_BITS 32
+#define MULT (1LL << MULT_BITS)
+
+int main(int argc, char **argv)
+{
+	long long tstep, t;
+	struct sample sin[2], sout;
+	int bytes_appended, debug = 0;
+
+	while(argc > 1 && strcmp(argv[1], "-d") == 0) {
+		argc--;
+		argv++;
+		debug++;
+	}
+	if(argc != 3) {
+		fprintf(stderr,"\
+Usage: resample f_in f_out\n\
+\n\
+       f_in    : input sampling frequency\n\
+       f_out:  : output sampling frequency\n\
+\n\
+       stdin   : 16-bit signed little-endian input\n\
+       stdout  : 16-bit signed little-endian output\n\
+\n");
+		exit(1);
+	}
+
+	tstep = MULT * atoi(argv[1]) / atoi(argv[2]);
+	fprintf(stderr, "tstep=%.16f\n", (double)tstep / MULT);
+	if(fread(sin, sizeof(sin), 1, stdin) != 1) exit(0);
+	if(debug) fprintf(stderr,"..");
+
+	for(t = 0, bytes_appended = 0;;) {
+#if 0
+		if(t == 0) {
+			sout.l = sin[0].l;
+			sout.r = sin[0].r;
+		} else {
+			asm ("movl %1,%%eax; negl %%eax; mull %2; movw %%dx, %0"
+				: "=m" (sout.l)
+				: "m" ((int)t) , "m" ((int)sin[0].l)
+				: "eax", "edx");
+			fprintf(stderr,"%hd = (%Ld * %hd) >> 40\n", sout.l, MULT-t, sin[0].l);
+			asm ("movl %1,%%eax; mull %2; addw %%dx, %0"
+				: "=m" (sout.l)
+				: "m" (t) , "m" ((int)sin[1].l)
+				: "eax", "edx");
+			asm ("movl %1,%%eax; negl %%eax; mull %2; movw %%dx, %0"
+				: "=m" (sout.r)
+				: "m" (t) , "m" ((int)sin[0].r)
+				: "eax", "edx");
+			asm ("movl %1,%%eax; mull %2; addw %%dx, %0"
+				: "=m" (sout.r)
+				: "m" (t) , "m" ((int)sin[1].r)
+				: "eax", "edx");
+		}
+#else
+		sout.l = ((MULT - t) * sin[0].l + t * sin[1].l) >> MULT_BITS;
+		sout.r = ((MULT - t) * sin[0].r + t * sin[1].r) >> MULT_BITS;
+#endif
+		if((sout.l != ((MULT - t) * sin[0].l + t * sin[1].l) >> MULT_BITS) ||
+		   (sout.r != ((MULT - t) * sin[0].r + t * sin[1].r) >> MULT_BITS)) {
+		   fprintf(stderr, "oei\n");
+		   exit(1);
+		}
+
+		if(fwrite(&sout, sizeof(sout), 1, stdout) != 1) exit(1);
+		if(debug) fprintf(stderr,"+");
+
+		t += tstep;
+		while(t >= MULT) {
+			t -= MULT;
+			sin[0] = sin[1];
+			if(bytes_appended || fread(&sin[1], sizeof(sin[1]), 1, stdin) != 1) {
+				sin[1].l = sin[1].r = 0;
+				if(debug) fprintf(stderr,",");
+				if(++bytes_appended > 1) exit(0);
+				continue;
+			}
+			if(debug) fprintf(stderr,".");
+		}
+	}
+	fflush(stderr);
+	return 0;
+}
