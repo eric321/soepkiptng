@@ -259,12 +259,20 @@ EOF
 	$q = "REPLACE INTO song SET id=?, artist_id=?, title=?, album_id=?, " .
 		"track=?, present=1, filename=?, length=?, encoding=?, random_pref=?, " .
 		"last_played=from_unixtime(?), time_added=from_unixtime(?)";
+
 	$dbh->do($q, undef, $filename{$_}, $artistid_cache{$info{artist}},
 		$info{title}, $albumid_cache{$info{album}}, $info{track} || 0,
 		$_, $info{len}, $info{encoding}, $opt_R || 10000,
 		$last_played{$_} || ($opt_L? time : 0),
 		$time_added{$_} || time)
                 or die "can't do sql command: " . $dbh->errstr . "\n";
+
+	if($info{lyrics}) {
+		$dbh->do("REPLACE INTO lyrics SET id=?, description=?, language=?, lyrics=?",
+			undef, $filename{$_} || $dbh->{'mysql_insertid'},
+			$info{description}, $info{language}, $info{lyrics})
+	                or die "can't do sql command: " . $dbh->errstr . "\n";
+	}
 	delete $filename{$_};
 }
 
@@ -310,6 +318,17 @@ sub get_id3($\%) {
 	my $id3 = MP3::Tag->new($file);
 	$id3->config("autoinfo", "ID3v2", "ID3v1");
 	my ($t, $tr, $a, $alb) = $id3->autoinfo();
+	
+	# read lyrics
+	my $tag = $id3->{ID3v2};
+	if($tag) {
+		my $uslt = $tag->getFrame('USLT');
+		if($uslt) {
+			$info->{language} = $uslt->{Language};
+			$info->{lyrics} = $uslt->{Text};
+			$info->{description} = $uslt->{Description};
+		}
+	}
 
 	$a =~ s/_/ /g;
 	$a =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g unless $a =~ /[A-Z]/ || $opt_C;

@@ -87,6 +87,6 @@ CREATE TABLE lyrics (
   id int(11) NOT NULL,
   language char(3),
   lyrics mediumblob,
-  source blob,
+  description blob,
   PRIMARY KEY (id)
 );

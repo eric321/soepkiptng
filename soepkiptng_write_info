@@ -107,6 +107,7 @@ sub do_dir($$) {
 
 sub do_file($$) {
 	my ($dbh, $f) = @_;
+	my ($id, $ti, $ar, $al, $tr, $len, $lyrics, $source, $language);
 
 	$f =~ s|^\./+||;
 
@@ -120,7 +121,7 @@ sub do_file($$) {
 
 	my $sth = $dbh->prepare(
 		"SELECT song.id,title,artist.name,album.name,track,length," .
-		"lyrics,language FROM song " .
+		"lyrics,language,source FROM song " .
 		"LEFT JOIN album ON album.id=song.album_id " .
 		"LEFT JOIN artist ON artist.id=song.artist_id " . 
 		"LEFT JOIN lyrics ON lyrics.id=song.id " .
@@ -130,7 +131,7 @@ sub do_file($$) {
 	for(;;) {
 		$sth->execute($filename_noext)
 			or die "can't do sql command: " . $dbh->errstr;
-		($id, $ti, $ar, $al, $tr, $len, $lyrics, $language) =
+		($id, $ti, $ar, $al, $tr, $len, $lyrics, $language, $source) =
 			$sth->fetchrow_array and last;
 
 		$partial++;
@@ -151,7 +152,7 @@ sub do_file($$) {
 	next unless -s $f;
 
 	if($f =~ /\.mp[123]$/i) {
-		do_mp3($dbh, $f, $ar, $ti, $al, $tr, $len, $lyrics, $language);
+		do_mp3($dbh, $f, $ar, $ti, $al, $tr, $len, $lyrics, $source, $language);
 	} elsif($f =~ /\.flac$/i) {
 		do_flac($dbh, $f, $ar, $ti, $al, $tr, $len);
 	} elsif($f =~ /\.ogg$/i) {
@@ -196,8 +197,8 @@ sub do_file($$) {
 	return 1;
 }
 
-sub do_mp3($$$$$$$$) {
-	my ($dbh, $f, $ar, $ti, $al, $tr, $len, $lyrics, $lyrlang) = @_;
+sub do_mp3($$$$$$$$$) {
+	my ($dbh, $f, $ar, $ti, $al, $tr, $len, $lyrics, $lyrdesc, $lyrlang) = @_;
 
 	open F, "+<$f" or do {
 		warn "$f: $!\n";
@@ -235,7 +236,7 @@ sub do_mp3($$$$$$$$) {
 		$newtag = $mp3->newTag('ID3v2');
 	}
 	if($p_ti ne $ti || $p_tr != $tr || $p_ar ne $ar || $p_al ne $al ||
-		$p_len != 1000 * $len || $p_uslt->{Description} ne "" || 
+		$p_len != 1000 * $len || $p_uslt->{Description} ne $lyrdesc || 
 		$p_uslt->{Language} ne $lyrlang || $p_uslt->{Text} ne $lyrics) {
 
 		$newtag->add_frame('TIT2', $ti) if $ti;
@@ -243,7 +244,7 @@ sub do_mp3($$$$$$$$) {
 		$newtag->add_frame('TALB', $al) if $al;
 		$newtag->add_frame('TRCK', $tr) if $tr;
 		$newtag->add_frame('TLEN', 1000 * $len) if $len;
-		$newtag->add_frame('USLT', 0, $lyrlang, "", $lyrics);
+		$newtag->add_frame('USLT', 0, $lyrlang, $lyrdesc, $lyrics);
 		warn "$f: updating ID3v2 tag\n";
 		$newtag->write_tag()
 			unless $opt_t;

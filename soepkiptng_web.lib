@@ -747,8 +747,8 @@ sub getlyrics_purelyrics_com($) {
 	$num == 1
 		or return undef; #die "Not a single match\n";
 
-	$info->{source} = "http://www.purelyrics.com/$url";
-	$req = HTTP::Request->new(GET => $info->{source});
+	$info->{description} = "http://www.purelyrics.com/$url";
+	$req = HTTP::Request->new(GET => $info->{description});
 	$res = $ua->request($req);
 
 	$res->code == 200
@@ -792,8 +792,8 @@ sub getlyrics_lyricsdomain_com($) {
 	$num == 1
 		or return undef; #die "Not a single match\n";
 
-	$info->{source} = "http://www.lyricsdomain.com/lyrics/$lyrnum/";
-	$req = HTTP::Request->new(GET => $info->{source});
+	$info->{description} = "http://www.lyricsdomain.com/lyrics/$lyrnum/";
+	$req = HTTP::Request->new(GET => $info->{description});
 	$res = $ua->request($req);
 
 	$res->code == 200
@@ -860,12 +860,12 @@ sub print_lyrics_page($$) {
 	my ($dbh, $argsref) = @_;
 
 	if($argsref->{action_clear}) {
-		$argsref->{lyrics} = $argsref->{source} = "";
+		$argsref->{lyrics} = $argsref->{description} = "";
 	}
 	$argsref->{lyrics} =~ s/\r\n?/\n/g;
 	if($argsref->{update}) {
-		$dbh->do("REPLACE INTO lyrics SET id=?, source=?, language=?, lyrics=?",
-			undef, $argsref->{id}, $argsref->{source},
+		$dbh->do("REPLACE INTO lyrics SET id=?, description=?, language=?, lyrics=?",
+			undef, $argsref->{id}, $argsref->{description},
 			$argsref->{language}, $argsref->{lyrics})
 			or die;
 	}
@@ -879,7 +879,7 @@ sub print_lyrics_page($$) {
 	my $sth = $dbh->prepare(
 		"SELECT song.id, title, song.track, album.name as album, " .
 		"artist.name as artist, lyrics.lyrics as lyrics, " .
-		"lyrics.language as language, lyrics.source as source FROM song " .
+		"lyrics.language as language, lyrics.description as description FROM song " .
 		"LEFT JOIN album ON album.id=song.album_id " .
 		"LEFT JOIN artist ON artist.id=song.artist_id " . 
 		"LEFT JOIN lyrics ON lyrics.id=song.id " .
@@ -898,7 +898,7 @@ sub print_lyrics_page($$) {
 			$downloaded .= "No lyrics found";
 		} else {
 			$downloaded .= sprintf "Downloaded lyrics from <a href=\"%s\">%s</a>",
-				$f->{source}, enchtml($f->{source});
+				$f->{description}, enchtml($f->{description});
 		}
 		$downloaded .= ")</b></td></tr>";
 		$f->{language} = "eng";
@@ -928,12 +928,12 @@ sub print_lyrics_page($$) {
 #	if($rows == 1) { $rows = 30; }
 	$rows = 30;
 
-	my $source = $f->{source};
-	$source =~ s/\s.*//;
-	if($source =~ /^(ftp|http):/) {
-		$source = "<a href=\"$source\" target=_blank>Open page</a>";
+	my $description = $f->{description};
+	$description =~ s/\s.*//;
+	if($description =~ /^(ftp|http):/) {
+		$description = "<a href=\"$description\" target=_blank>Open page</a>";
 	} else {
-		$source = "";
+		$description = "";
 	}
 
 	printf <<EOF,
@@ -950,8 +950,8 @@ sub print_lyrics_page($$) {
  <tr><td>Album:</td><td>%s</td></tr> 
  <tr><td>Track:</td><td>%s</td></tr> 
  <tr>
-  <td>Source:</td>
-  <td><input type=text name=source size=74 value="%s">%s</td>
+  <td>Description:</td>
+  <td><input type=text name=description size=74 value="%s">%s</td>
  </tr>
  <tr>
   <td>Language:</td>
@@ -975,7 +975,7 @@ EOF
 		$self, $argsref->{id}, $argsref->{ids}, $downloaded,
 		enchtml($f->{artist}), enchtml($f->{title}),
 		enchtml($f->{album}), $f->{track}? $f->{track} : "",
-		enchtml($f->{source}), $source,
+		enchtml($f->{description}), $description,
 		join("\n", map { sprintf "<option value=\"%s\"%s>%s</option>",
 				$_, $_ eq $f->{language}? " selected":"",
 				$_? "$iso_639_2{$_} ($_)" : "-------";
