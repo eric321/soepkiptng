@@ -82,7 +82,7 @@ TODO:
 * get correct info for VBR mp3's
 * ogg-vorbis support                               ->done
 * reading of samplefreq/channels of lpac files.    ->done
-* resampling & mono->stereo conversion
+* resampling & mono->stereo conversion	           ->done (quick hack)
 * smooth transition between 2 songs (interpolation)
 * id3/id3v2 support
 * synchronize update of statusfile with cdrplay
