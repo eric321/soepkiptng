@@ -1,0 +1,7 @@
+#!/bin/sh
+
+(head -9 /var/local/soepkiptng/soepkiptng.status | tail -1;
+ echo ...;
+ head -10 /var/local/soepkiptng/soepkiptng.status | tail -1) | \
+text2wave -F 44100 | \
+bplay -s 44100 -b 16
