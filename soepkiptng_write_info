@@ -243,12 +243,19 @@ sub do_mp3($$$$$$$) {
 	my ($p_ti, $p_tr, $p_ar, $p_al) = $mp3->autoinfo();
 
 	my $p_len = 0;
-	if(exists $mp3->{ID3v2}) {
+	my $newtag = $mp3->{ID3v2};
+	if(defined($newtag)) {
 		$p_len = $mp3->{ID3v2}->getFrame("TLEN");
+		$newtag->remove_frame('TIT2');
+		$newtag->remove_frame('TPE1');
+		$newtag->remove_frame('TALB');
+		$newtag->remove_frame('TRCK');
+		$newtag->remove_frame('TLEN');
+	} else {
+		$newtag = $mp3->newTag('ID3v2');
 	}
 
 	if($p_ti ne $ti || $p_tr != $tr || $p_ar ne $ar || $p_al ne $al || $p_len != 1000 * $len) {
-		$newtag = $mp3->newTag('ID3v2');
 		$newtag->add_frame('TIT2', $ti) if $ti;
 		$newtag->add_frame('TPE1', $ar) if $ar;
 		$newtag->add_frame('TALB', $al) if $al;
