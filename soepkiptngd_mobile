@@ -62,7 +62,7 @@ sub open_db() {
 			$conf{db_user}, $conf{db_pass}) or do {
 
 			warn "Can't connect to database $conf{db_name}" .
-			     "\@$conf{db_host} as user $conf{db_user}\r\n";
+			     "\@$conf{db_host} as user $conf{db_user}\n";
 			return undef;
 		};
 	}
@@ -72,16 +72,16 @@ sub open_db() {
 sub playlist_clear() {
 	open_db() or return;
 	$dbh->do("DELETE FROM queue");
-	warn "playlist cleared.\r\n";
+	warn "playlist cleared.\n";
 }
 
 sub open_db_getnow() {
 	open_db() or return;
 	my $now = get_nowplaying($dbh) or do {
-		warn "no now!\r\n";
+		warn "no now!\n";
 		return;
 	};
-	warn "now->{id}=$now->{id}\r\n";
+	warn "now->{id}=$now->{id}\n";
 	return $now;
 }
 
@@ -93,7 +93,7 @@ sub playlist_addall_artist() {
 		"artist_id=$now->{arid} AND id != $now->{id} AND ".
                 "unix_timestamp(now()) - unix_timestamp(last_played) > ".
 		"$conf{min_random_time} ORDER BY RAND()");
-	warn "adding songs: " . join(",", @{$songsref}) . ".\r\n";
+	warn "adding songs: " . join(",", @{$songsref}) . ".\n";
 	return if @{$songsref} == 0;
 	add_song($dbh, '', @{$songsref});
 }
@@ -111,7 +111,7 @@ sub playlist_addall_album($) {
 		"track > $now->{track} AND ".
                 "unix_timestamp(now()) - unix_timestamp(last_played) > ".
 		"$conf{min_random_time} ORDER BY track");
-	warn "adding songs: " . join(",", @{$songsref}) . ".\r\n";
+	warn "adding songs: " . join(",", @{$songsref}) . ".\n";
 	return if @{$songsref} == 0;
 	add_song($dbh, '', @{$songsref});
 }
@@ -119,7 +119,7 @@ sub playlist_addall_album($) {
 sub shuffle() {
 	open_db() or return;
 	shuffle_queue($dbh);
-	warn "shuffle\r\n";
+	warn "shuffle\n";
 }
 
 # return higest of (left, right) volume
@@ -140,7 +140,7 @@ sub setvol($;$) {
 		}
 	} else {
 		$volume = getvol() + $incr;
-		warn "volume=$volume\r\n";
+		warn "volume=$volume\n";
 	}
 
 	if($incr == 0) { $muted = !$muted; }
@@ -149,7 +149,7 @@ sub setvol($;$) {
 	if($volume > 100) { $volume = 100; }
 	if($volume < 0) { $volume = 0; }
 
-	warn "setting volume, volume=$volume, muted=$muted\r\n";
+	warn "setting volume, volume=$volume, muted=$muted\n";
 	say("volume " . numtext($volume)) if $debug;
 	Audio::Mixer::set_cval($mixerchannel, ($muted? 0 : $volume));
 }
@@ -163,7 +163,7 @@ sub killsong() {
 		or return;
 	connect SOCK, $paddr
 		or return;
-	warn "killed song.\r\n";
+	warn "killed song.\n";
 	close SOCK;
 }
 
@@ -182,13 +182,13 @@ sub digit($) {
 	$keypadvalue *= 10;
 	$keypadvalue += $_[0];
 	push @keypadvalues, $_[0];
-	warn "keypadvalue=$keypadvalue\r\n";
+	warn "keypadvalue=$keypadvalue\n";
 }
 
 sub digit_reset() {
 	$keypadvalue = 0;
 	@keypadvalues = ();
-	warn "digit_reset\r\n";
+	warn "digit_reset\n";
 }
 
 sub playlist() {
@@ -231,7 +231,10 @@ sub playlist() {
 	digit_reset();
 	if($reboots >= 3) {
 		say("reboot") if $debug;
+		warn "sync\n";
 		system "sync";
+		sleep 2;
+		warn "reboot -nf\n";
 		system "reboot -nf";
 	}
 	if($killdelete >= 3) {
@@ -244,13 +247,14 @@ sub say($) {
 	my ($t) = @_;
 
 	my $wavfile = "/tmp/soepkiptngd_mobile_say_$t.wav";
-	warn "say wavfile=$wavfile\r\n";
+	warn "say wavfile=$wavfile\n";
 
 	my $tmpfile = "/tmp/soepkiptngd_mobile_say.wav";
 	unlink $tmpfile;
 	symlink $wavfile, $tmpfile;
 
 	# pause _before_ doing text2speech (to speed it up)
+	warn "kill -USR2 $cdrplaypid\n";
 	kill 'USR2', $cdrplaypid;	# pause: make it close /dev/dsp
 
 	if(! -f $wavfile) {
@@ -260,16 +264,17 @@ sub say($) {
 		close F;
 	}
 
-	warn "wavfile size=" . (-s $wavfile) . " bytes.\r\n";
+	warn "wavfile size=" . (-s $wavfile) . " bytes.\n";
 
 	system "wav2raw $tmpfile | cdrplay -w";
+	warn "kill -HUP $cdrplaypid\n";
 	kill 'HUP', $cdrplaypid;	# resume
 	unlink $tmpfile;
 }
 
 sub sayit() {
 	my $now = get_nowplaying($dbh) or do {
-		warn "no now!\r\n";
+		warn "no now!\n";
 		return;
 	};
 
@@ -284,7 +289,7 @@ sub request() {
 	say("request song " . numtext($keypadvalue))
 		if $debug;
 	add_song($dbh, '', $keypadvalue);
-	warn "adding song: $keypadvalue.\r\n";
+	warn "adding song: $keypadvalue.\n";
 	digit_reset();
 }
 
@@ -297,13 +302,13 @@ sub request_album() {
 		"song.album_id=album.id AND album.id=$alid ".
 		"ORDER BY track");
 	digit_reset();
-	warn "adding songs: " . join(",", @{$songsref}) . ".\r\n";
+	warn "adding songs: " . join(",", @{$songsref}) . ".\n";
 	return if @{$songsref} == 0;
 	say("request album " . numtext($alid) .
 	    " found " . numtext(scalar @{$songsref}))
 		if $debug;
 	add_song($dbh, '', @{$songsref});
-	warn "adding song: @{$songsref}.\r\n";
+	warn "adding song: @{$songsref}.\n";
 }
 
 sub request_artist() {
@@ -315,17 +320,17 @@ sub request_artist() {
 		"song.artist_id=artist.id AND artist.id=$arid ".
 		"ORDER BY track");
 	digit_reset();
-	warn "adding songs: " . join(",", @{$songsref}) . ".\r\n";
+	warn "adding songs: " . join(",", @{$songsref}) . ".\n";
 	say("request artist " . numtext($arid) .
 	    " found " . numtext(scalar @{$songsref}))
 		if $debug;
 	return if @{$songsref} == 0;
 	add_song($dbh, '', @{$songsref});
-	warn "adding song: @{$songsref}.\r\n";
+	warn "adding song: @{$songsref}.\n";
 }
 
 sub funkeyd() {
-	warn "funkeyd cdrplaypid=$cdrplaypid k=$killhost:$killport\r\n";
+	warn "funkeyd cdrplaypid=$cdrplaypid k=$killhost:$killport\n";
 	local *F;
 
 	my $keynum = 89;
@@ -333,7 +338,7 @@ sub funkeyd() {
 	my $loadkeys_input;
 	foreach(keys %conf) {
 		next unless /^funkey_(\d+)$/;
-		$keynum < 128 or die "too many funkeys defined!\r\n";
+		$keynum < 128 or die "too many funkeys defined!\n";
 		$loadkeys_input .= sprintf "  keycode %d = U+%04x\n", $1, 0xfe00 + $keynum;
 		print STDERR " $1=>$keynum";
 		$scancode{$keynum} = $1;
@@ -341,30 +346,32 @@ sub funkeyd() {
 		$keynum++;
 	}
 	warn "---\n$loadkeys_input---\n";
-	warn "loadkeys\r\n";
+	warn "loadkeys\n";
 	if(open(F, "|-") == 0) {
 		$ENV{'PATH'} = $mypath;
 		setpgrp;
 		exec 'loadkeys', '-';
-		die "loadkeys: $!\r\n";
+		die "loadkeys: $!\n";
 	}
 	print F $loadkeys_input;
-	warn "\r\nloadkeys wait\r\n";
+	warn "\nloadkeys wait\n";
 	close F;
 
-	warn "funkey fork\r\n";
+	warn "funkey fork\n";
 	if(fork == 0) {
 		setpgrp;
 		$ENV{'PATH'} = $mypath;
 		open LOGERR, ">>/tmp/soepkiptngd_mobile.out";
 		$SIG{__WARN__} = sub {
-			print STDERR $_[0];
+			my $msg = $_[0];
+			$msg =~ s/\n/\r\n/g;
+			print STDERR $msg;
 			printf LOGERR "%s %s",
-				scalar localtime, $_[0];
+				scalar localtime, $msg;
 		};
 
 		Audio::Mixer::init_mixer();
-		open F, "/dev/funkey" or die "/dev/funkey: $!\r\n";
+		open F, "/dev/funkey" or die "/dev/funkey: $!\n";
 		for(;;) {
 			sysread F, $key, 1;
 			$key = unpack "C", $key;
@@ -383,7 +390,7 @@ sub funkeyd() {
 			}
 			$lastkeytime = time;
 
-			warn "scancode $scancode{$key} keynum $key action $funkey_handle{$key}!\r\n";
+			warn "scancode $scancode{$key} keynum $key action $funkey_handle{$key}!\n";
 			eval $funkey_handle{$key};
 		}
 	}
@@ -406,14 +413,20 @@ sub wait_for_soepkiptng() {
 
 ### MAIN ###
 
-$mypath = "/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin:$progdir:$progdir/bin";
-warn "path=$mypath\r\n";
+$SIG{__WARN__} = sub {
+	my $msg = $_[0];
+	$msg =~ s/\n/\r\n/g;
+	print STDERR $msg;
+};
 
-warn "volume\r\n";
+$mypath = "/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin:$progdir:$progdir/bin";
+warn "path=$mypath\n";
+
+warn "volume\n";
 setvol($conf{volume_init}, 1) if $conf{volume_init};
 
 if($$ == 1) {
-	warn "fork\r\n";
+	warn "fork\n";
 	if(fork == 0) {
 		setpgrp;
 		$ENV{'PATH'} = $mypath;
@@ -424,26 +437,26 @@ if($$ == 1) {
 				scalar localtime, $_[0];
 		};
 
-		warn "hdparm -u1 -m16 -X66 -d1 /dev/hda\r\n";
+		warn "hdparm -u1 -m16 -X66 -d1 /dev/hda\n";
 		system "hdparm -u1 -m16 -X66 -d1 /dev/hda";
-		warn "ifconfig lo\r\n";
+		warn "ifconfig lo\n";
 		system "ifconfig lo 127.0.0.1";
-		warn "hostname -F /etc/hostname\r\n";
+		warn "hostname -F /etc/hostname\n";
 		system "hostname -F /etc/hostname";
 
-		warn "unlink $conf{statusfile}\r\n";
+		warn "unlink $conf{statusfile}\n";
 		unlink $conf{statusfile};
 
-		warn "starting soepkiptngd\r\n";
+		warn "starting soepkiptngd\n";
 		exec 'sched', 'soepkiptngd', '-d';
-		warn "sched: $!\r\n";
+		warn "sched: $!\n";
 		exec 'soepkiptngd', '-d';
-		warn "soepkiptngd: $!\r\n";
+		warn "soepkiptngd: $!\n";
 		exec "$progdir/soepkiptngd", '-d';
-		die "$progdir/soepkiptngd: $!\r\n";
+		die "$progdir/soepkiptngd: $!\n";
 	}
 
-	warn "wait_for_soepkiptng\r\n";
+	warn "wait_for_soepkiptng\n";
 	wait_for_soepkiptng;
 } else {
 	local *ST;
@@ -454,7 +467,7 @@ if($$ == 1) {
 }
 warn "killhost=$killhost:$killport\n";
 
-warn "funkeyd\r\n";
+warn "funkeyd\n";
 funkeyd;
 
 # for testing
@@ -463,10 +476,10 @@ exit if $$ != 1;
 sleep 1;
 
 exec "/sbin/init";
-warn "/sbin/init: $!\r\n";
+warn "/sbin/init: $!\n";
 
 exec "/bin/sh";
-warn "/bin/sh: $!\r\n";
+warn "/bin/sh: $!\n";
 
 # nothing else we can do
 for(;;) { }
