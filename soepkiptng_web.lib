@@ -526,7 +526,7 @@ EOF
 	print "<table border=0 cellspacing=0>\n";
 
 	if(@ids) {
-	$addall = sprintf <<EOF, ids_encode(@ids);
+		$addall = sprintf <<EOF, ids_encode(@ids);
 <a id=a href="$req->{self}?cmd=add&ids=%s" target=tframe>$conf{addalltext}</a>
 EOF
 	}
@@ -863,6 +863,9 @@ sub print_lyrics_page($) {
 	if($req->{args}->{action_clear}) {
 		$req->{args}->{lyrics} = $req->{args}->{description} = "";
 	}
+	if($req->{args}->{action_refetch}) {
+		$req->{dbh}->do("DELETE FROM lyrics WHERE id=?", undef, $req->{args}->{id});
+	}
 	$req->{args}->{lyrics} =~ s/\r\n?/\n/g;
 	if($req->{args}->{update}) {
 		$req->{dbh}->do("REPLACE INTO lyrics SET id=?, description=?, language=?, lyrics=?",
@@ -964,6 +967,7 @@ sub print_lyrics_page($) {
   <td colspan=2>%s %s
    <input type=submit name=action_update value="Update">
    <input type=submit name=action_clear value="Clear">
+   <input type=submit name=action_refetch value="Refetch">
 <script language="Javascript">
 <!--
  document.write('<input type=submit value="Close" onClick="javascript:window.close();">');
@@ -1299,7 +1303,6 @@ sub handle_request($) {
 		shuffle_queue($req->{dbh});
 	 	printredir($req, 'playlist', \%args);
 		return;
-		$sessiondata{$sessionid} = 1;
 	}
 	elsif($cmd eq 'changefile') {
 		my $newid = 0;
