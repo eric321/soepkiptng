@@ -205,6 +205,7 @@ $editlistopts
  <td id=az>&nbsp;&nbsp;<a id=az href="$self?cmd=shuffle">Shuffle</a></td>
  <td id=az>&nbsp;&nbsp;<a id=az href="$self?cmd=recent&days=7" target=bframe>Recent</a></td>
  <td id=az>&nbsp;&nbsp;<a id=az href="$self?cmd=alllist&rand=50" target=bframe>Random</a></td>
+ <td id=az>&nbsp;&nbsp;<a id=az href="$self?cmd=alllist&encoding=^Video" target=bframe>Video</a></td>
  <td id=az>&nbsp;&nbsp;<a id=az target=_blank href="$self?cmd=maint">*</a></td>
  <td id=az>&nbsp;&nbsp;<a id=az target=bframe href="$self?cmd=shoutcast">Shoutcast</a></td>
  <td id=az width=100%>&nbsp;&nbsp;<a id=az target=bframe href="$self?cmd=sql">SQL</a></td>
@@ -865,10 +866,10 @@ sub printftr() {
 EOF
 }
 
-sub printredirexit($$$) {
-	my ($q, $cmd, $argsref) = @_;
+sub printredirexit($$$$) {
+	my ($q, $self, $cmd, $argsref) = @_;
 	$argsref->{cmd} = $cmd;
- 	print $q->redirect(construct_url($q->url(-full=>1), $argsref));
+ 	print $q->redirect(construct_url($self, $argsref));
 	exit;
 }
 
@@ -928,10 +929,30 @@ sub get_user($) {
 ############################################################################
 # MAIN
 
-my $q = new CGI;
-$self = $q->script_name();
+my $query = new CGI;
+my $pathinfo = $query->path_info();
+if($pathinfo =~ s|^/*([.\d]+)/([^/]*)||) {
+	$sessionid = $1;
+	$cmd = $2;
+#	$bla = "ja,$pathinfo,$sessionid,$cmd";
+} else {
+	$sessionid = sprintf "%d.%d.%d", $$, time, rand 1e9;
+#	$bla = "nee,$pathinfo,$sessionid,$cmd";
+
+	# remove expired entries (>= 1 week old) from session hash
+	my $threshold = time - 7 * 86400;
+	foreach(keys %sessiontime) {
+		if($_ < $threshold) {
+			delete $sessiontime{$_};
+			delete $sessiondata{$_};
+		}
+	}
+}
+$sessiontime{$sessionid} = time;
+$bla = "s=$sessiondata{$sessionid},\$\$=$$";
+$self = $query->script_name() . "/$sessionid/";
 my %args;
-foreach($q->param) { $args{$_} = $q->param($_); }
+foreach($query->param) { $args{$_} = $query->param($_); }
 
 $SIG{__DIE__} = sub {
 	printhtmlhdr;
@@ -942,22 +963,10 @@ $SIG{__DIE__} = sub {
 my $dbh = DBI->connect("DBI:mysql:$conf{db_name}:$conf{db_host}",$conf{db_user},$conf{db_pass}, {mysql_client_found_rows =>1 })
 	or die "can't connect to database...$!\n";
 
-# cookies/sessions
 my $r = Apache->request;
-#my $cookie;
-#if($r->header_in('Cookie') =~ /SESSION_ID=(\w*)/) {
-#	$cookie = $1;
-#}
-#my %session;
-#tie %session, 'Apache::Session::MySQL', $cookie, {
-#	Handle     => $dbh,
-#	LockHandle => $dbh
-#};
-#$r->header_out("Set-Cookie" => "SESSION_ID=$session{_session_id};");
 $r->no_cache(1);
 
 my $cmd = $args{cmd};
-
 my $rt = $conf{refreshtime};
 
 if($cmd eq 'empty') {
@@ -968,33 +977,33 @@ if($cmd eq 'empty') {
 
 if($cmd eq 'add') {
 	add_song($dbh, get_user($r), ids_decode($args{ids}));
- 	printredirexit($q, 'playlist', undef);
+ 	printredirexit($query, $self, 'playlist', undef);
 }
 elsif($cmd eq 'del') {
 	del_song($dbh, ids_decode($args{ids}));
- 	printredirexit($q, 'playlist', undef);
+ 	printredirexit($query, $self, 'playlist', undef);
 }
 elsif($cmd eq 'up') {
 	foreach(reverse split /,/, $args{id}) { move_song_to_top($dbh, $_); }
- 	printredirexit($q, 'playlist', undef);
+ 	printredirexit($query, $self, 'playlist', undef);
 }
 elsif($cmd eq 'kill') {
 	kill_song(get_user($r));
- 	printredirexit($q, 'playlist', undef);
+ 	printredirexit($query, $self, 'playlist', undef);
 }
 elsif($cmd eq 'setplaylist') {
 	$session{playlist} = $args{list};
- 	printredirexit($q, 'playlist', undef);
+ 	printredirexit($query, $self, 'playlist', undef);
 }
 elsif($cmd eq 'seteditlist') {
 	$session{editlist} = $args{list};
- 	printredirexit($q, 'playlist', undef);
+ 	printredirexit($query, $self, 'playlist', undef);
 }
 elsif($cmd eq 'addlist') {
 	require_write_access;
 	$dbh->do("REPLACE INTO list SET name=?", undef, $args{listname})
 		or die;
- 	printredirexit($q, 'lists', \%args);
+ 	printredirexit($query, $self, 'lists', \%args);
 }
 elsif($cmd eq 'addtolist') {
 	require_write_access;
@@ -1004,7 +1013,7 @@ elsif($cmd eq 'addtolist') {
 	delete $args{add_type};
 	delete $args{add_list};
 	delete $args{add_id};
- 	printredirexit($q, 'alllist', \%args);
+ 	printredirexit($query, $self, 'alllist', \%args);
 }
 elsif($cmd eq 'dellist') {
 	require_write_access;
@@ -1012,11 +1021,12 @@ elsif($cmd eq 'dellist') {
 		or die;
 	$dbh->do("DELETE FROM list_contents WHERE list_id=?", undef, $args{id})
 		or die;
- 	printredirexit($q, 'lists', \%args);
+ 	printredirexit($query, $self, 'lists', \%args);
 }
 elsif($cmd eq 'shuffle') {
 	shuffle_queue($dbh);
- 	printredirexit($q, 'playlist', \%args);
+ 	printredirexit($query, $self, 'playlist', \%args);
+	$sessiondata{$sessionid} = 1;
 }
 elsif($cmd eq 'changefile') {
 	my $newid = 0;
@@ -1025,10 +1035,6 @@ elsif($cmd eq 'changefile') {
 
 	if($args{action_delete}) {
 		delete_file($dbh, \%args);
-		exit;
-	}
-	if($args{action_download}) {
-		download_file($dbh, \%args, $q);
 		exit;
 	}
 	if($args{action_clearlp}) {
@@ -1117,7 +1123,7 @@ elsif($cmd eq 'changefile') {
 	}
 
 	if($newid) { $args{id} = $newid; }
- 	printredirexit($q, 'edit', \%args);
+ 	printredirexit($query, $self, 'edit', \%args);
 }
 
 if($cmd eq 'search') {
@@ -1143,13 +1149,13 @@ if($cmd eq '') {
 }
 elsif($cmd eq 'playlist') {
 	printhtmlhdr;
-	my $s = $q->url(-full=>1);
 	print <<EOF;
-<META HTTP-EQUIV="Refresh" CONTENT="$rt;URL=$s?cmd=playlist&s=$args{s}">
+<META HTTP-EQUIV="Refresh" CONTENT="$rt;URL=$self?cmd=playlist&s=$args{s}">
 EOF
 	printhdr($conf{plstyle});
 	print_az_table($dbh, \%session);
 	print_playlist_table($dbh);
+#	printf "[[%s]]\n", $bla;
 	printftr;
 }
 elsif($cmd eq 'artistlist') {
@@ -1229,6 +1235,11 @@ elsif($cmd eq 'alllist') {
 		$s = "album.name" unless $s;
 		$cap = sprintf($args{cap}, $args{album_id});
 	}
+	if($args{encoding}) {
+		$s = "artist.name" unless $s;
+		add_search_args(\$q, \@qargs, \$s, $args{encoding}, 'encoding');
+		$cap = "Search Encoding: $args{encoding}";
+	}
 	if($args{rand}) {
 		$limit = 0 + $args{rand};
 		$s = "rand()";
@@ -1243,6 +1254,7 @@ elsif($cmd eq 'alllist') {
 	} else {
 		print "Error: No search terms specified.\n";
 	}
+#	printf "[[%s]]\n", $bla;
 	printftr;
 }
 elsif($cmd eq 'seealso') {
@@ -1334,7 +1346,7 @@ EOF
 }
 elsif($cmd eq 'update') {
 	require_write_access;
-	print $q->header(-type=>'text/plain');
+	print $query->header(-type=>'text/plain');
 	my $arg = "";
 	$arg = "-f" if $args{action_full};
 	print `$conf{progdir}/soepkiptng_update $arg 2>&1`;
@@ -1358,7 +1370,7 @@ elsif($cmd eq 'download') {
 		or die "id $id not found in database\n";
 
 	open F, $file or die "$file: $!\n";
-	print $q->header(-type=>'application/octet-stream', -Content_length=>(-s F));
+	print $query->header(-type=>'application/octet-stream', -Content_length=>(-s F));
 	while(read F, $_, 4096) { print; }
 	close F;
 }
