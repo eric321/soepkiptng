@@ -170,10 +170,7 @@ while(<FILES>) {
 
 	# insert song into database
 	$q = "REPLACE INTO songs SET id=?, artist=?, title=?, album=?, track=?, " .
-		"filename=?, length=?, encoding=?, last_played=from_unixtime(?)";
-	if(!$filename{$_}) {
-		$q .= ", time_added=NULL";
-	}
+		"filename=?, length=?, encoding=?, last_played=from_unixtime(?), time_added=NULL";
 	$dbh->do($q, undef, $filename{$_}, $artist, $title, $album, $track, $_, $len,
 		$desc, $last_played{$_} || 0)
                 or die "can't do sql command: " . $dbh->errstr . "\n";
@@ -383,17 +380,17 @@ sub extract_artist_title {
 	$p = '' if -e "$p/.noalbum";
 
 	$f =~ s/\s*$//;
-	$f =~ s/^\s*(\d{0,2})\W*//;	# nummer weg, max 2 digits
+	$f =~ s/^\s*(\d{0,2})[^a-z]*//i;	# nummer weg, max 2 digits
 	$tr = $1;
 
 	$p =~ s|/+$||;
 	$p =~ s|.*/||;
 
-	if($f =~ /\s*-\s*/) {
+	if($f =~ /[_\s]*-[_\s]*/) {
 		($a, $t) = ($`, $');
-		($alb = $p) =~ s/.*-//;
+		($alb = $p) =~ s/.*-[_\s]*//;
 	} else {
-		$p =~ s/-(.*)// and $alb = $1;
+		$p =~ s/-[_\s]*(.*)// and $alb = $1;
 		($a, $t) = ($p, $f);
 	}
 	return (unsimplify($a), unsimplify($t), $tr, unsimplify($alb));
