@@ -159,7 +159,7 @@ while(<FILES>) {
 	}
 
 	# get artist/title/track/album info
-	m|([^/]+/+[^/]+)$|;
+	m|([^/]+/+[^/]+)\.\w+$|;
 #warn "1=$1\n";
 	$artist = $artist{$1};
 	$title = $track{$1};
@@ -402,7 +402,7 @@ sub read_eric_files() {
 						$realartist = $1;
 						next;
 					};
-					if(s/^track\s+(\S+)\s*//) {
+					if(s/^track\s+(\S+)\.\w+\s*//) {
 						$a = $1;
 						$filename = $1;
 						$a =~ s/^(\d+)-([^-]+)-.*/\2/;
@@ -421,7 +421,6 @@ sub read_eric_files() {
 						s/\s*$//;
 						if(!$_) {
 							$_ = $filename;
-							s/\..*?$//;
 							s/^\d+-([^-]+)-//;
 							s/_/ /g;
 							s/\b(\w)/\U\1/g; 
