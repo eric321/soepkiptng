@@ -21,6 +21,7 @@
 
 # $Id$
 
+use Cwd 'abs_path';
 use CGI qw/-nph/;
 use DBI;
 use Getopt::Std;
@@ -29,28 +30,16 @@ use HTTP::Status;
 use IO::Socket;
 use Socket;
 
-############################################################################
-# CONFIG
-
-$configfile = "/etc/soepkiptng.conf";
-open F, $configfile or die "$configfile: $!\n";
-while(<F>) {
-	/^#/ and next;
-	s/\s+$//;
-	/./ or next;
-	if(/^(\w+)\s*=\s*(.*?)\s*$/) {
-		$f = $1;
-		$conf{$f} = $2;
-	} elsif(/^\s+(.*?)\s*$/) {
-		# continuation line
-		$conf{$f} .= "\n$1";
-	} else {
-		die "$configfile line $.: invalid format\n";
-	}
+# find program directory
+$_ = $0;
+while(-l) {
+	my $l = readlink or die "readlink $_: $!\n";
+	if($l =~ m|^/|) { $_ = $l; } else { s|[^/]*$|/$l|; }
 }
-close F;
+m|(.*)/|;
+my $progdir = abs_path($1);
 
-require "$conf{progdir}/soepkiptng.lib";
+require "$progdir/soepkiptng.lib";
 
 my $cgiquery;
 
@@ -120,7 +109,15 @@ sub ids_decode($) {
 }
 
 
-sub print_frame() {
+sub print_frame($) {
+	my ($args) = @_;
+
+	my $bframe_args = exists $args->{sval}?
+		sprintf("cmd=search&stype=%s&sval=%s",
+			encurl($args->{stype}) || "any",
+			encurl($args->{sval})) :
+		"cmd=empty";
+
 	print <<EOF;
 <html>
 <head>
@@ -128,7 +125,7 @@ sub print_frame() {
 </head>
 <frameset rows="$conf{frameheights}">
  <frame name=tframe src="$self?cmd=playlist" marginheight="$conf{marginheight}">
- <frame name=bframe src="$self?cmd=empty" marginheight="$conf{marginheight}">
+ <frame name=bframe src="$self?$bframe_args" marginheight="$conf{marginheight}">
 </frameset>
 <body $conf{body}>
 </body>
@@ -166,7 +163,12 @@ EOF
 </td>
 <td id=az nowrap>&nbsp;&nbsp;Search:</td>
 <td id=az nowrap>
- <form id=search action="$self" method=get target=bframe>
+ <script>
+ <!--
+ function do_onload(){document.search.sval.focus();}
+ // -->
+ </script>
+ <form id=search name=search action="$self" method=get target=bframe>
   <input type=hidden name=cmd value=search>
   <input type=text size=$sz name=sval style="$conf{searchformstyle}">
 </td>
@@ -335,7 +337,7 @@ EOF
  </tr>
  <tr><td colspan=7></td></tr>
 %s%s
-<tr><td>Total time: %d:%02d</td></tr>
+<tr><td><font size=-2>&nbsp;Total time: %d:%02d</font></td></tr>
 </table>
 EOF
 		$conf{th_left}, @ids? sprintf(qq|<a id=a href="%s?cmd=del&ids=%s">| .
@@ -868,7 +870,7 @@ sub printhtmlhdr() {
 EOF
 }
 
-sub printhdr($) {
+sub printhdr($;$) {
 	print <<EOF;
 <html>
 <head>
@@ -878,7 +880,7 @@ $_[0]
 -->
 </style>
 </head>
-<body $conf{body}>
+<body $conf{body} $_[1]>
 EOF
 }
 
@@ -1200,14 +1202,14 @@ sub handle_request() {
 	
 	if($cmd eq '') {
 		printhtmlhdr;
-		print_frame;
+		print_frame(\%args);
 	}
 	elsif($cmd eq 'playlist') {
 		printhtmlhdr;
 		print <<EOF;
 <META HTTP-EQUIV="Refresh" CONTENT="$rt;URL=$self?cmd=playlist&s=$args{s}">
 EOF
-		printhdr($conf{plstyle});
+		printhdr($conf{plstyle}, "onLoad=do_onload()");
 		print_az_table($dbh, \%session);
 		print_playlist_table($dbh);
 	#	printf "[[%s]]\n", $bla;
@@ -1406,7 +1408,7 @@ EOF
 		print $cgiquery->header(-type=>'text/plain');
 		my $arg = "";
 		$arg = "-f" if $args{action_full};
-		print `$conf{progdir}/soepkiptng_update $arg 2>&1`;
+		print `$progdir/soepkiptng_update $arg 2>&1`;
 	}
 	elsif($cmd eq 'edit') {
 		printhtmlhdr;
@@ -1475,7 +1477,9 @@ sub run_instance() {
 ############################################################################
 # MAIN
 
-getopts('dp:i:l:');
+getopts('dp:i:l:c:');
+
+read_configfile(\%conf, $opt_c);
 
 my $port = $opt_p || $conf{httpd_port} || 80;
 $daemon = new HTTP::Daemon(LocalPort => $port, ReuseAddr => 1)
@@ -1504,4 +1508,5 @@ for(;;) {
 	}
 	my $pid = wait;
 	delete $pids{$pid};
+	if($?) { sleep 1; } # rate-limit failing children
 }
