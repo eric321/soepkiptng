@@ -180,6 +180,31 @@ sub logprintf($@) {
 	}
 }
 
+sub playshoutcast($) {
+	my ($file) = @_;
+	my $starttime;
+	my $errors = 0;
+
+	# append trailing slash if necessary
+	# (mpg123 gets confused if it's missing)
+	$file =~ m|^http:/+[^/]+/| or $file .= "/";
+
+	for(;;) {
+		$starttime = time;
+		system qw/mpg123 -s -y -pnone -r44100 --stereo/, $file;
+		if(time - $starttime < 60) {
+			$errors++;
+		} else {
+			$errors = 0;
+		}
+		if($errors > 5) {
+			die "Too many errors, giving up on $file.\n";
+		}
+		sleep 1;
+		warn "restarting mpg123 [$file]\n";
+	}
+}
+
 sub start_play($) {
 	my ($filename) = @_;
 
@@ -195,15 +220,7 @@ sub start_play($) {
 		my $ext = lc($1);
 
 		if($filename =~ /^http:/) {
-			# append trailing slash if necessary
-			# (mpg123 gets confused if it's missing)
-			$filename =~ m|http:/+[^/]+/| or $filename .= "/";
-
-			for(;;) {
-				system qw/mpg123 -s -y -pnone -q -r44100 --stereo/, $filename;
-				sleep 1;
-				warn "restarting mpg123 [$filename]\n";
-			}
+			playshoutcast($filename);
 		} elsif($ext eq "mp2" || $ext eq "mp3") {
 			exec "mp3toraw", $filename;
 		} elsif($ext eq "ogg") {
@@ -232,7 +249,6 @@ sub perish {
 	kill 'KILL', -$pid, $cdrplaypid;
 	exit;
 };
-
 
 getopts('dr:s:');
 my $debug = 1 if $opt_d;
