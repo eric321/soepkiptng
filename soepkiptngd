@@ -307,7 +307,7 @@ sub start_play($) {
 			exec "cat", $filename;
 		} elsif($ext eq "flac") {
 			exec "flac", "-d", "-fl", $filename, "-";
-		} elsif($ext =~ /^(mpe?g|avi|asx|asf|vob|wmv)$/) {
+		} elsif($ext =~ /^(mpe?g|avi|asx|asf|vob|wmv|rm)$/) {
 			exec "soepkiptng_video", $filename;
 		} elsif($ext eq "ac3") {
 			exec "soepkiptng_ac3", $filename;
