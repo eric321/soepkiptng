@@ -81,6 +81,10 @@ static void handle_cmd(int fd, struct socket_t *p, char *s)
 
 	else if(strcasecmp(cmd, "waitbufferempty") == 0) {
 		p->waitbufferempty = 1;
+		if(!output_oss_running()) {
+			buffer_length = 0;
+			oss_intercept_resume = 1;
+		}
 	}
 
 	else if(strcasecmp(cmd, "resume") == 0) {
@@ -115,10 +119,12 @@ static void socket_pre(int fd, long cookie)
 	struct socket_t *p = (struct socket_t *)cookie;
 
 	if(p->waitbufferempty) {
-		if(buffer_length == 0) {
+		DDEBUG("socket_pre[%d]: waitbufferempty buffer_length=%d\n", fd, buffer_length);
+		if(!oss_intercept_resume && buffer_length == 0) {
 			sockprintf(p, "+OK\n");
 			p->waitbufferempty = 0;
 		} else {
+			set_fd_mask(fd, 0);
 			return;
 		}
 	}

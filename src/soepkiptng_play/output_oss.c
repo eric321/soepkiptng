@@ -20,6 +20,7 @@
 static char *oss_dev;
 static int oss_fd;
 static int oss_do_init;
+int oss_intercept_resume;
 
 static int ischardev(int fd)
 {
@@ -32,7 +33,7 @@ static int ischardev(int fd)
 static void output_oss_pre(int fd, long cookie)
 {
 	DDEBUG("output_oss_pre: length=%d oss_do_init=%d\n", buffer_length, oss_do_init);
-
+	
 	if(buffer_length < (oss_do_init? BUFFER_MIN : 1)) {
 		set_fd_mask(fd, 0);
 		return;
@@ -64,16 +65,18 @@ static void output_oss_post(int fd, short events, long cookie)
 
 	DDEBUG("output_oss_post: start=%6d lenght=%d, writing %d bytes\n", buffer_start, buffer_length, l);
 
-	if((l = write(fd, buffer + buffer_start, l)) == -1) {
-		if(errno == EINTR || errno == EAGAIN) return;
-		perror("write");
-		exit(1);
-	}
+	if(l > 0) {
+		if((l = write(fd, buffer + buffer_start, l)) == -1) {
+			if(errno == EINTR || errno == EAGAIN) return;
+			perror("write");
+			exit(1);
+		}
 
-	buffer_length -= l;
-	buffer_start += l;
-	if(buffer_start >= buffer_size) {
-		buffer_start -= buffer_size;
+		buffer_length -= l;
+		buffer_start += l;
+		if(buffer_start >= buffer_size) {
+			buffer_start -= buffer_size;
+		}
 	}
 
 	DDEBUG("output_oss_post: start=%6d length=%d\n", buffer_start, buffer_length);
@@ -106,6 +109,11 @@ int output_oss_start()
 	
 	if(oss_fd != -1) {
 		/* already started */
+		return 0;
+	}
+	
+	if(oss_intercept_resume) {
+		oss_intercept_resume = 0;
 		return 0;
 	}
 
