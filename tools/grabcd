@@ -360,7 +360,7 @@ sub simplify($) {
 	my ($s) = @_;
 	my $c = $s;
 
-	$s =~ s/([\200-\377])/$latin1toascii{ord($1)}/eg;
+	$s =~ s/([\200-\377])/$latin9_to_ascii{ord($1)}/eg;
 	$s =~ s/<[^>]*(>|$)//g;
 	$s =~ s/[^\w(]+$//;
 	$s =~ s/^\W+//;
