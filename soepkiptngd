@@ -1,11 +1,11 @@
 #!/usr/bin/perl
-
 ############################################################################
 # soepkiptngd (Soepkip The Next Generation daemon)
 #
-# created by Eric Lammerts <eric@lammerts.org>
-# loosely based on mymusic by "caffiend" <caffiend@atdot.org>
-# and Soepkip by Andre Pool <andre@scintilla.utwente.nl>
+# (c) copyright 2000 Eric Lammerts <eric@lammerts.org>
+#
+# loosely based on `mymusic' by "caffiend" <caffiend@atdot.org>
+# and `Soepkip' by Andre Pool <andre@scintilla.utwente.nl>
 #
 # $Id$
 ############################################################################
@@ -19,9 +19,10 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+# A copy of the GNU General Public License is available on the World Wide Web
+# at `http://www.gnu.org/copyleft/gpl.html'.  You can also obtain it by
+# writing to the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+# Boston, MA 02111-1307, USA.
 ############################################################################
 
 $configfile = "/etc/soepkiptng.conf";
@@ -79,16 +80,25 @@ $SIG{'CHLD'} = sub {
 		return if $p < 1;
 		warn sprintf "reaped child %d, sig=%d status=%d\n",
 			$p, $? & 0x7f, $? >> 8 if $debug;
-		die "exiting because '$playercmd' died.\n" if $p == $cdrplaypid;
-		if($p == $pid) {
+		if($p == $cdrplaypid) {
+			unlink $statusfile;
+			die "exiting because '$playercmd' died.\n";
+		} elsif($p == $pid) {
 			$pid = 0;
 			warn "player finished ($p)\n" if $debug;
 		}
 	}
 };
 
+$SIG{'TERM'} = sub {
+	kill 'KILL', $pid, $cdrplaypid;
+	unlink $statusfile;
+};
+
 $cdrplaypid = open STDOUT, "|$playercmd";
 warn "cdrplaypid=$cdrplaypid\n" if $debug;
+
+$SIG{'PIPE'} = 'IGNORE';
 
 for(;;) {
 	my ($qid, $song_id, $filename);
@@ -128,13 +138,7 @@ for(;;) {
 	}
 
 	# write to log file
-	if(open LOG, ">>$logfile") {
-		printf LOG "%s %s %d %s\n", scalar localtime,
-			$qid? "Q":"R", $song_id, $filename;
-		close LOG;
-	} else {
-		warn "cannot open logfile $logfile: $!\n";
-	}
+	logprintf("%s %d %s", $qid? "Q":"R", $song_id, $filename);
 
 	# write status file
 	if(open ST, ">$statusfile") {
@@ -152,7 +156,18 @@ EOF
 	}
 
 	# close accepted socket after statusfile was updated
-	if($closebla) { close BLA; }
+	if($socket_open) {
+		print SOCK <<EOF;
+$song_id
+$filename
+$$
+$cdrplaypid
+$killhost
+$killport
+EOF
+		close SOCK;
+		$socket_open = 0;
+	}
 
 	# get file type
 	$filename =~ /([^.]*)$/;
@@ -165,6 +180,7 @@ EOF
 		$childtime = $c + $d;
 	}
 	if(($pid = fork) == 0) {
+		$SIG{'PIPE'} = 'DEFAULT';
 		if($ext eq "mp2" || $ext eq "mp3") {
 			exec "splay", "-d", "-", $filename;
 		} elsif($ext eq "ogg") {
@@ -193,9 +209,13 @@ EOF
 			# tell cdrplay to flush its buffers
 			kill 'SIGUSR1', $cdrplaypid;
 
-			# close new tcp connection
-			accept BLA, KILLSOCK;
-			$closebla = 1;
+			# accept the tcp connection; we close it later,
+			# after a new song has been selected
+			accept SOCK, KILLSOCK;
+			$socket_open = 1;
+
+			# write to log file
+			logprintf("K %d", $song_id);
 		}
 	}
 	if($debug) {
@@ -208,5 +228,17 @@ EOF
 	# to prevent us from eating 100% cpu time in case of misconfiguration
 	if(time == $starttime) {
 		sleep 1;
+	}
+}
+
+sub logprintf($@) {
+	my ($fmt, @args) = @_;
+
+	# write to log file
+	if(open LOG, ">>$logfile") {
+		printf LOG "%s $fmt\n", scalar localtime, @args;
+		close LOG;
+	} else {
+		warn "cannot open logfile $logfile: $!\n";
 	}
 }

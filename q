@@ -1,11 +1,7 @@
 #!/usr/bin/perl
-
-$configfile = "/etc/soepkiptng.conf";
-
 ############################################################################
 # soepkiptng (c) copyright 2000 Eric Lammerts <eric@lammerts.org>.
 # $Id$
-
 ############################################################################
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,12 +13,15 @@ $configfile = "/etc/soepkiptng.conf";
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
-
+# A copy of the GNU General Public License is available on the World Wide Web
+# at `http://www.gnu.org/copyleft/gpl.html'.  You can also obtain it by
+# writing to the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+# Boston, MA 02111-1307, USA.
 ############################################################################
+
 # CONFIG
+
+$configfile = "/etc/soepkiptng.conf";
 
 use integer;
 use Term::ReadKey;
@@ -80,6 +79,14 @@ sub splitrange($$) {
 		}
 	}
 	@ret;
+}
+
+sub killit() {
+	($song_id) = kill_song();
+	($t, $a, $al, $tr) = $dbh->selectrow_array(
+		"SELECT title,artist,album,track FROM songs WHERE id = $song_id"
+	);
+	printf "next: %s - %02d. %s [%s]\n", $a, $tr, $t, $al;
 }
 
 $| = 1;
@@ -185,13 +192,15 @@ while(@q = $sth->fetchrow_array) {
 print STDERR "\nDelete (a=all): ";
 $_ = <STDIN>;
 exit unless /\S/;
-if(/^a/i) {
+if(/^S/) {
+	shuffle_queue($dbh);
+} elsif(/^a/i) {
 	$sth = $dbh->prepare("DELETE FROM queue");
 	$sth->execute();
-	kill_song();
+	killit()
 } else {
 	foreach(splitrange($_, $i)) {
-		if($_ == 1) { kill_song(); }
+		if($_ == 1) { killit(); }
 		else { del_song($dbh, $delid[$_]) if $delid[$_]; }
 	}
 }

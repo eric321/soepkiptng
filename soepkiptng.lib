@@ -1,27 +1,84 @@
-
+############################################################################
+# soepkiptng (c) copyright 2000 Eric Lammerts <eric@lammerts.org>.
 # $Id$
+############################################################################
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# A copy of the GNU General Public License is available on the World Wide Web
+# at `http://www.gnu.org/copyleft/gpl.html'.  You can also obtain it by
+# writing to the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+# Boston, MA 02111-1307, USA.
+############################################################################
 
-sub del_song($$) {
-	my $sth = $_[0]->prepare("DELETE FROM queue WHERE song_id=?");
-	$sth->execute($_[1]);
+sub del_song($@) {
+	my ($db, @ids) = @_;
+	@ids or return;
+	$db->do("DELETE FROM queue WHERE song_id=" . join(" OR song_id=", @ids));
 }
 
-sub add_song($$) {
-	$_[0]->do("LOCK TABLES queue WRITE");
-	del_song($_[0], $_[1]);
-	my ($max) = $_[0]->selectrow_array("SELECT MAX(song_order) FROM queue");
-	my $sth = $_[0]->prepare("INSERT INTO queue (song_order,song_id) VALUES (?,?)");
-	$sth->execute($max + 1, $_[1]);
-	$_[0]->do("UNLOCK TABLES");
+sub add_song_nolock($$@) {
+	my ($db, $order, @ids) = @_;
+
+	my $firstid = shift @ids or return;
+	my $q = "INSERT INTO queue (song_order,song_id) VALUES ($order,$firstid)";
+	foreach(@ids) {
+		$order++;
+		$q .= ",($order,$_)";
+	}
+	$db->do($q);
 }
 
-sub move_song_to_top($$) {
-	$_[0]->do("LOCK TABLES queue WRITE");
-	del_song($_[0], $_[1]);
-	$_[0]->do("UPDATE queue SET song_order = song_order + 1");
-	my $sth = $_[0]->prepare("INSERT INTO queue (song_order,song_id) VALUES (0,?)");
-	$sth->execute($_[1]);
-	$_[0]->do("UNLOCK TABLES");
+sub get_queue_ids($$) {
+	my ($db, $orderby) = @_;
+
+	my $res = $db->selectcol_arrayref("SELECT song_id FROM queue ORDER BY $orderby");
+	return @$res;
+}
+
+
+sub add_song($@) {
+	my ($db, @ids) = @_;
+
+	$db->do("LOCK TABLES queue WRITE");
+	del_song($db, @ids);
+	my ($order) = $db->selectrow_array("SELECT MAX(song_order) FROM queue")
+		or $order = -1;
+	add_song_nolock($db, $order + 1, @ids);
+	$db->do("UNLOCK TABLES");
+}
+
+sub move_song_to_top($@) {
+	my ($db, @ids) = @_;
+
+	$db->do("LOCK TABLES queue WRITE");
+
+	del_song($db, @ids);
+
+	my @res = get_queue_ids($db, "song_id");
+	$db->do("DELETE FROM queue");
+	add_song_nolock($db, 1, (@ids, @res));
+
+	$db->do("UNLOCK TABLES");
+}
+
+sub shuffle_queue($) {
+	my ($db) = @_;
+
+	$db->do("LOCK TABLES queue WRITE");
+
+	my @res = get_queue_ids($db, "rand()");
+	$db->do("DELETE FROM queue");
+	add_song_nolock($db, 1, @res);
+
+	$db->do("UNLOCK TABLES");
 }
 
 
@@ -35,14 +92,18 @@ sub kill_song() {
 	$port = <F>;
 	close F;
 
+	$host && $port or return undef;
+
 	use Socket;
 
 	socket(F, PF_INET, SOCK_STREAM, getprotobyname('tcp'))
 		or die "socket: $!\n";
 	connect(F, sockaddr_in($port, inet_aton($host)))
 		or die "connect $host:$port: $!\n";
-	read F, $_, 1;	# will get end-of-file
+	my @status;
+	@status = <F>;
 	close F;
+	return @status;
 }
 
 1;

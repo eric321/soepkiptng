@@ -121,6 +121,9 @@ EOF
 <td id=az>&nbsp;&nbsp;
 <a id=a target=_blank href="$self?cmd=maint&t=$t" target=playlist>Maintenance</a>
 </td>
+<td id=az>&nbsp;&nbsp;
+<a id=a href="$self?cmd=shuffle&t=$t" target=playlist>Shuffle queue</a>
+</td>
 </tr></table>
 EOF
 }
@@ -140,11 +143,11 @@ sub get_playlist_table_entry($$$$$) {
 	$e =~ s/ /&nbsp;/g;
 	my $tr = $_[4]->{track} || "";
 	$tr .= "." if $tr;
-	return sprintf <<EOF, $_[0], $_[1], $_[2], $_[3], $ar, $_[4]->{artist}, $al, $_[4]->{album}, $tr, $_[4]->{title}, $l, $e;
+	return sprintf <<EOF, $_[0], $_[1], $_[2], $_[3], $ar, $_[4]->{artist}, $al, $ar, $_[4]->{album}, $tr, $_[4]->{title}, $l, $e;
  <tr>
   <td><a id=a href="%s" target=playlist>%s</a> <a id=a href="%s" target=playlist>%s</a></td>
   <td><a href="$self?cmd=albumlist&a=%s&t=$t" target=albumlist>%s</a></td>
-  <td><a href="$self?cmd=songlist&s=%s&t=$t" target=songlist>%s</a></td>
+  <td><a href="$self?cmd=songlist&s=%s&a=%s&t=$t" target=songlist>%s</a></td>
   <td>%s&nbsp;</td>
   <td>%s</td>
   <td>%s</td>
@@ -153,17 +156,19 @@ sub get_playlist_table_entry($$$$$) {
 EOF
 }
 
-sub print_playlist_table($) {
-	my ($dbh) = @_;
+sub print_playlist_table($$) {
+	my ($dbh, $nowplaying) = @_;
 	my $output;
 	my $delall;
 
-	local *F;
-	my $nowplaying;
-	if(open F, $statusfile) {
-		$nowplaying = <F>;
-		close F;
-
+	if(!$nowplaying) {
+		local *F;
+		if(open F, $statusfile) {
+			$nowplaying = <F>;
+			close F;
+		}
+	}
+	if($nowplaying) {
 		my $query =  "SELECT title,artist,album,id,track,length,encoding" .
 			" FROM songs" .
 			" WHERE id = $nowplaying";
@@ -280,7 +285,7 @@ sub print_songlist_table($@) {
 	my ($dbh, @val) = @_;
 	my ($output, $addall, $delete);
 
-	my $query = "SELECT title,id,track,length,encoding".
+	my $query = "SELECT artist,title,id,track,length,encoding".
 			" FROM songs" .
 			" WHERE artist REGEXP ? AND album REGEXP ? AND title REGEXP ?".
 			" ORDER BY track,title";
@@ -294,10 +299,15 @@ sub print_songlist_table($@) {
 		$e =~ s/ /&nbsp;/g;
 		my $tr = $_->{track} || "";
 		$tr .= "." if $tr;
-		$output .= sprintf <<EOF, $tr, $_->{id}, $_->{title}, $l, $e;
+		my $esca = $_->{artist};
+		$esca =~ s/(['"<>])/sprintf "\\x%02x", ord($1)/ge;
+		$output .= sprintf <<EOF, $tr, $_->{id}, $esca, $_->{title}, $l, $e;
  <tr>
   <td>%s&nbsp;</td>
-  <td><a id=a href="$self?cmd=add&id=%d&t=$t">%s</a></td>
+  <td><a id=a href="$self?cmd=add&id=%d&t=$t"
+       onMouseOver="window.status='%s';return true"
+       onMouseOut="window.status=''; return true"
+      >%s</a></td>
   <td>%s</td>
   <td>%s</td>
  </tr>
@@ -374,33 +384,38 @@ my $t = time;
 my $cmd = $args{'cmd'};
 
 my $r = $refreshtime;
+my $nowplaying;
 
-if($cmd eq "add") {
-	foreach(split /,/, $args{'id'}) { add_song($dbh, $_); }
-	$cmd = "playlist";
+if($cmd eq 'add') {
+	add_song($dbh, split(/,/, $args{'id'}));
+	$cmd = 'playlist';
 }
-elsif($cmd eq "del") {
-	foreach(split /,/, $args{'id'}) { del_song($dbh, $_); }
-	$cmd = "playlist";
+elsif($cmd eq 'del') {
+	del_song($dbh, split(/,/, $args{'id'}));
+	$cmd = 'playlist';
 }
-elsif($cmd eq "up") {
+elsif($cmd eq 'up') {
 	foreach(reverse split /,/, $args{'id'}) { move_song_to_top($dbh, $_); }
-	$cmd = "playlist";
+	$cmd = 'playlist';
 }
-elsif($cmd eq "kill") {
-	kill_song;
-	$cmd = "playlist";
+elsif($cmd eq 'kill') {
+	($nowplaying) = kill_song();
+	$cmd = 'playlist';
 #not needed anymore because the cgi waits until the status file has been updated
 #	$r = $refreshtime_kill;
 }
+elsif($cmd eq 'shuffle') {
+	shuffle_queue($dbh);
+	$cmd = 'playlist';
+}
 
 
 
-if($cmd eq "") {
+if($cmd eq '') {
 	printhtmlhdr;
 	print_frame;
 }
-elsif($cmd eq "playlist") {
+elsif($cmd eq 'playlist') {
 	printhtmlhdr;
 	print <<EOF;
 <META HTTP-EQUIV="Refresh" CONTENT="$r;URL=$self?cmd=playlist&s=$args{'s'}&t=$t">
@@ -409,10 +424,10 @@ EOF
 	print "<base target=artistlist>\n";
 	print $topwindow_title;
 	print_az_table();
-	print_playlist_table($dbh);
+	print_playlist_table($dbh, $nowplaying);
 	printftr;
 }
-elsif($cmd eq "artistlist") {
+elsif($cmd eq 'artistlist') {
 	printhtmlhdr;
 	printhdr($alstyle);
 	print "<base target=albumlist>\n";
@@ -421,7 +436,7 @@ elsif($cmd eq "artistlist") {
 	}
 	printftr;
 }
-elsif($cmd eq "albumlist") {
+elsif($cmd eq 'albumlist') {
 	printhtmlhdr;
 	printhdr($abstyle);
 	print "<base target=songlist>\n";
@@ -430,7 +445,7 @@ elsif($cmd eq "albumlist") {
 	}
 	printftr;
 }
-elsif($cmd eq "songlist") {
+elsif($cmd eq 'songlist') {
 	printhtmlhdr;
 	printhdr($slstyle);
 	print "<base target=playlist>\n";
@@ -443,7 +458,7 @@ elsif($cmd eq "songlist") {
 	}
 	printftr;
 }
-elsif($cmd eq "maint") {
+elsif($cmd eq 'maint') {
 	printhtmlhdr;
 	printhdr($slstyle);
 	print <<EOF;
@@ -452,7 +467,7 @@ elsif($cmd eq "maint") {
 EOF
 	printftr;
 }
-elsif($cmd eq "update") {
+elsif($cmd eq 'update') {
 	printhtmlhdr;
 	printhdr($slstyle);
 	print "<pre>\n";
@@ -460,7 +475,7 @@ elsif($cmd eq "update") {
 	print "</pre>\n";
 	printftr;
 }
-elsif($cmd eq "delfiles") {
+elsif($cmd eq 'delfiles') {
 	printhtmlhdr;
 	printhdr($slstyle);
 	print "<table><tr><th>Delete files:</th></tr>\n";
@@ -476,7 +491,7 @@ EOF
 	print "</table>\n";
 	printftr;
 }
-elsif($cmd eq "delfile") {
+elsif($cmd eq 'delfile') {
 	printhtmlhdr;
 	printhdr($slstyle);
 	print "<table></tr><td>";
@@ -494,4 +509,5 @@ else {
 	print "oei\n";
 }
 $dbh->disconnect();
+
 
