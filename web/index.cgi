@@ -208,8 +208,8 @@ sub table_entry($;$$$$) {
 	return sprintf <<EOF,
  <tr>
   <td %s>&nbsp;%s&nbsp;</td>
-  <td %s>&nbsp;<a id=a href="%s?cmd=alllist&artist_id=%s&cap=%s" target=bframe>%s</a>&nbsp;</td>
-  <td %s>&nbsp;<a id=a href="%s?cmd=alllist&album_id=%s&cap=%s" target=bframe>%s</a>&nbsp;</td>
+  <td %s>&nbsp;%s&nbsp;</td>
+  <td %s>&nbsp;%s&nbsp;</td>
   <td %s>&nbsp;%s&nbsp;</td>
   <td %s>&nbsp;%s%s%s&nbsp;</td>
   <td %s>&nbsp;%d:%02d&nbsp;</td>
@@ -219,8 +219,14 @@ sub table_entry($;$$$$) {
  </tr>
 EOF
 		$td_left, $col1,
-		$td_artist, $self, $q->{arid}, encurl("Artist: $q->{artist}"), enchtml($q->{artist}),
-		$td_album, $self, $q->{alid}, encurl("Album: $q->{album}"), enchtml($q->{album}),
+		$td_artist,
+		$q->{arid}? sprintf(qq|<a id=a href="%s?cmd=alllist&artist_id=%s&cap=%s" target=bframe>%s</a>|,
+			$self, $q->{arid}, encurl("Artist: $q->{artist}"), enchtml($q->{artist}))
+			: enchtml($q->{artist}),
+		$td_album,
+		$q->{alid}? sprintf(qq|<a id=a href="%s?cmd=alllist&album_id=%s&cap=%s" target=bframe>%s</a>|,
+			$self, $q->{alid}, encurl("Album: $q->{album}"), enchtml($q->{album}))
+			: enchtml($q->{album}),
 		$td_track, $q->{track}? "$q->{track}." : "",
 		$td_song, $title_href, enchtml($q->{title}), $title_href? "</a>":"",
 		$td_time, $q->{length} / 60, $q->{length} % 60,
@@ -245,7 +251,6 @@ sub albumlist_entry($) {
 
 sub print_playlist_table($) {
 	my ($dbh) = @_;
-	my ($nowplaying, $nowfile, $nowtype, $nowuser);
 	my $killline;
 
 	$query =  "SELECT title,artist.name as artist,album.name as album," .
@@ -263,55 +268,14 @@ sub print_playlist_table($) {
 		push @records, $_;
 	}
 
-	local *F;
-	if(open F, $statusfile) {
-		chop($nowplaying = <F>);
-		chop($nowfile = <F>);
-		<F>; <F>; <F>; <F>;
-		chop($nowtype = <F>);
-		chop($nowuser = <F>);
-		close F;
-	}
+	if($_ = get_nowplaying($dbh)) {
+		if($_->{id} > 0) { unshift @ids, $_->{id}; }
 
-	if($nowplaying) {
-		if($nowtype eq 'J') {
-			$_->{artist} = '** Jingle **';
-			$_->{album} = '';
-			($_->{title} = $nowfile) =~ s|.*/||;
-			$_->{f} = substr($nowfile, 0, 1);
-			$_->{id} = -1;
-			$_->{track} = '';
-			$_->{length} = 0;
-			$_->{encoding} = '?';
-		} else {
-			my $query = "SELECT title,artist.name as artist,album.name as album," .
-				"song.id as id,track,length,encoding,left(filename,1) as f," .
-				"song.artist_id as arid,song.album_id as alid" .
-				" FROM song,artist,album" .
-				" WHERE song.artist_id=artist.id AND song.album_id=album.id" .
-				" AND song.id=?";
-
-			my $sth = $dbh->prepare($query);
-			my $rv = $sth->execute($nowplaying);
-			if($_ = $sth->fetchrow_hashref) {
-				unshift @ids, $_->{id};
-			} else {
-				$nowfile =~ m|(.*/)?(.*)|;
-				$_->{artist} = 'ERROR: Not in database';
-				$_->{album} = $1;
-				$_->{title} = $2;
-				$_->{f} = '';
-				$_->{id} = $nowplaying;
-				$_->{track} = '';
-				$_->{length} = 0;
-				$_->{encoding} = "id=$nowplaying";
-			}
-		}
 		$killline = table_entry($_,
 			sprintf(qq|<a id=a href="%s?cmd=kill&id=%s">%s</a>|,
 			$self, $_->{id}, $killtext), undef,
-			$_->{f} eq '/'? ids_encode(@ids) : "",
-			($show_user && $nowuser)? "<td>&nbsp;($nowuser)</td>":"");
+			($_->{filename} =~ m|^/|)? ids_encode(@ids) : "",
+			($show_user && $_->{user})? "<td>&nbsp;($_->{user})</td>":"");
 
 		if($title_song) {
 			my $alb = $_->{album};
