@@ -62,7 +62,7 @@ for(;; sleep 1) {
 		chop($nowplaying = <F>);
 		close F;
 
-		my $query = "SELECT song.title,artist.name,album.name,song.id,song.track" .
+		my $query = "SELECT song.title as title,artist.name as artist,album.name as album,song.id,song.track" .
 			    " FROM song,artist,album" .
 			    " WHERE song.id=?" .
 			    " AND song.artist_id=artist.id AND song.album_id=album.id";
