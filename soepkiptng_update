@@ -490,7 +490,7 @@ sub getinfo_video($\%) {
 	$file =~ /\.(mpe?g|avi|asx|asf|vob|wmv|rm)$/i
 		or return undef;
 
-	$info->{encoding} = "Video: $1";
+	$info->{encoding} = $1 eq "rm"? "RealMedia":"Video: $1";
 	$info->{freq} = 0;
 	$info->{chan} = 0;
 	$info->{len} = 0;
