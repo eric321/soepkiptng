@@ -98,7 +98,7 @@ read_eric_files() unless $opt_e;
 if($ARGV[0]) {
 	chdir $ARGV[0] or die "$ARGV[0]: $!\n";
 	@paths = (cwd);
-	$sth = $dbh->prepare("SELECT id,filename,unix_timestamp(last_played),unix_timestamp(time_added),present FROM song WHERE filename LIKE ?");
+	$sth = $dbh->prepare("SELECT id,filename,unix_timestamp(last_played),unix_timestamp(time_added),present FROM song WHERE binary filename LIKE ?");
 	$sth->execute("$paths[0]/%");
 } else {
 	$sth = $dbh->prepare("SELECT id,filename,unix_timestamp(last_played),unix_timestamp(time_added),present FROM song WHERE filename LIKE \"/%\"");
@@ -194,9 +194,9 @@ while(<FILES>) {
 		my $oldname = $longname{$1};
 		if($oldname && ($oldname eq $_ || ! -e $oldname)) {
 			$dbh->do("DELETE FROM song WHERE present=0 AND id!=? AND " .
-				"filename=?", undef, $longname_id{$1}, $_)
+				"binary filename=?", undef, $longname_id{$1}, $_)
 				or die "can't do sql command: " . $dbh->errstr . "\n";
-			$dbh->do("UPDATE song SET present=1, filename=?, " .
+			$dbh->do("UPDATE song SET present=1, binary filename=?, " .
 				"length=?, encoding=? WHERE id=?", undef,
 				$_, $info{len}, $info{encoding}, $longname_id{$1})
 				or die "can't do sql command: " . $dbh->errstr . "\n";
@@ -271,7 +271,7 @@ close FILES
 
 # delete all filenames in database what were not found on disk
 if($do_delete) {
-	$sth = $dbh->prepare("UPDATE song SET present=0 WHERE filename=?");
+	$sth = $dbh->prepare("UPDATE song SET present=0 WHERE binary filename=?");
 	foreach(keys %filename) {
 		$sth->execute($_);
 		print "Deleting $_\n";

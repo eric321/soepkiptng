@@ -16,7 +16,7 @@ CREATE TABLE song (
   album_id int DEFAULT 0 NOT NULL,
   encoding varchar(255) DEFAULT '' NOT NULL,
   track int(4) unsigned DEFAULT '0' NOT NULL,
-  filename varchar(255) DEFAULT '' NOT NULL,
+  filename varchar(255) BINARY DEFAULT '' NOT NULL,
   length smallint DEFAULT '0' NOT NULL,
   mtime timestamp,
   last_played timestamp,
