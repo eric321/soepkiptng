@@ -27,7 +27,7 @@ int main(int argc, char **argv)
 Usage: resample f_in f_out\n\
 \n\
        f_in    : input sampling frequency\n\
-       f_out:  : output sampling frequency\n\
+       f_out   : output sampling frequency\n\
 \n\
        stdin   : 16-bit stereo little-endian input\n\
        stdout  : 16-bit stereo little-endian output\n\
