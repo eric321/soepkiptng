@@ -27,6 +27,7 @@
 use Cwd 'abs_path';
 use DBI;
 use Errno;
+use Fcntl;
 use Getopt::Std;
 use IO::Handle;
 use IO::Socket;
@@ -344,38 +345,25 @@ sub exec_prog(;$$) {
 }
 
 sub play_mplayer($) {
-	my ($file) = @_;
-	my ($i, $tmpdir);
-
-	for($i = 0; $i < 100; $i++) {
-		$tmpdir = "/tmp/mplayer.$$.audiodump.$i";
-		mkdir $tmpdir and last;
-	}
-	$i < 100 or do { warn "$tmpdir: $!\n"; return undef; };
-
-	chdir $tmpdir or do { warn "chdir $tmpdir: $!\n"; return undef; };
-	system "mkfifo", "audiodump.pcm";
-	if($?) { warn "mkfifo audiodump.pcm: $!\n"; return undef; }
+	my @args = @_;
+	local *F;
 
 	exec_prog and return;
 
-	if(($pid = fork) == 0) {
-		# protect us from being sigkilled by soepkiptngd so we can
-		# clean up
-		setpgrp;
-		system "cat audiodump.pcm";
-		unlink "audiodump.pcm";
-		chdir "/";
-		rmdir $tmpdir;
-		exit;
-	}
+	# open duplicate of stdout
+	open F, ">&STDOUT";
+	# no close-on-exec
+	fcntl F, F_SETFD, 0;
 
 	open STDIN, "/dev/null";
 	open STDERR, ">/dev/null";
 	open STDOUT, ">&STDERR";
-
 	delete $ENV{http_proxy};
-	exec qw"mplayer -ao pcm -nowaveheader -cache 512 -aop list=resample:fout=44100 -vc dummy -vo null", $file;
+
+	if($args[0] =~ /^http:/) { unshift @args, "-cache", 512; }
+
+	exec qw"mplayer -ao pcm -nowaveheader -aop list=resample:fout=44100 -vc dummy -vo null",
+		"-aofile", "/dev/fd/" . fileno(F), @args;
 	die "mplayer: $!\n";
 }
 
