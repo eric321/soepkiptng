@@ -18,7 +18,7 @@ TODO
 * fade-out/fade-in in pause/resume
 * release of /dev/dsp during pause
 * ogg-vorbis support
-* reading of samplefreq/channels of lpac files.
+* reading of samplefreq/channels of lpac files. -> done
 * resampling & mono->stereo conversion
 * smooth transition between 2 songs (interpolation)
 * id3/id3v2 support
