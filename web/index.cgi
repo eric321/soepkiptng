@@ -192,21 +192,11 @@ $editlistopts
 </td>
 -->
 
- <td id=az>&nbsp;&nbsp;
-   <a id=az href="$self?cmd=shuffle">Shuffle</a>
- </td>
- <td id=az>&nbsp;&nbsp;
-   <a id=az href="$self?cmd=recent&days=7" target=bframe>Recent</a>
- </td>
- <td id=az>&nbsp;&nbsp;
-   <a id=az target=_blank href="$self?cmd=maint">*</a>
- </td>
- <td id=az>&nbsp;&nbsp;
-   <a id=az target=bframe href="$self?cmd=shoutcast">Shoutcast</a>
- </td>
- <td id=az width=100%>&nbsp;&nbsp;
-   <a id=az target=bframe href="$self?cmd=sql">SQL</a>
- </td>
+ <td id=az>&nbsp;&nbsp;<a id=az href="$self?cmd=shuffle">Shuffle</a></td>
+ <td id=az>&nbsp;&nbsp;<a id=az href="$self?cmd=recent&days=7" target=bframe>Recent</a></td>
+ <td id=az>&nbsp;&nbsp;<a id=az target=_blank href="$self?cmd=maint">*</a></td>
+ <td id=az>&nbsp;&nbsp;<a id=az target=bframe href="$self?cmd=shoutcast">Shoutcast</a></td>
+ <td id=az width=100%>&nbsp;&nbsp;<a id=az target=bframe href="$self?cmd=sql">SQL</a></td>
 
 </tr></table>
 EOF
@@ -502,7 +492,7 @@ EOF
 				$alids_shortlist{$_} = 1;
 			}
 			my @alids2 = grep { $alids_shortlist{$_} } @alids;
-			printf "Albums: %s", join(",&nbsp; ",
+			printf "Albums: %s", join(",&nbsp;\n",
 				map { $al{$_} } @alids2);
 			
 			printf <<EOF, $baseurl, $argsref->{cmd}, $#alids - $#alids2;
