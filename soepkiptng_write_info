@@ -73,6 +73,7 @@ sub simplify($) {
 sub do_dir($$) {
 	my ($dbh, $f) = @_;
 
+	$opt_r or return;
 	$f = abs_path($f);
 	$f =~ s|/+$||;
 	my $q = "SELECT filename,artist.name as artist,album.name as album" .
