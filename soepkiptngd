@@ -326,8 +326,8 @@ for(;;) {
 		unlink $conf{statusfile};
 
 		warn "execing myself\n";
-		exec $0, '-r', $cdrplaypid;
-		die "$0: $!\n";
+		exec "$conf{progdir}/soepkiptngd", '-r', $cdrplaypid;
+		die "$conf{progdir}/soepkiptngd: $!\n";
 	}
 
 	if($num_errors > 1) {
