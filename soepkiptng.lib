@@ -17,6 +17,7 @@
 # Boston, MA 02111-1307, USA.
 ############################################################################
 
+use IO::Socket;
 use Socket;
 
 sub encurl($) {
@@ -141,6 +142,20 @@ sub kill_song_internal() {
 	close F;
 	return @status;
 }
+
+sub pause(;$) {
+	my $cmd = defined($_[0])? ($_[0]? "pause":"resume") : "pausetoggle";
+
+	my $sock = IO::Socket::INET->new('localhost:2222') or return undef;
+	$sock->autoflush(1);
+	$response = <$sock>;	#greeting
+	$sock->print("$cmd\n");
+	$response = <$sock>;
+	$sock->close;
+
+	return $response =~ /^\+/;
+}
+
 
 sub get_player_pid() {
 	local *F;
@@ -270,6 +285,7 @@ sub construct_url($@) {
 sub cleanup_name {
 	my ($s) = @_;
 	$s =~ s/\.mp3$//;
+	$s =~ s/%([0-9a-f][0-9a-f])/chr(hex($1))/eig;
 	$s =~ s/([a-zA-Z])([A-Z][a-z])/\1 \2/g;
 	$s = lc($s);
 	$s =~ s/_/ /g;
