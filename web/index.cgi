@@ -867,6 +867,22 @@ sub delete_file($$) {
 	printftr;
 }
 
+sub get_user($) {
+	my ($req) = @_;
+	my $user = '';
+
+	my $host = $req->header_in('X-Forwarded-For')
+		|| $req->get_remote_host();
+	if($host =~ /^\d+\.\d+\.\d+\.\d+$/) {
+		$host = gethostbyaddr(inet_aton($host), AF_INET) || $host;
+	}
+	if($host) {
+		$host =~ /^([-a-z0-9]*)/;
+		$user = ${"user_from_$1"} || ${"user_from_$host"} || $host;
+	}
+	return $user;
+}
+
 ############################################################################
 # MAIN
 
@@ -909,18 +925,7 @@ if($cmd eq 'empty') {
 }
 
 if($cmd eq 'add') {
-	my $user = '';
-
-	my $host = $r->header_in('X-Forwarded-For') || $r->get_remote_host();
-	if($host =~ /^\d+\.\d+\.\d+\.\d+$/) {
-		$host = gethostbyaddr(inet_aton($host), AF_INET) || $host;
-	}
-	if($host) {
-		$host =~ /^([-a-z0-9]*)/;
-		$user = ${"user_from_$1"} || ${"user_from_$host"} || $host;
-	}
-		
-	add_song($dbh, $user, ids_decode($args{ids}));
+	add_song($dbh, get_user($r), ids_decode($args{ids}));
  	printredirexit($q, 'playlist', undef);
 }
 elsif($cmd eq 'del') {
@@ -932,7 +937,7 @@ elsif($cmd eq 'up') {
  	printredirexit($q, 'playlist', undef);
 }
 elsif($cmd eq 'kill') {
-	kill_song();
+	kill_song(get_user($r));
  	printredirexit($q, 'playlist', undef);
 }
 elsif($cmd eq 'setplaylist') {
