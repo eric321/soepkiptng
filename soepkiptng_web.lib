@@ -1233,7 +1233,7 @@ EOF
 			$s =~ s/^r_(.*)/\1 DESC/;
 			$q .= " AND song.artist_id=artist.id AND song.album_id=album.id ".
 			      " AND filename LIKE '/%' ".
-			      " ORDER BY $s,album.name,track,artist.name,title";
+			      " ORDER BY $s,album.name,track,artist.name,title,time_added";
 			print_alllist_table($dbh, \%args, \%session, $cap, $q, $limit, @qargs);
 		} else {
 			print "Error: No search terms specified.\n";
