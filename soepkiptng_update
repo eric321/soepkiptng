@@ -196,7 +196,7 @@ while(<FILES>) {
 			$dbh->do("DELETE FROM song WHERE present=0 AND id!=? AND " .
 				"binary filename=?", undef, $longname_id{$1}, $_)
 				or die "can't do sql command: " . $dbh->errstr . "\n";
-			$dbh->do("UPDATE song SET present=1, binary filename=?, " .
+			$dbh->do("UPDATE song SET present=1, filename=?, " .
 				"length=?, encoding=? WHERE id=?", undef,
 				$_, $info{len}, $info{encoding}, $longname_id{$1})
 				or die "can't do sql command: " . $dbh->errstr . "\n";
