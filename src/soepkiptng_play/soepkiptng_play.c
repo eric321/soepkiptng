@@ -50,7 +50,7 @@ int main(int argc, char **argv)
 		switch(c) {
 			case 'b':
 				buffer_size = atoi(optarg) * 1024;
-				if(buffer_size == < 16) {
+				if(buffer_size < 16) {
 					fprintf(stderr, "ERROR: buffer_size < 16\n");
 					exit(1);
 				}
@@ -80,7 +80,7 @@ int main(int argc, char **argv)
 
 	buffer_init();
 	input_start();
-	output_oss_init("/dev/dsp");
+	output_oss_init(dev);
 	signals_init();
 	socket_init(port);
 

@@ -20,6 +20,12 @@ static void input_pre(int fd, long cookie)
    }
 }
 
+static void input_pre_waitbufferempty(int fd, long cookie)
+{
+	// dirty trick
+	if(buffer_length == 0) exit(0);
+}
+
 static void input_post(int fd, short events, long cookie)
 {
 	int dst, l;
@@ -38,6 +44,7 @@ static void input_post(int fd, short events, long cookie)
 	if(l == 0) {
 		//EOF
 		unregister_fd(0);
+		register_fd(0, input_pre_waitbufferempty, 0, 0);
 		return;
 	}
 	
