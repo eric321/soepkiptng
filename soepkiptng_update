@@ -98,6 +98,8 @@ while(<FILES>) {
 	chop;
 	# skip hidden files
 	next if m|/\.[^/]+$|;
+	# skip zero-length files
+	next unless -s;
 
 #	if(++$num % 10 == 0) { print STDERR "."; }
 
@@ -358,7 +360,7 @@ sub read_eric_files() {
 sub unsimplify {
 	my ($s) = @_;
 	$s =~ s/_/ /g;
-	$s =~ s/([^'\w]|^)(\w)/\1\U\2/g;
+	$s =~ s/([^'\w\xc0-\xff]|^)(\w)/\1\U\2/g;
 	$s =~ s/n T\b/n't/g;
 	$s =~ s/ S\b/'s/g;
 	$s =~ s/\bI M\b/I'm/g;
@@ -392,6 +394,6 @@ sub extract_artist_title {
 		$p =~ s/-(.*)// and $alb = $1;
 		($a, $t) = ($p, $f);
 	}
-	return (unsimplify($a), unsimplify($t), $tr, $alb);
+	return (unsimplify($a), unsimplify($t), $tr, unsimplify($alb));
 }
 
