@@ -36,8 +36,8 @@ use Sys::Hostname;
 
 use integer;
 use strict;
-use vars qw(%conf $dbh $restart $opt_d $opt_r $opt_s $cdrplaypid
-	$pid_status $pid_signal $pid);
+use vars qw(%conf $dbh $restart $opt_d $opt_p $opt_r $opt_s $cdrplaypid
+	$pid_status $pid_signal $pid @preload);
 
 
 sub rotatelog(;$) {
@@ -197,6 +197,46 @@ sub get_song_random() {
 	return $s;
 }
 
+sub update_preload() {
+	local *PRELOAD;
+
+	$opt_p or return;
+
+	my $sth = $dbh->prepare(
+		"SELECT song.id, song.filename, artist.name, album.name,".
+		"       song.track, song.title, song.length, song.encoding".
+		" FROM song,artist,album WHERE present AND filename LIKE '/%' AND" .
+		"      artist.id=song.artist_id AND album.id=song.album_id AND" .
+		" unix_timestamp(now()) - unix_timestamp(last_played) > $conf{min_random_time}" .
+		" ORDER BY rand() LIMIT 10"
+	);
+
+	$sth->execute() or return;
+	open PRELOAD, ">$opt_p" or return;
+	while(my @s = $sth->fetchrow_array) {
+		printf PRELOAD "%s\n", join("\t", @s);
+	}
+	close PRELOAD;
+
+	warn "update preload $opt_p\n";
+	$opt_p = undef;
+}
+
+sub get_song_preload() {
+	my $s = undef;
+
+	@preload or return undef;
+
+	($s->{id}, $s->{filename}, $s->{artist}, $s->{album}, $s->{track},
+	 $s->{title}, $s->{length}, $s->{encoding}) = split /\t+/, shift @preload;
+	$s->{type} = "P";
+	$s->{user} = '';
+
+	warn "playing preload $s->{filename}\n";
+
+	return $s;
+}
+
 sub logprintf($@) {
 	my ($fmt, @args) = @_;
 
@@ -279,7 +319,7 @@ sub perish {
 	exit;
 };
 
-getopts('dr:s:');
+getopts('dp:r:s:');
 my $debug = 1 if $opt_d;
 
 my $field;
@@ -349,6 +389,17 @@ $SIG{'USR1'} = sub {
 
 $SIG{'PIPE'} = 'IGNORE';
 
+if($opt_p) {
+	local *PRELOAD;
+
+	if(open PRELOAD, $opt_p) {
+		chop(@preload = <PRELOAD>);
+		close PRELOAD;
+	} else {
+		warn "$opt_p: $!\n";
+	}
+}
+
 if($opt_r) {
 	$cdrplaypid = $opt_r;
 	warn "cdrplaypid=$cdrplaypid (from -r)\n";
@@ -392,25 +443,32 @@ for(;;) {
 	# (re)open database connection if necessary
 	if(!$dbh) {
 		$dbh = DBI->connect("DBI:mysql:$conf{db_name}:$conf{db_host}",
-			$conf{db_user}, $conf{db_pass}) or do {
-			warn "Can't connect to database $conf{db_name}" .
+			$conf{db_user}, $conf{db_pass}) or warn
+				"Can't connect to database $conf{db_name}" .
 				"\@$conf{db_host} as user $conf{db_user}\n";
+	}
+
+	if($dbh) {
+		$song = get_song_jingle() || get_song_queued() ||
+			get_song_random_recent() || get_song_random();
+
+		if($song->{id}) {
+			# update database
+			$dbh->do("UPDATE song set last_played=NULL where id=$song->{id}");
+
+			update_preload();
+		} else {
+			warn "no song found.\n";
+			$dbh->disconnect;
+			$dbh = undef;
+			$num_errors++;
+			next;
+		}
+	} else {
+		$song = get_song_preload() or do {
 			$num_errors++;
 			next;
 		};
-	}
-
-	$song = get_song_jingle() || get_song_queued() || get_song_random_recent() || get_song_random();
-
-	if($song->{id}) {
-		# update database
-		$dbh->do("UPDATE song set last_played=NULL where id=$song->{id}");
-	} else {
-		warn "no song found.\n";
-		$dbh->disconnect;
-		$dbh = undef;
-		$num_errors++;
-		next;
 	}
 
 	# write to log file
