@@ -1,6 +1,7 @@
 
 static char rcsid[] = "$Id$";
 
+#include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -9,22 +10,42 @@ struct sample {
 	short r;
 };
 
+int mono2stereo = 0;
+
 #define BUFSIZE 1024
+
+int myread(struct sample *buf, int n, FILE *f)
+{
+	static short monosamples[BUFSIZE];
+	int i, r;
+
+	if(!mono2stereo)
+		return fread(buf, sizeof(struct sample), n, f);
+	
+	r = fread(monosamples, sizeof(short), n, f);
+	for(i = 0; i < r; i++) buf[i].l = buf[i].r = monosamples[i];
+	return r;
+}
 
 int main(int argc, char **argv)
 {
 	int tstep, tperiod, t, i, common, s, d, len;
 	struct sample src[BUFSIZE + 1], dst[BUFSIZE];
-	int termflag, debug = 0;
+	int termflag, debug = 0, c;
 
-	while(argc > 1 && strcmp(argv[1], "-d") == 0) {
-		argc--;
-		argv++;
-		debug++;
+	while((c = getopt(argc, argv, "ds")) != EOF) {
+		switch(c) {
+			case 'd':
+				debug++;
+				break;
+			case 's':
+				mono2stereo = 1;
+				break;
+		}
 	}
-	if(argc != 3) {
+	if(argc != optind + 2) {
 		fprintf(stderr,"\
-Usage: resample f_in f_out\n\
+Usage: resample [-ds] f_in f_out\n\
 \n\
        f_in    : input sampling frequency\n\
        f_out   : output sampling frequency\n\
@@ -35,8 +56,8 @@ Usage: resample f_in f_out\n\
 		exit(1);
 	}
 
-	tstep = atoi(argv[1]);
-	tperiod = atoi(argv[2]);
+	tstep = atoi(argv[optind]);
+	tperiod = atoi(argv[optind + 1]);
 	for(i = 2, common = 1; i <= tstep && i <= tperiod; i++) {
 		while(tstep % i == 0 && tperiod % i == 0) {
 			tstep /= i;
@@ -54,7 +75,7 @@ Usage: resample f_in f_out\n\
 		tperiod /= i;
 	}
 
-	if((len = fread(src, sizeof(struct sample), BUFSIZE, stdin)) < 1) exit(0);
+	if((len = myread(src, BUFSIZE, stdin)) < 1) exit(0);
 	if(len == 1) {
 		src[1].l = src[1].r = 0;
 		termflag = 1;
@@ -90,7 +111,7 @@ Usage: resample f_in f_out\n\
 				}
 				src[0] = src[len - 1];
 				s = 1;
-				if((len = fread(src + 1, sizeof(struct sample), BUFSIZE, stdin)) > 0) {
+				if((len = myread(src + 1, BUFSIZE, stdin)) > 0) {
 					len++;
 				} else {
 					src[1].l = src[1].r = 0;
