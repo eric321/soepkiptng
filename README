@@ -28,7 +28,7 @@ Requirements: (you can get things with (*) from my homepage)
 * cdrplay(*)
 * resample(*)
 * programs that decode the various sound formats to standard output:
-  - mp3: get mp3toraw(*) and (for instance) mpg123 or splay
+  - mp3: get mp3toraw(*) and mpg123
   - wav: for instance splay
   - lpac:
     LPAC is a lossless compression algorithm. You can get a linux binary
