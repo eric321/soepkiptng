@@ -20,7 +20,8 @@ Features:
 * player uses real-time scheduling and memory locking for uninterrupted music
   playback; zero silence period between two songs (very nice for consecutive
   songs of a live cd).
-* song information is kept in a MySQL database.
+* song information is kept in a MySQL database, but can be written back
+  to mp3s (using ID3v2) too.
 * plays from request queue; plays random songs if nothing is on the request
   queue
 * versatile web interface:
@@ -39,12 +40,12 @@ Requirements:
   (3.23 recommended; 3.22 cannot do case-insensitive regexps)
 * apache + mod_perl
 * perl modules:
-  - MP3-Info (optional)
-  - MP3::Tag
+  - MPEG::MP3Info
   - CGI
   - DBI
-  - ApacheDBI
-  - Msql-Mysql-modules
+  - DBD::mysql
+  - Apache::DBI
+  - Apache::Session
   - TermReadKey (optional)
 * programs for decoding the various sound formats:
   - mp3: mpg123 and splay
@@ -61,8 +62,7 @@ Requirements:
     Get the libraries from http://www.xiph.org.
 
 
-On a Debian system you can install all the necessary software (except
-MP3::Tag) with apt-get:
+On a Debian system you can install all the necessary software with apt-get:
 
 apt-get install libapache-mod-perl libapache-dbi-perl libdbd-mysql-perl \
    mysql-server libmpeg-mp3info-perl libterm-readkey-perl \

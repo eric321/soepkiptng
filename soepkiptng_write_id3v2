@@ -52,7 +52,7 @@ use Cwd;
 use DBI;
 use MP3::Tag;
 
-use vars qw/$opt_r $opt_h/;
+use vars qw/$opt_r $opt_h $opt_q/;
 
 %latin1_to_ascii = (
 	192 => "A", 193 => "A", 194 => "A", 195 => "A", 196 => "A", 197 => "A",
@@ -80,7 +80,7 @@ sub simplify($) {
 	return lc($a);
 };
 
-getopts('rh');
+getopts('rhq');
 
 ($prog = $0) =~ s|.*/||;
 if($opt_h || !@ARGV) {
@@ -112,7 +112,11 @@ $dbh = DBI->connect("DBI:$conf{'db_type'}:$conf{'db_name'}:$conf{'db_host'}",
 	or die "can't connect to database";
 
 foreach $f (@ARGV) {
-	next if -d $f;
+	next if -d $f || ! -s $f;
+	if($f !~ /\.mp[123]$/i) {
+		warn "$f: not an MP3 file, skipping.\n";
+		next;
+	}
 	$f =~ s|^\./+||;
 
 	my $fullf = $f;
@@ -139,10 +143,10 @@ foreach $f (@ARGV) {
 			or die "can't do sql command: " . $dbh->errstr;
 	
 		($id, $ti, $ar, $al, $tr, $len) = $sth->fetchrow_array or do {
-			warn "$f: not found in dbase\n";
+			warn "$f: not found in dbase\n" unless $opt_q;
 			next;
 		};
-		warn "$f: partial filename match on $shortf\n";
+		warn "$f: partial filename match on $shortf\n" unless $opt_q;
 	};
 
 	open F, "+<$f" or do {

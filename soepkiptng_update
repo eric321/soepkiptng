@@ -48,21 +48,8 @@ use Cwd;
 use DBI;
 use Getopt::Std;
 use MP3::Tag;
+use MPEG::MP3Info;
 #use Data::Dumper;
-
-#eval "
-#use POSIX qw(locale_h);
-#";
-#unless($@) {
-#	setlocale(LC_CTYPE, "en_US.ISO8859-1") or die;
-#q}
-
-# optional
-eval "use MPEG::MP3Info;";
-if($@) {
-	warn "MPEG::MP3Info not found; properties of mp3 files will not be available.\n";
-	$omitmp3info = 1;
-}
 
 use vars qw/$opt_d $opt_e $opt_f $opt_r/;
 
@@ -251,10 +238,6 @@ EOF
 sub getinfo_mp3($) {
 	$_[0] =~ /\.mp[1-3]$/i
 		or return undef;
-
-	if($omitmp3info) {
-		return ("MP3", 0, 0, 0);
-	}
 
 	# open file to check Xing VBR tag
 	my $xframes = 0;
@@ -479,7 +462,7 @@ sub extract_artist_title {
 	$f =~ s|(.*)/||;
 	my $p = $1;
 
-	if(!$omitmp3info && ! -e "$p/.noid3" && "$p/$f" =~ /\.mp3$/i) {
+	if(! -e "$p/.noid3" && "$p/$f" =~ /\.mp3$/i) {
 		my $mp3 = MP3::Tag->new("$p/$f");
 		$mp3->config("autoinfo", "ID3v1", "ID3v2");
 		($t, $tr, $a, $alb) = $mp3->autoinfo();

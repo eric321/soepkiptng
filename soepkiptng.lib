@@ -155,21 +155,8 @@ sub get_id($$$) {
 	my ($db, $table, $value) = @_;
 
 	my $sth = $db->prepare("SELECT id,name FROM $table WHERE binary name=?");
-	if($sth->execute($value) >= 1) {
+	if($sth->execute($value || "") >= 1) {
 		my ($id, $v) = $sth->fetchrow_array;
-
-#		# "gt" works case-insensitively !@#!@#%$@#, compare byte-by-byte
-#		my ($vvalue, $vv) = ($value, $v);
-#		while($vvalue) {
-#			last if ord($vvalue) > ord($vv);
-#			if(ord($vvalue) < ord($vv)) {
-#				$db->do("UPDATE $table SET name=? WHERE id=?", undef, $value, $id)
-#					or die;
-#				last;
-#			}
-#			$vvalue =~ s/.//;
-#			$vv =~ s/.//;
-#		}
 		return $id;
 	} else {
 		$db->do("REPLACE INTO $table SET name=?", undef, $value)

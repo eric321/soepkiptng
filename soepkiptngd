@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/perl -w
 ############################################################################
 # soepkiptngd (Soepkip The Next Generation daemon)
 #
@@ -25,62 +25,29 @@
 # Boston, MA 02111-1307, USA.
 ############################################################################
 
-$configfile = "/etc/soepkiptng.conf";
+my $configfile = "/etc/soepkiptng.conf";
 
 use DBI;
+use Getopt::Std;
 use IO::Handle;
-use MPEG::MP3Info;
 use IO::Socket;
 use POSIX ":sys_wait_h";
 use Sys::Hostname;
-use Getopt::Std;
 
-getopts('dr:s:');
-$debug = 1 if $opt_d;
+use integer;
+use strict;
+use vars qw(%conf $dbh $restart $opt_d $opt_r $opt_s $cdrplaypid
+	$pid_status $pid_signal $pid);
 
-open F, $configfile
-	or die "$configfile: $!\n";
-while(<F>) {
-	/^#/ and next;
-	s/\s+$//;
-	/./ or next;
-	if(/^(\w+)\s*=\s*(.*?)\s*$/) {
-		$f = $1;
-		${$f} = $2;
-	} elsif(/^\s+(.*?)\s*$/) {
-		# continuation line
-		${$f} .= "\n$1";
-	} else {
-		die "$configfile line $.: invalid format\n";
-	}
-}
-close F;
-
-$ENV{'PATH'} = "$progdir/bin:$ENV{'PATH'}";
-
-if(open ST, $statusfile) {
-	my ($s, $f, $pid) = <ST>;
-	close ST;
-	$pid = 0 + $pid;
-	if($pid) {
-		kill 0, $pid
-			and die "Another copy of soepkiptngd is already running! (pid $pid)\n";
-	}
-}
-
-$killsock = IO::Socket::INET->new(Listen => 5)
-	or die "cannot create listening TCP socket: $!\n";
-$killhost = hostname;
-$killport = $killsock->sockport();
 
 sub rotatelog(;$) {
 	if($_[0] or -s STDERR > 65000) {
-		rename $errfile, "$errfile.old" or do {
-			warn "rename $errfile -> $errfile.old: $!\n";
+		rename $conf{errfile}, "$conf{errfile}.old" or do {
+			warn "rename $conf{errfile} -> $conf{errfile}.old: $!\n";
 			return;
 		};
 		close STDERR;
-		open STDERR, ">$errfile";
+		open STDERR, ">$conf{errfile}";
 		STDERR->autoflush(1);
 	}
 }
@@ -103,8 +70,8 @@ sub child_reaper {
 		warn sprintf "reaped child %d, sig=%d status=%d\n",
 			$p, $? & 0x7f, $? >> 8;
 		if($p == $cdrplaypid) {
-			unlink $statusfile;
-			die "exiting because '$playercmd' died.\n";
+			unlink $conf{statusfile};
+			die "exiting because '$conf{playercmd}' died.\n";
 		} elsif($p == $pid) {
 			$pid = 0;
 			$pid_status = $? >> 8;
@@ -119,22 +86,21 @@ sub get_song_jingle() {
 	my ($song_id, $filename);
 
 	$song_id = 0;
-	if($jingledir && opendir JINGLEDIR, $jingledir) {
+	if($conf{jingledir} && opendir JINGLEDIR, $conf{jingledir}) {
 		foreach(sort readdir JINGLEDIR) {
 			next if /^\./;
-			warn "playing jingle $jingledir/$_\n";
+			warn "playing jingle $conf{jingledir}/$_\n";
 			$song_id = -1;
-			$filename = "$jingledir/$_";
+			$filename = "$conf{jingledir}/$_";
 			last;
 		}
 		close JINGLEDIR;
 	}
 	$song_id or return undef;
-	return ($song_id, 'J', $filename);
+	return ($song_id, 'J', $filename, '');
 }
 
-sub get_song_queued($) {
-	my ($dbh) = @_;
+sub get_song_queued() {
 	my ($song_id, $song_order, $filename, $pres, $user);
 
 	# get queued song
@@ -166,29 +132,27 @@ sub get_song_queued($) {
 	return ($song_id, 'Q', $filename, $user);
 }
 
-sub get_song_random_recent($) {
-	my ($dbh) = @_;
+sub get_song_random_recent() {
 	my ($song_id, $filename);
 
-	if(rand() < $recent_prob) {
-		my $maxage = $recent_age * 86400;
+	if(rand() < $conf{recent_prob}) {
+		my $maxage = $conf{recent_age} * 86400;
 		($song_id, $filename) = $dbh->selectrow_array(
 			"SELECT id,filename FROM song WHERE present AND " .
 			"unix_timestamp(now()) - unix_timestamp(time_added) < $maxage AND " .
-			"unix_timestamp(now()) - unix_timestamp(last_played) > $min_random_time " .
+			"unix_timestamp(now()) - unix_timestamp(last_played) > $conf{min_random_time} " .
 			"ORDER BY rand() LIMIT 1"
 		);
 		warn "playing recent $filename\n" if $song_id;
 	}
 	$song_id or return undef;
-	return ($song_id, 'r', $filename);
+	return ($song_id, 'r', $filename, '');
 }
 
-sub get_song_random($) {
-	my ($dbh) = @_;
+sub get_song_random() {
 	my ($song_id, $filename);
 
-	my $min = $min_random_time;
+	my $min = $conf{min_random_time};
 	for(;;) {
 		($song_id, $filename) = $dbh->selectrow_array(
 			"SELECT id,filename FROM song WHERE present AND " .
@@ -201,9 +165,103 @@ sub get_song_random($) {
 	}
 	warn "playing random $filename\n";
 	$song_id or return undef;
-	return ($song_id, 'R', $filename);
+	return ($song_id, 'R', $filename, '');
 }
 
+sub logprintf($@) {
+	my ($fmt, @args) = @_;
+
+	# write to log file
+	if(open LOG, ">>$conf{logfile}") {
+		printf LOG "%s $fmt\n", scalar localtime, @args;
+		close LOG;
+	} else {
+		warn "cannot open logfile $conf{logfile}: $!\n";
+	}
+}
+
+sub start_play($) {
+	my ($filename) = @_;
+
+	if(($pid = fork) == 0) {
+		# get our own program group so our parent can kill us easily
+		setpgrp;
+
+		# restore broken pipe behavior
+		$SIG{'PIPE'} = 'DEFAULT';
+
+		# get file type
+		$filename =~ /([^.]*)$/;
+		my $ext = lc($1);
+
+		if($ext eq "mp2" || $ext eq "mp3") {
+			exec "mp3toraw", $filename;
+		} elsif($ext eq "ogg") {
+			exec "ogg2raw", $filename;
+		} elsif($ext eq "wav") {
+			exec "wav2raw", $filename;
+		} elsif($ext eq "pac") {
+			exec "lpac2raw", $filename;
+		} elsif($ext eq "raw") {
+			exec "cat", $filename;
+		} elsif($ext eq "flac") {
+			exec "flac", "-d", "-fl", $filename, "-";
+		} else {
+			die "no player for .$ext files.\n";
+		}
+		die "exec failed";
+	}
+}
+
+sub perish {
+	my ($sig) = @_;
+
+	unlink $conf{statusfile};
+	$dbh and $dbh->disconnect;
+	warn "got SIG$sig, kill -KILL -$pid and $cdrplaypid, exiting\n";
+	kill 'KILL', -$pid, $cdrplaypid;
+	exit;
+};
+
+
+getopts('dr:s:');
+my $debug = 1 if $opt_d;
+
+my $field;
+open F, $configfile
+	or die "$configfile: $!\n";
+while(<F>) {
+	/^#/ and next;
+	s/\s+$//;
+	/./ or next;
+	if(/^(\w+)\s*=\s*(.*?)\s*$/) {
+		$field = $1;
+		$conf{$field} = $2;
+	} elsif(/^\s+(.*?)\s*$/) {
+		# continuation line
+		$conf{$field} .= "\n$1";
+	} else {
+		die "$configfile line $.: invalid format\n";
+	}
+}
+close F;
+
+$ENV{'PATH'} = "$conf{progdir}/bin:$ENV{'PATH'}";
+
+if(open ST, $conf{statusfile}) {
+	my ($s, $f, $pid) = <ST>;
+	close ST;
+	$pid = 0 + $pid;
+	if($pid) {
+		kill 0, $pid
+			and die "Another copy of soepkiptngd is already running! (pid $pid)\n";
+	}
+}
+
+my $killsock = IO::Socket::INET->new(Listen => 5)
+	or die "cannot create listening TCP socket: $!\n";
+my $killhost = hostname;
+my $killport = $killsock->sockport();
 
 unless($debug) {
 	if(!$opt_r) {
@@ -212,9 +270,9 @@ unless($debug) {
 		setpgrp();
 	}
 	open STDIN, "</dev/null";
-	open STDERR, ">>$errfile" or do {
+	open STDERR, ">>$conf{errfile}" or do {
 		rotatelog(1);
-		open STDERR, ">$errfile" or die "$errfile: $!\n";
+		open STDERR, ">$conf{errfile}" or die "$conf{errfile}: $!\n";
 		warn "logs rotated prematurely because of permission problems.\n";
 	};
 	STDERR->autoflush(1);
@@ -226,17 +284,15 @@ sleep $opt_s if $opt_s;
 warn sprintf "*** starting soepkiptngd (pid=$$) %s ***\n", '$Id$';
 warn "PATH=$ENV{'PATH'}\n";
 
-$SIG{'TERM'} = sub {
-	unlink $statusfile;
-	warn "got SIGTERM, kill -KILL -$pid and $cdrplaypid, exiting\n";
-	kill 'KILL', -$pid, $cdrplaypid;
-	exit;
-};
+$SIG{'TERM'} = \&perish;
+$SIG{'INT'} = \&perish;
 
 $SIG{'USR1'} = sub {
 	warn "setting restart flag\n";
 	$restart = 1;
 };
+
+$SIG{'PIPE'} = 'IGNORE';
 
 if($opt_r) {
 	$cdrplaypid = $opt_r;
@@ -244,28 +300,30 @@ if($opt_r) {
 } else {
 	# when $playercmd fails instantly, we might get SIGCHLD
 	# before $cdrplaypid is set !!!
-	$cdrplaypid = open STDOUT, "|$playercmd";
+	$cdrplaypid = open STDOUT, "|$conf{playercmd}";
 	warn "cdrplaypid=$cdrplaypid\n";
-}
 
-$SIG{'PIPE'} = 'IGNORE';
-$SIG{'CHLD'} = \&child_reaper;
+	# play 2 sec. of silence to get my external DAC going
+	print pack("x352800");
+}
 
 # we might have missed the exiting of cdrplay, so reap once now
 child_reaper();
 
 srand;
 
-$num_errors = 0;
+my $num_errors = 0;
+my ($killsock_conn);
 for(;;) {
 	my ($song_id, $songtype, $filename, $user);
+	my ($childtime);
 
 	if($restart) {
 		# close-on-exec apparently doesn't work
 #		$dbh->disconnect;
 		$killsock_conn and $killsock_conn->close();
 		$killsock->close();
-		unlink $statusfile;
+		unlink $conf{statusfile};
 
 		warn "execing myself\n";
 		exec $0, '-r', $cdrplaypid;
@@ -277,18 +335,21 @@ for(;;) {
 		sleep 1 << ($num_errors < 10? $num_errors : 10);
 	}
 
+	# (re)open database connection if necessary
 	if(!$dbh) {
-		$dbh = DBI->connect("DBI:mysql:$db_name:$db_host", $db_user, $db_pass) or do {
-			warn "Can't connect to database $db_name\@$db_host as user $db_user\n";
+		$dbh = DBI->connect("DBI:mysql:$conf{db_name}:$conf{db_host}",
+			$conf{db_user}, $conf{db_pass}) or do {
+			warn "Can't connect to database $conf{db_name}" .
+				"\@$conf{db_host} as user $conf{db_user}\n";
 			$num_errors++;
 			next;
 		};
 	}
 
 	($song_id, $songtype, $filename, $user) = get_song_jingle();
-	$song_id or ($song_id, $songtype, $filename, $user) = get_song_queued($dbh);
-	$song_id or ($song_id, $songtype, $filename, $user) = 	get_song_random_recent($dbh);
-	$song_id or ($song_id, $songtype, $filename, $user) = 	get_song_random($dbh);
+	$song_id or ($song_id, $songtype, $filename, $user) = get_song_queued();
+	$song_id or ($song_id, $songtype, $filename, $user) = 	get_song_random_recent();
+	$song_id or ($song_id, $songtype, $filename, $user) = 	get_song_random();
 
 	if($song_id) {
 		# update database
@@ -305,7 +366,7 @@ for(;;) {
 	logprintf("%s %6d %s", $songtype, $song_id, $filename);
 
 	# write status file
-	if(open ST, ">$statusfile.tmp") {
+	if(open ST, ">$conf{statusfile}.tmp") {
 		print ST <<EOF;
 $song_id
 $filename
@@ -317,10 +378,10 @@ $songtype
 $user
 EOF
 		close ST;
-		rename "$statusfile.tmp", $statusfile
-			or warn "cannot rename $statusfile.tmp -> $statusfile: $!\n";
+		rename "$conf{statusfile}.tmp", $conf{statusfile}
+			or warn "cannot rename $conf{statusfile}.tmp -> $conf{statusfile}: $!\n";
 	} else {
-		warn "cannot open statusfile $statusfile: $!\n";
+		warn "cannot open statusfile $conf{statusfile}: $!\n";
 	}
 
 	# close accepted socket after statusfile was updated
@@ -333,28 +394,32 @@ $cdrplaypid
 $killhost
 $killport
 $songtype
+$user
 EOF
 		$killsock_conn->close();
 		undef $killsock_conn;
 	}
 
 	# launch player
-	$starttime = time;
+	my $starttime = time;
 	if($debug) {
-		($a, $b, $c, $d) = times;
+		my ($a, $b, $c, $d) = times;
 		$childtime = $c + $d;
 	}
 	start_play($filename);
 	warn "pid=$pid\n";
 
 	# wait until player is done or we get a connect on $killsock
-	vec($rin, $killsock->fileno(), 1) = 1;
-	while($pid) {
+	my ($rin, $rout);
+	vec($rin = '', $killsock->fileno(), 1) = 1;
+	for(;;) {
+		child_reaper();
+		last if $pid == 0;
 		if(select($rout = $rin, undef, undef, 0.1) == 1) {
 			warn "got connection\n";
 
 			# kill player
-			$p = $pid;
+			my $p = $pid;
 			if($p) {
 				warn "kill -KILL -$p\n";
 				kill 'KILL', -$p
@@ -383,63 +448,17 @@ EOF
 	}
 
 	if($debug) {
-		($a, $b, $c, $d) = times;
+		my ($a, $b, $c, $d) = times;
 		$childtime = $c + $d - $childtime;
 		warn "song finished, time=$childtime\n";
 	}
 
+	# delete jingle files
 	if($songtype eq 'J') {
 		unlink "$filename" or warn "unlink $filename: $!\n";
 	}
 
 	# prevent us from eating 100% cpu time in case of misconfiguration
-	time == $starttime or $num_errors++;
-}
-
-sub logprintf($@) {
-	my ($fmt, @args) = @_;
-
-	# write to log file
-	if(open LOG, ">>$logfile") {
-		printf LOG "%s $fmt\n", scalar localtime, @args;
-		close LOG;
-	} else {
-		warn "cannot open logfile $logfile: $!\n";
-	}
-}
-
-sub start_play($) {
-	my ($filename) = @_;
-
-	if(($pid = fork) == 0) {
-		# damn! a race condition occurs: the program can terminate and
-		# SIGCHLD be delivered to the parent _before_ $pid was set!
-		# maybe a little wait helps...
-		select undef, undef, undef, 0.3;
-
-		$SIG{'PIPE'} = 'DEFAULT';
-		setpgrp;
-
-		# get file type
-		$filename =~ /([^.]*)$/;
-		my $ext = lc($1);
-
-		if($ext eq "mp2" || $ext eq "mp3") {
-			exec "mp3toraw", $filename;
-		} elsif($ext eq "ogg") {
-			exec "ogg2raw", $filename;
-		} elsif($ext eq "wav") {
-			exec "wav2raw", $filename;
-		} elsif($ext eq "pac") {
-			exec "lpac2raw", $filename;
-		} elsif($ext eq "raw") {
-			exec "cat", $filename;
-		} elsif($ext eq "flac") {
-			exec "flac", "-d", "-fl", $filename, "-";
-		} else {
-			warn "no player for .$ext files.\n";
-		}
-		die "exec failed";
-	}
+	time == $starttime and $num_errors++;
 }
 
