@@ -20,6 +20,25 @@
 
 use Socket;
 
+sub encurl($) {
+	my ($a) = @_;
+
+	$a =~ s|([^-./\w])|sprintf "%%%02x", ord($1)|ge;
+#	$a =~ s| |+|g;
+	$a;
+}
+
+sub enchtml($;$) {
+	my ($a, $do_nbsp) = @_;
+
+	$a =~ s|&|&amp;|g;
+	$a =~ s|"|&quot;|g;
+	$a =~ s|<|&lt;|g;
+	$a =~ s|>|&gt;|g;
+	$a =~ s| |&nbsp;|g if $do_nbsp;
+	$a;
+}
+
 sub del_song($@) {
 	my ($db, @ids) = @_;
 	@ids or return;
@@ -217,7 +236,7 @@ sub construct_url($@) {
 	my ($baseurl, $argsref) = @_;
 	my $sep = "?";
 	foreach(keys %$argsref) {
-		$baseurl .= "$sep$_=" . encode($$argsref{$_});
+		$baseurl .= "$sep$_=" . encurl($$argsref{$_});
 		$sep = "&";
 	}
 	return $baseurl;
