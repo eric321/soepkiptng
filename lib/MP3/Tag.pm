@@ -12,29 +12,48 @@ use MP3::Tag::ID3v2;
 use MP3::Tag::File;
 use vars qw/$VERSION %config/;
 
-$VERSION="0.30";
+$VERSION="0.40";
 
 =pod
 
 =head1 NAME
 
-Tag - Module for reading tags of MP3 audio files
+MP3::Tag - Module for reading tags of MP3 audio files
 
 =head1 SYNOPSIS
 
-  use Tag;
+  use MP3::Tag;
+
   $mp3 = MP3::Tag->new($filename);
-  $mp3->getTags;
+
+  # get some information about the file in the easiest way
+  ($song, $track, $artist, $album) = $mp3->autoinfo();
+
+  # or have a closer look on the tags
+
+  # scan file for existing tags
+  $mp3->get_tags;
 
   if (exists $mp3->{ID3v1}) {
-    $id3v1 = $mp3->{ID3v1};
-    print $id3v1->song;
-    ...
+      # read some information from the tag
+      $id3v1 = $mp3->{ID3v1};  # $id3v1 is only a shortcut for $mp3->{ID3v1}
+      print $id3v1->song;
+      
+      # change the tag contents
+      $id3v1->all("Song","Artist","Album",2001,"Comment",10,"Top 40");
+      $id3v1->write_tag;
   }
 
   if (exists $mp3->{ID3v2}) {
-    ($name, $info) = $mp3->{ID3v2}->getFrame("TIT2");
-    ...
+      # read some information from the tag
+      ($name, $info) = $mp3->{ID3v2}->get_frame("TIT2");
+      # delete the tag completely from the file
+      $mp3->{ID3v2}->remove_tag;
+  } else {
+      # create a new tag
+      $mp3->new_tag("ID3v2");
+      $mp3->{ID3v2}->add_frame("TALB", "Album title");
+      $mp3->write_tag;
   }
 
   $mp3->close();
@@ -51,9 +70,6 @@ which do the handling of reading/writing the tags itself.
 
 At the moment MP3::Tag::ID3v1 and MP3::Tag::ID3v2 are supported.
 
-!! As this is only a beta version, it is very likely that the design 
-!! of this wrapper module will change soon !!
-
 =over 4
 
 =item new()
@@ -66,65 +82,74 @@ different tags.
 =cut
 
 sub new {
-  my $class = shift;
-  my $filename = shift;
-  my $mp3data;
-  if (-f $filename) {
-    $mp3data = MP3::Tag::File->new($filename);
-  }
-  # later it should hopefully possible to support also http/ftp sources
-  # with a MP3::Tag::Net module or something like that
-  if ($mp3data) {
-    my $self={filename=>$mp3data};
-    bless $self, $class;
-    return $self;
-  }
-  return undef;
+    my $class = shift;
+    my $filename = shift;
+    my $mp3data;
+    if (-f $filename) {
+	$mp3data = MP3::Tag::File->new($filename);
+    }
+    # later it should hopefully possible to support also http/ftp sources
+    # with a MP3::Tag::Net module or something like that
+    if ($mp3data) {
+	my $self={filename=>$mp3data};
+	bless $self, $class;
+	return $self;
+    }
+    return undef;
 }
 
 =pod
 
-=item getTags()
+=item get_tags()
 
-  @tags = $mp3->getTags;
+  [old name: getTags() . The old name is still available, but its use is not advised]
+
+  @tags = $mp3->get_tags;
 
 Checks which tags can be found in the mp3-object. It returns
-a list @tags which contains strings identifying the found tags.
+a list @tags which contains strings identifying the found tags, like
+"ID3v1" or "ID3v2" .
 
-Each found tag can be accessed then with $mp3->{tagname} .
+Each found tag can then be accessed with $mp3->{tagname} , where tagname is
+a sting returned by get_tags ;
 
-Use the information found in MP3::Tag::ID3v1 and MP3::Tag::ID3v2
+Use the information found in L<MP3::Tag::ID3v1> and L<MP3::Tag::ID3v2>
 to see what you can do with the tags.
 
 =cut 
 
 ################ tag subs
 
-sub getTags {
-  my $self = shift;
-  my (@IDs, $ref);
-  if (exists $self->{gottags}) {
-    push @IDs, "ID3v1" if exists $self->{ID3v1};
-    push @IDs, "ID3v2" if exists $self->{ID3v2};
-  } elsif ($self->{filename}->open()) {
-    $self->{gottags}=1;
-    if (defined ($ref = MP3::Tag::ID3v2->new($self->{filename}))) {
-      $self->{ID3v2} = $ref;
-      push @IDs, "ID3v2";
+sub get_tags {
+    my $self = shift;
+    my (@IDs, $ref);
+    if (exists $self->{gottags}) {
+	push @IDs, "ID3v1" if exists $self->{ID3v1};
+	push @IDs, "ID3v2" if exists $self->{ID3v2};
+    } elsif ($self->{filename}->open()) {
+	$self->{gottags}=1;
+	if (defined ($ref = MP3::Tag::ID3v2->new($self->{filename}))) {
+	    $self->{ID3v2} = $ref;
+	    push @IDs, "ID3v2";
+	}
+	if(defined ($ref = MP3::Tag::ID3v1->new($self->{filename}))) {
+	    $self->{ID3v1} = $ref;
+	    push @IDs, "ID3v1";
+	}
     }
-    if(defined ($ref = MP3::Tag::ID3v1->new($self->{filename}))) {
-      $self->{ID3v1} = $ref;
-      push @IDs, "ID3v1";
-    }
-  }
-  return @IDs;
+    return @IDs;
 }
+
+# keep old name for a while
+*getTags = \&get_tags;
 
 =pod
 
-=item newTag()
+=item new_tag()
 
-  $tag = $mp3->newTag($tagname);
+  [old name: newTag() . The old name is still available, but its use is not advised]
+
+  $tag = $mp3->new_tag($tagname);
 
 Creates a new tag of the given type $tagname. You
 can access it then with $mp3->{$tagname}. At the
@@ -134,19 +159,23 @@ Returns an tag-object: $mp3->{$tagname}.
 
 =cut
 
-sub newTag {
-  my $self = shift;
-  my $whichTag = shift;
-  if ($whichTag =~ /1/) {
-    $self->{ID3v1}= MP3::Tag::ID3v1->new($self->{filename},1);
-    return $self->{ID3v1};
-  } elsif ($whichTag =~ /2/) {
-    $self->{ID3v2}= MP3::Tag::ID3v2->new($self->{filename},1);
-    return $self->{ID3v2};
-  }
+sub new_tag {
+    my $self = shift;
+    my $whichTag = shift;
+    if ($whichTag =~ /1/) {
+	$self->{ID3v1}= MP3::Tag::ID3v1->new($self->{filename},1);
+	return $self->{ID3v1};
+    } elsif ($whichTag =~ /2/) {
+	$self->{ID3v2}= MP3::Tag::ID3v2->new($self->{filename},1);
+	return $self->{ID3v2};
+    }
 }
 
+# keep old name for a while
+*newTag = \&new_tag;
+
 #only as a shortcut to {filename}->close to explicitly close a file
+
 =pod
 
 =item close()
@@ -154,13 +183,13 @@ sub newTag {
   $mp3->close;
 
 You can use close() to explicitly close a file. Normally this is done
-automatically by the module, so that you don't need to do this.
+automatically by the module, so that you do not need to do this.
 
 =cut
 
 sub close {
-  my $self=shift;
-  $self->{filename}->close;
+    my $self=shift;
+    $self->{filename}->close;
 }
 
 =pod
@@ -177,6 +206,7 @@ name or id to a given id or name.
 This function is only a shortcut to MP3::Tag::ID3v1->genres.
 
 This can be also called as MP3::Tag->genres;
+
 =cut
 
 sub genres {
@@ -193,7 +223,7 @@ sub genres {
   $info_hashref = $mp3->autoinfo();
 
 autoinfo() returns information about the song name, song number,
-artist number and album name. It can get this information from an
+artist and album name. It can get this information from an
 ID3v1-tag, an ID3v2-tag and from the filename itself.
 
 It will as default first try to find a ID3v2-tag to get this
@@ -204,35 +234,36 @@ the information.
 You can change the order of this with the config() command.
 
 autoinfo() returns an array with the information or a hashref. The hash
-then has the keys song, track, artist, album where the information is
+has four keys 'song', 'track', 'artist' and 'album' where the information is
 stored.
 
 =cut
 
 sub autoinfo() {
-  my ($self) = shift;
-
-  my @order;
-  if (exists $config{autoinfo}) {
-    @order = @{$config{autoinfo}};
-  } else {
-    @order = ("ID3v2","ID3v1","filename");
-  }
-
-  $self->getTags unless exists $self->{gottags};
-
-  my ($song, $track, $artist, $album)=("","","","");
-  foreach my $part (@order) {
-    if (exists $self->{$part}) {
-      #get the info
-      $song=$self->{$part}->song;
-      $track=$self->{$part}->track;
-      $artist=$self->{$part}->artist;
-      $album=$self->{$part}->album;
-      last;
+    my ($self) = shift;
+    
+    my @order;
+    if (exists $config{autoinfo}) {
+	@order = @{$config{autoinfo}};
+    } else {
+	@order = ("ID3v2","ID3v1","filename");
     }
-  }
-  return ($song, $track, $artist, $album);
+
+    $self->get_tags unless exists $self->{gottags};
+    
+    my ($song, $track, $artist, $album)=("","","","");
+    foreach my $part (@order) {
+	if (exists $self->{$part}) {
+	    #get the info
+	    $song=$self->{$part}->song;
+	    $track=$self->{$part}->track;
+	    $artist=$self->{$part}->artist;
+	    $album=$self->{$part}->album;
+	    last;
+	}
+    }
+    return wantarray ? ($song, $track, $artist, $album) : 
+                       { song => $song, track => $track, artist => $artist, album => $album } ;
 }
 
 =pod
@@ -246,43 +277,50 @@ Possible items are:
 * autoinfo
 
   Configure the order in which ID3v1-, ID3v2-tag and filename are used
-  by autoinfo.  options can be "ID3v1","ID3v2","filename". The order
+  by autoinfo.  Options can be "ID3v1","ID3v2","filename". The order
   in which they are given to config also sets the order how they are
   used by autoinfo. If an option is not present, it will not be used
   by auotinfo.
 
   $mp3->config("autoinfo","ID3v1","ID3v2","filename");
 
-    sets the order to check first ID3v1, then ID3v2 and last the
+    sets the order to check first ID3v1, then ID3v2 and at last the
     Filename
 
   $mp3->config("autoinfo","ID3v1","filename","ID3v2");
 
     sets the order to check first ID3v1, then the Filename and last
-    ID3v2. As the filename will be always present ID3v2 will be
-    checked never.
+    ID3v2. As the filename will be always present ID3v2 will here
+    never be checked.
 
   $mp3->config("autoinfo","ID3v1","ID3v2");
 
     sets the order to check first ID3v1, then ID3v2. The filename will
-    be never used.
+    never be used.
 
-* Later this will be used probably to configure more things.
+* Later there will be probably more things to configure.
 
 =cut
 
 sub config() {
-  my ($self, $item, @options) = @_;
-
-  $config{lc $item}=\@options;
+    my ($self, $item, @options) = @_;
+    
+    $item = lc $item;
+    
+    if ($item ne "autoinfo") {
+	warn "MP3::Tag::config(): Unknown option '$item' found\n";
+	return;
+    }
+    
+    $config{$item}=\@options;
 }
 
 
 sub DESTROY {
-  my $self=shift;
-  if (exists $self->{filename}) {
-    $self->{filename}->close;
-  }
+    my $self=shift;
+    if (exists $self->{filename} and defined $self->{filename}) {
+	$self->{filename}->close;
+    }
 }
 
 1;

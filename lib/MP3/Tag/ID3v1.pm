@@ -3,7 +3,7 @@ package MP3::Tag::ID3v1;
 use strict;
 use vars qw /@mp3_genres @winamp_genres $AUTOLOAD %ok_length $VERSION/;
 
-$VERSION="0.52";
+$VERSION="0.60";
 
 # allowed fields in ID3v1.1 and max length of this fields (expect for track and genre which are coded later)
 %ok_length = (song => 30, artist => 30, album => 30, comment => 28, track => 3, genre => 30, year=>4, genreID=>1); 
@@ -17,14 +17,18 @@ MP3::Tag::ID3v1 - Module for reading / writing ID3v1 tags of MP3 audio files
 =head1 SYNOPSIS
 
 MP3::Tag::ID3v1 is designed to be called from the MP3::Tag module.
-It then returns a ID3v1-tag-object, which can be used in a users
-program.
 
-  use MP3::Tag::ID3v1;
-  $id3v1 = MP3::Tag::ID3v1->new($mp3obj);
+  use MP3::Tag;
+  $mp3 = MP3::Tag->new($filename);
 
-C<$mp3obj> is a object from MP3::Tag. See L<MP3::Tag|according documentation>.
-C<$tag> is undef when no tag is found in the C<$mp3obj>.
+  # read an existing tag
+  $mp3->get_tags();
+  $id3v1 = $mp3->{ID3v1} if exists $mp3->{ID3v1};
+
+  # or create a new tag
+  $id3v1 = $mp3->new_tag("ID3v1");
+
+See L<MP3::Tag|according documentation> for information on the above used functions.
   
 * Reading the tag
 
@@ -35,9 +39,11 @@ C<$tag> is undef when no tag is found in the C<$mp3obj>.
     print "   Year: " .$id3v1->year . "\n";
     print "  Genre: " .$id3v1->genre . "\n";
     print "  Track: " .$id3v1->track . "\n";
+
+    # or at once
     @tagdata = $mp3->all();
-    foreach (@tagdata) {
-      print $_;
+    foreach $tag (@tagdata) {
+	print $tag;
     }
 
 * Changing / Writing the tag
@@ -50,48 +56,18 @@ C<$tag> is undef when no tag is found in the C<$mp3obj>.
       $id3v1->track("5");
       $id3v1->genre("Blues");
       # or at once
-      $id3v1->all("song title","artist","album","1900","comment",10,"Ska");#
-      $id3v1->writeTag;
+      $id3v1->all("song title","artist","album","1900","comment",10,"Ska");
+      $id3v1->write_tag();
+
+* Removing the tag from the file
+
+      $id3v1->remove_tag();
 
 =head1 AUTHOR
 
 Thomas Geffert, thg@users.sourceforge.net
 
 =head1 DESCRIPTION
-
-=item new()
-
-  $id3v1 = MP3::Tag::ID3v1->new($mp3obj[, $create]);
-
-Generally called from MP3::Tag, because a $mp3obj is needed.
-If $create is true, a new tag is created. Otherwise undef is
-returned, if now ID3v1 tag is found in the $mp3obj.
-
-=cut
-
-# create a ID3v1 object
-sub new {
-  my ($class, $mp3obj, $create) = @_;
-  my $self={mp3=>$mp3obj};
-  my $buffer;
-
-  if (defined $create && $create) {
-    $self->{new} = 1;
-  } else {
-    $mp3obj->seek(-128,2);
-    $mp3obj->read(\$buffer, 128);
-    $mp3obj->close;
-  }
-
-  if (exists $self->{new} || substr ($buffer,0,3) eq "TAG") {
-    bless $self, $class;
-    $self->readTag($buffer);
-
-    return $self;
-  } else {
-    return undef;
-  }
-}
 
 =pod
 
@@ -163,78 +139,84 @@ genre has to be a string with the name of the genre, or a number identifying the
 sub all {
   my $self=shift;
   if ($#_ == 6) {
-    my $new;
-    for (qw/song artist album year comment track genre/) {
-      $new = shift;
-      $new =~ s/ +$//;
-      $new = substr  $new, 0, $ok_length{$_};
-      $self->{$_}=$new;
-    }
-    if ($self->{genre} =~ /^\d+$/) {
-      $self->{genreID} = $self->{genre};
-    } else {
-      $self->{genreID} = genre2id($self->{genre});
-    }
-    $self->{genre} = id2genre($self->{genreID});
-    $self->{changed} = 1;
+      my $new;
+      for (qw/song artist album year comment track genre/) {
+	  $new = shift;
+	  $new =~ s/ +$//;
+	  $new = substr  $new, 0, $ok_length{$_};
+	  $self->{$_}=$new;
+      }
+      if ($self->{genre} =~ /^\d+$/) {
+	  $self->{genreID} = $self->{genre};
+      } else {
+	  $self->{genreID} = genre2id($self->{genre});
+      }
+      $self->{genre} = id2genre($self->{genreID});
+      $self->{changed} = 1;
   }
   for (qw/song artist album year comment track genre/) {
-    $self->{$_} =~ s/ +$//;
+      $self->{$_} =~ s/ +$//;
   }	
   if (wantarray) {
-    return ($self->{song},$self->{artist},$self->{album},
-	    $self->{year},$self->{comment}, $self->{track}, $self->{genre});
+      return ($self->{song},$self->{artist},$self->{album},
+	      $self->{year},$self->{comment}, $self->{track}, $self->{genre});
   }
   return $self->{song}; 
 }
 =pod
 
-=item writeTag()
+=item write_tag()
 
-  $id3v1->writeTag;
+  $id3v1->write_tag();
+
+  [old name: writeTag() . The old name is still available, but you should use the new name]
 
 Writes the ID3v1 tag to the file.
 
 =cut
 
-sub writeTag {
-  my $self = shift;
-  return undef unless exists $self->{song} && exists $self->{changed};
-  $self->{track}=0 unless $self->{track} =~ /^\d+$/;
-  $self->{genreID}=255 unless $self->{genreID} =~ /^\d+$/;
-  my $data = pack("a30a30a30a4a28xCC",$self->{song},$self->{artist},$self->{album}, 
-		  $self->{year}, $self->{comment}, $self->{track}, $self->{genreID});
-  my $mp3obj = $self->{mp3};
-  my $mp3tag;
-  $mp3obj->close;
-  if ($mp3obj->open("+<")) {
-    $mp3obj->seek(-128,2);
-    $mp3obj->read(\$mp3tag, 3);
-    if ($mp3tag eq "TAG") {
-      $mp3obj->seek(-125,2); # neccessary for windows
-      $mp3obj->write($data);
+sub write_tag {
+    my $self = shift;
+    return undef unless exists $self->{song} && exists $self->{changed};
+    $self->{track}=0 unless $self->{track} =~ /^\d+$/;
+    $self->{genreID}=255 unless $self->{genreID} =~ /^\d+$/;
+    my $data = pack("a30a30a30a4a28xCC",$self->{song},$self->{artist},$self->{album}, 
+		    $self->{year}, $self->{comment}, $self->{track}, $self->{genreID});
+    my $mp3obj = $self->{mp3};
+    my $mp3tag;
+    $mp3obj->close;
+    if ($mp3obj->open("write")) {
+	$mp3obj->seek(-128,2);
+	$mp3obj->read(\$mp3tag, 3);
+	if ($mp3tag eq "TAG") {
+	    $mp3obj->seek(-125,2); # neccessary for windows
+	    $mp3obj->write($data);
+	} else {
+	    $mp3obj->seek(0,2);
+	    $mp3obj->write("TAG$data");
+	}
     } else {
-      $mp3obj->seek(0,2);
-      $mp3obj->write("TAG$data");
+	warn "Couldn't open file to write tag";
+	return 0;
     }
-  } else {
-    warn "Couldn't open file to write tag";
-    return 0;
-  }
-  return 1;
+    return 1;
 }
+
+*writeTag = \&write_tag;
 
 =pod
 
-=item removeTag()
+=item remove_tag()
 
-  $id3v1->removeTag;
+  $id3v1->remove_tag();
+
+  [old name: removeTag() . The old name is still available, but you should use the new name]
 
 Removes the ID3v1 tag from the file.
 
 =cut
 
-sub removeTag {
+sub remove_tag {
   my $self = shift;
   my $mp3obj = $self->{mp3};
   my $mp3tag;
@@ -242,7 +224,7 @@ sub removeTag {
   $mp3obj->read(\$mp3tag, 3);
   if ($mp3tag eq "TAG") {
     $mp3obj->close;
-    if ($mp3obj->open("+<")) {
+    if ($mp3obj->open("write")) {
       $mp3obj->truncate(-128);
       $self->all("","","","","",0,255);
       $mp3obj->close;
@@ -253,6 +235,8 @@ sub removeTag {
   }
   return 0;
 }
+
+*removeTag = \&remove_tag;
 
 =pod
 
@@ -268,18 +252,64 @@ a given id or name.
 =cut
 
 sub genres {
-  # return an array with all genres, of if a parameter is given, the according genre
-  my ($self, $genre) = @_;
-  return \@winamp_genres unless defined $genre;
-  return $winamp_genres[$genre] if $genre =~ /^\d+$/;
-  my $r;
-  foreach (@winamp_genres) {
-    if ($_ eq $genre) {
-      $r=$_;
-      last;
+    # return an array with all genres, of if a parameter is given, the according genre
+    my ($self, $genre) = @_;
+    if ( (defined $self) and (not defined $genre) and ($self !~ /MP3::Tag/)) {
+	## genres may be called directly via MP3::Tag::ID3v1::genres()
+	## and $self is then not used for an id3v1 object
+	$genre = $self;
     }
-  }
-  return $r;
+    return \@winamp_genres unless defined $genre;
+    return $winamp_genres[$genre] if $genre =~ /^\d+$/;
+    my $r;
+    foreach (@winamp_genres) {
+	if ($_ eq $genre) {
+	    $r=$_;
+	    last;
+	}
+    }
+    return $r;
+}
+
+=item new()
+
+  $id3v1 = MP3::Tag::ID3v1->new($mp3fileobj[, $create]);
+
+Generally called from MP3::Tag, because a $mp3fileobj is needed.
+If $create is true, a new tag is created. Otherwise undef is
+returned, if now ID3v1 tag is found in the $mp3obj.
+
+Please use
+
+   $mp3 = MP3::Tag->new($filename);
+   $id3v1 = $mp3->new_tag($filename);
+
+instead of using this function directly
+
+=cut
+
+# create a ID3v1 object
+sub new {
+    my ($class, $mp3obj, $create) = @_;
+    my $self={mp3=>$mp3obj};
+    my $buffer;
+
+    if (defined $create && $create) {
+	$self->{new} = 1;
+    } else {
+	$mp3obj->seek(-128,2);
+	$mp3obj->read(\$buffer, 128);
+	$mp3obj->close;
+    }
+
+    if (exists $self->{new} || substr ($buffer,0,3) eq "TAG") {
+	bless $self, $class;
+	$self->read_tag($buffer);
+	
+	return $self;
+    } else {
+	return undef;
+    }
 }
 
 #################
@@ -287,47 +317,47 @@ sub genres {
 ## internal subs
 
 # actually read the tag data
-sub readTag {
-  my ($self, $buffer) = @_;
-  my $mp3obj = $self->{mp3};
-  my $id3v1;
+sub read_tag {
+    my ($self, $buffer) = @_;
+    my $mp3obj = $self->{mp3};
+    my $id3v1;
 
-  if ($self->{new}) {
-    ($self->{song}, $self->{artist}, $self->{album}, $self->{year}, 
-     $self->{comment}, $self->{track}, $self->{genre}, $self->{genreID}) = ("","","","","",0,"",255);
-    $self->{changed} = 1;
-  } else {
-    (undef, $self->{song}, $self->{artist}, $self->{album}, $self->{year}, 
-     $self->{comment}, $id3v1, $self->{track}, $self->{genreID}) = 
-       unpack ("a3Z30Z30Z30Z4Z28CCC", $buffer);
-
-    if ($id3v1!=0) { # ID3v1 tag found: track is not valid, comment two chars longer
-      $self->{comment} .= chr($id3v1);
-      $self->{comment} .= chr($self->{track}) if $self->{track}!=32;
-      $self->{track} = 0;
-    };
-    $self->{genre} = id2genre($self->{genreID});
-  }
+    if ($self->{new}) {
+	($self->{song}, $self->{artist}, $self->{album}, $self->{year}, 
+	 $self->{comment}, $self->{track}, $self->{genre}, $self->{genreID}) = ("","","","","",0,"",255);
+	$self->{changed} = 1;
+    } else {
+	(undef, $self->{song}, $self->{artist}, $self->{album}, $self->{year}, 
+	 $self->{comment}, $id3v1, $self->{track}, $self->{genreID}) = 
+	   unpack ("a3Z30Z30Z30Z4Z28CCC", $buffer);
+	
+	if ($id3v1!=0) { # ID3v1 tag found: track is not valid, comment two chars longer
+	    $self->{comment} .= chr($id3v1);
+	    $self->{comment} .= chr($self->{track}) if $self->{track}!=32;
+	    $self->{track} = 0;
+	};
+	$self->{genre} = id2genre($self->{genreID});
+    }
 }
 
 # convert one byte id to genre name
 sub id2genre {
-  my $id=shift;
-  return "" unless defined $id && $id<$#winamp_genres;
-  return $winamp_genres[$id];
+    my $id=shift;
+    return "" unless defined $id && $id<$#winamp_genres;
+    return $winamp_genres[$id];
 }
 
 # convert genre name to one byte id
 sub genre2id {
-  my $genre = shift;
-  my $i=0;
-  foreach (@winamp_genres) {
-    if (uc $genre eq uc $_) {
-      return $i;
+    my $genre = shift;
+    my $i=0;
+    foreach (@winamp_genres) {
+	if (uc $genre eq uc $_) {
+	    return $i;
+	}
+	$i++,
     }
-    $i++,
-  }
-  return 255;
+    return 255;
 }
 
 # nothing to do for destroy
