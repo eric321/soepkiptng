@@ -203,7 +203,7 @@ $editlistopts
 -->
 
  <td id=az>&nbsp;&nbsp;<a id=az href="$self?cmd=shuffle">Shuffle</a></td>
- <td id=az>&nbsp;&nbsp;<a id=az href="$self?cmd=recent&days=7" target=bframe>Recent</a></td>
+ <td id=az>&nbsp;&nbsp;<a id=az href="$self?cmd=recent&days=7" target=bframe>Recent</a><a id=az href="$self?cmd=recent&days=7&np=1" target=bframe>*</a></td>
  <td id=az>&nbsp;&nbsp;<a id=az href="$self?cmd=alllist&rand=50" target=bframe>Random</a></td>
  <td id=az>&nbsp;&nbsp;<a id=az href="$self?cmd=alllist&encoding=^Video" target=bframe>Video</a></td>
  <td id=az>&nbsp;&nbsp;<a id=az target=_blank href="$self?cmd=maint">*</a></td>
@@ -1314,12 +1314,14 @@ elsif($cmd eq 'recent') {
 	my $s = $args{sort} || "r_time_added";
 	$s =~ s/\W//g;
 	$s =~ s/^r_(.*)/\1 DESC/;
-	print_alllist_table($dbh, \%args, \%session, "Most recent $n songs",
+	print_alllist_table($dbh, \%args, \%session,
+		"Most recent $n songs" . ($args{np}? " (never played yet)":""),
 		"SELECT artist.name as artist,album.name as album,song.*," .
 		"song.artist_id as arid, song.album_id as alid" .
 		" FROM song,artist,album WHERE present AND filename LIKE '/%'" .
 		" AND song.artist_id=artist.id AND song.album_id=album.id" .
 		" AND unix_timestamp(now()) - unix_timestamp(time_added) < $maxage" .
+		($args{np}? " AND unix_timestamp(last_played) = 0":"") .
 		" ORDER BY $s,album.name,track,artist.name,title", 500);
 	printftr;
 }
