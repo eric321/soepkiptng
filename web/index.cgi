@@ -389,7 +389,7 @@ EOF
 			" count(*) as c, song.artist_id as arid, song.album_id as alid " .
 			" FROM song,artist,album WHERE present AND song.artist_id = ?".
 			" AND song.artist_id=artist.id AND song.album_id=album.id".
-			" GROUP BY binary album.name ORDER BY album.name";
+			" GROUP BY album_id ORDER BY album.name";
 		my $sth = $dbh->prepare($query);
 		my $rv = $sth->execute(keys %artistids);
 		while($_ = $sth->fetchrow_hashref()) {
@@ -810,7 +810,7 @@ elsif($cmd eq 'artistlist') {
 	if($s) {
 		$s =~ s/^r_(.*)/\1 DESC/;
 		$q[0] .= " AND song.artist_id=artist.id AND song.album_id=album.id".
-			 " GROUP BY binary artist.name, binary album.name ORDER BY $s";
+			 " GROUP BY artist_id, album_id ORDER BY $s";
 		print_artistlist_table($dbh, \%session, $cap, @q);
 	} else {
 		print "Error: No search terms specified.\n";
