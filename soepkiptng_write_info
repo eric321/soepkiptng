@@ -89,6 +89,7 @@ $dbh = DBI->connect("DBI:$conf{'db_type'}:$conf{'db_name'}:$conf{'db_host'}",
 
 foreach $f (@ARGV) {
 	next if -d $f;
+	$f =~ s|^\./+||;
 
 	my $fullf = $f;
 	$f =~ m|^/| or $fullf = "$cwd/$f";
@@ -98,7 +99,8 @@ foreach $f (@ARGV) {
 	     " WHERE song.artist_id=artist.id AND song.album_id=album.id" .
 	     " AND present AND filename=?";
 	$sth = $dbh->prepare($q);
-	$sth->execute($fullf) or die;
+	$sth->execute($fullf)
+		or die "can't do sql command: " . $dbh->errstr;
 
 	($id, $ti, $ar, $al, $tr) = $sth->fetchrow_array or do {
 		my $shortf = $fullf;
@@ -112,12 +114,17 @@ foreach $f (@ARGV) {
 		$sth->execute($shortf)
 			or die "can't do sql command: " . $dbh->errstr;
 	
-		($id, $ti, $ar, $al, $tr) = $sth->fetchrow_array
-			or die "$f: not found in dbase\n";
+		($id, $ti, $ar, $al, $tr) = $sth->fetchrow_array or do {
+			warn "$f: not found in dbase\n";
+			next;
+		};
 		warn "$f: partial filename match on $shortf\n";
 	};
 
-	open F, "+<$f" or die "$f: $!\n";
+	open F, "+<$f" or do {
+		warn "$f: $!\n";
+		next;
+	};
 	seek F, -128, 2;
 	read F, $buf, 128;
 	if($buf =~ /^TAG/) {
@@ -133,9 +140,9 @@ foreach $f (@ARGV) {
 	
 	if($p_ti ne $ti || $p_tr != $tr || $p_ar ne $ar || $p_al ne $al) {
 		$newtag = $mp3->newTag('ID3v2');
-		$newtag->add_frame('TIT2', $ti);
-		$newtag->add_frame('TPE1', $ar);
-		$newtag->add_frame('TALB', $al);
+		$newtag->add_frame('TIT2', $ti) if $ti;
+		$newtag->add_frame('TPE1', $ar) if $ar;
+		$newtag->add_frame('TALB', $al) if $al;
 		$newtag->add_frame('TRCK', $tr) if $tr;
 		warn "$f: updating ID3v2 tag\n";
 		$newtag->write_tag();
@@ -146,21 +153,22 @@ foreach $f (@ARGV) {
 		$f =~ /.*\.(.*?)$/ and $ext = $1;
 		my $newname = "";
 		$newname .= sprintf "%02d-", $tr if $tr;
-		$newname .= simplify($ar) . "-" . simplify($ti) . ".$ext";
-		if($newname ne $f) {
-			$f =~ m|^(.*/)?|;
-			$newname = ($1 || $cwd) . "/$newname";
+		$newname .= simplify($ar) . "-" if $ar;
+		$newname .= simplify($ti) . ".$ext";
+		$fullf =~ m|^(.*)/|;
+		$newname = "$1/$newname";
 
-			warn "renaming $f -> $newname\n";
+		if($newname ne $fullf) {
+			warn "renaming $fullf -> $newname\n";
 			if(-e $newname) {
 				warn "$f: $newname exists, skipping\n";
 			} else {
-				if(rename $f, $newname) {
+				if(rename $fullf, $newname) {
 					$dbh->do("UPDATE song SET filename=? WHERE id=?",
 						undef, $newname, $id)
 						or die "can't do sql command: " . $dbh->errstr;
 				} else {
-					warn "rename $f -> $newname: $!\n";
+					warn "rename $fullf -> $newname: $!\n";
 				}
 			}
 		}
