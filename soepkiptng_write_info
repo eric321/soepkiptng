@@ -42,7 +42,7 @@ use Getopt::Std;
 use MP3::Tag;
 #use Data::Dumper;
 
-use vars qw/$opt_r $opt_h $opt_q $opt_t $opt_l $opt_c/;
+use vars qw/$opt_r $opt_h $opt_q $opt_t $opt_l $opt_c $opt_f/;
 
 sub do_dir($$) {
 	my ($dbh, $f) = @_;
@@ -107,7 +107,7 @@ sub do_dir($$) {
 
 sub do_file($$) {
 	my ($dbh, $f) = @_;
-	my ($id, $ti, $ar, $al, $tr, $len, $lyrics, $source, $language);
+	my ($id, $ti, $ar, $al, $tr, $len, $lyrics, $description, $language);
 
 	$f =~ s|^\./+||;
 
@@ -121,7 +121,7 @@ sub do_file($$) {
 
 	my $sth = $dbh->prepare(
 		"SELECT song.id,title,artist.name,album.name,track,length," .
-		"lyrics,language,source FROM song " .
+		"lyrics,language,description FROM song " .
 		"LEFT JOIN album ON album.id=song.album_id " .
 		"LEFT JOIN artist ON artist.id=song.artist_id " . 
 		"LEFT JOIN lyrics ON lyrics.id=song.id " .
@@ -131,13 +131,13 @@ sub do_file($$) {
 	for(;;) {
 		$sth->execute($filename_noext)
 			or die "can't do sql command: " . $dbh->errstr;
-		($id, $ti, $ar, $al, $tr, $len, $lyrics, $language, $source) =
+		($id, $ti, $ar, $al, $tr, $len, $lyrics, $language, $description) =
 			$sth->fetchrow_array and last;
 
 		$partial++;
 		if($partial == 1) {
 			# replace extension by .% wildcard
-			$filename_noext =~ s/[^.]+$/%/;
+			$filename_noext =~ s|\.[^/.]+$|.%|;
 		} else {
 			# replace first pathname component by %/
 			$filename_noext =~ s|^%?/+[^/]+/+|%/| or do {
@@ -152,7 +152,7 @@ sub do_file($$) {
 	next unless -s $f;
 
 	if($f =~ /\.mp[123]$/i) {
-		do_mp3($dbh, $f, $ar, $ti, $al, $tr, $len, $lyrics, $source, $language);
+		do_mp3($dbh, $f, $ar, $ti, $al, $tr, $len, $lyrics, $description, $language);
 	} elsif($f =~ /\.flac$/i) {
 		do_flac($dbh, $f, $ar, $ti, $al, $tr, $len);
 	} elsif($f =~ /\.ogg$/i) {
@@ -235,7 +235,7 @@ sub do_mp3($$$$$$$$$) {
 	} else {
 		$newtag = $mp3->newTag('ID3v2');
 	}
-	if($p_ti ne $ti || $p_tr != $tr || $p_ar ne $ar || $p_al ne $al ||
+	if($opt_f || $p_ti ne $ti || $p_tr != $tr || $p_ar ne $ar || $p_al ne $al ||
 		$p_len != 1000 * $len || $p_uslt->{Description} ne $lyrdesc || 
 		$p_uslt->{Language} ne $lyrlang || $p_uslt->{Text} ne $lyrics) {
 
@@ -243,8 +243,12 @@ sub do_mp3($$$$$$$$$) {
 		$newtag->add_frame('TPE1', $ar) if $ar;
 		$newtag->add_frame('TALB', $al) if $al;
 		$newtag->add_frame('TRCK', $tr) if $tr;
-		$newtag->add_frame('TLEN', 1000 * $len) if $len;
-		$newtag->add_frame('USLT', 0, $lyrlang, $lyrdesc, $lyrics);
+		if($len) {
+			$newtag->add_frame('TLEN', 1000 * $len);
+		}
+		if($lyrics) {
+			$newtag->add_frame('USLT', 0, $lyrlang, $lyrdesc, $lyrics);
+		}
 		warn "$f: updating ID3v2 tag\n";
 		$newtag->write_tag()
 			unless $opt_t;
@@ -316,13 +320,13 @@ sub do_flac($$$$$$$) {
 	}
 	while(<F>) {
 		s/\s+$//;
-		if(/^artist=(.*)/ && $1 ne $ar) { 
+		if($opt_f || (/^artist=(.*)/ && $1 ne $ar)) { 
 			push @changeargs, "--remove-vc-field=artist", "--set-vc-field=artist=$ar";
-		} elsif(/^title=(.*)/ && $1 ne $ti) {
+		} elsif($opt_f || (/^title=(.*)/ && $1 ne $ti)) {
 			push @changeargs, "--remove-vc-field=title", "--set-vc-field=title=$ti";
-		} elsif(/^album=(.*)/ && $1 ne $al) {
+		} elsif($opt_f || (/^album=(.*)/ && $1 ne $al)) {
 			push @changeargs, "--remove-vc-field=album", "--set-vc-field=album=$al";
-		} elsif(/^tracknumber=(.*)/ && $1 != $tr) {
+		} elsif($opt_f || (/^tracknumber=(.*)/ && $1 != $tr)) {
 			push @changeargs, "--remove-vc-field=tracknumber", "--set-vc-field=tracknumber=$tr";
 		}
 	}
@@ -337,19 +341,21 @@ sub do_flac($$$$$$$) {
 }
 
 
-getopts('rhqtl:c:');
+getopts('rfhqtl:c:');
 
 read_configfile(\%conf, $opt_c);
 
 ($prog = $0) =~ s|.*/||;
 if($opt_h || !@ARGV) {
 	print <<EOF;
-Usage: $prog [-qrt] mp3files...
+Usage: $prog [-hrqft] [-l len] mp3files...
 
-Options:
-       -r : rename files.
-       -q : don't warn about partial/failed filename matches.
-       -t : testmode, don't actually write any tags.
+Options: 
+       -r      : rename files.
+       -q      : don't warn about partial/failed filename matches.
+       -f      : force tag writing
+       -t      : testmode, don't actually write any tags.
+       -l len  : restrict length of filenames to 'len'
 
 $prog reads Artist/Title/Album/Track info from the SoepkipTNG
 database and writes it to the specified files using ID3v2 (unless the files
