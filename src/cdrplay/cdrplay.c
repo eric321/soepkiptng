@@ -8,6 +8,7 @@
 
 static char rcsid[] = "$Id$";
 
+#include <errno.h>
 #include <fcntl.h>
 #include <sched.h>
 #include <signal.h>
@@ -52,7 +53,7 @@ void realtime(int on)
 {
 	struct sched_param sp;
 
-	if(debug) printf("realtime(%s)\n", on? "on":"off");
+	if(debug) fprintf(stderr,"realtime(%s)\n", on? "on":"off");
 	if(on) {
 		sp.sched_priority = 3;
 		if(sched_setscheduler(getpid(), SCHED_FIFO, &sp) < 0)
@@ -92,7 +93,7 @@ void sighandler(int s)
 		if(do_realtime) realtime(0);
 		return;
 	}
-	fprintf(stderr,"Signal %d received, exiting.\n",s);
+	fprintf(stderr,"\nSignal %d received, exiting.\n",s);
 	exit(1);
 }
 
@@ -149,7 +150,7 @@ Report bugs to eric@scintilla.utwente.nl.\n");
 
 int main(int argc, char **argv)
 {
-	char *buf, *p, c;
+	char *buf, c;
 	int bufsize, l, minlen = 0, status, i, r, w, iseek = 0, retval;
 	int maxfd;
 	fd_set rfds, wfds;
@@ -204,12 +205,13 @@ int main(int argc, char **argv)
 		fd1 = pipeopen(argv + optind, &pid1);
 	if(iseek) lseek(fd1, iseek, SEEK_SET);
 
-	for(i = 0;;) {
+	if(strcmp(snddev,"-") == 0) fd2 = 1;
+	else for(i = 0;;) {
 		fd2 = open(snddev, O_WRONLY | O_CREAT | O_TRUNC, 0666);
 		if(!busywait || fd2 >= 0 || errno != EBUSY) break;
 		if(verbose) {
-			printf("%c\b", waitstr[i++ % 4]);
-			fflush(stdout);
+			fprintf(stderr,"%c\b", waitstr[i++ % 4]);
+			fflush(stderr);
 		}
 		usleep(200000);
 	}
@@ -235,13 +237,13 @@ int main(int argc, char **argv)
 	signal(SIGPIPE, SIG_IGN);
 	
 	for(;;) {
-		if(debug)
-			printf("Bufsize = %8d/%8d\n", len, bufsize);
+/*		if(debug)
+			fprintf(stderr,"Bufsize = %8d/%8d\n", len, bufsize); */
 
 		if(verbose) {
 			unsigned t;
 			int perc;
-			static unsigned displayed_t = 0;
+			static unsigned displayed_t = -1;
 			static int displayed_perc = -1;
 			
 			if(starttime)
@@ -252,23 +254,25 @@ int main(int argc, char **argv)
 			if(perc > 90) perc = -1;
 			
 			if(t != displayed_t || perc != displayed_perc) {
-				printf(" [%02u:%02u", t / 60, t % 60);
-				if(verbose > 1) {
-					struct stat st;
-					unsigned t;
-
-					fstat(fd1, &st);
-					if(st.st_size) {
-						t = st.st_size / 176400;
-						printf(" / %02u:%02u", t / 60, t % 60);
+				if(maywrite) {
+					fprintf(stderr," [%02u:%02u", t / 60, t % 60);
+					displayed_t = t;
+					if(verbose > 1) {
+						struct stat st;
+						unsigned t;
+	
+						fstat(fd1, &st);
+						if(st.st_size) {
+							t = st.st_size / 176400;
+							fprintf(stderr," / %02u:%02u", t / 60, t % 60);
+						}
 					}
+					fprintf(stderr,"]");
 				}
-				putchar(']');
-				if(perc != -1) printf(" fill %d%%", perc);
-				if(readeof) printf(" EOF");
-				printf("               \r");
-				fflush(stdout);
-				displayed_t = t;
+				if(perc != -1) fprintf(stderr," fill %d%%", perc);
+				if(readeof) fprintf(stderr," EOF");
+				fprintf(stderr,"            \r");
+				fflush(stderr);
 				displayed_perc = perc;
 			}
 		}		
@@ -283,7 +287,7 @@ int main(int argc, char **argv)
 
 			maywrite = 1;
 			minlen = len;
-			time(&starttime);
+			if(!starttime) time(&starttime);
 
 			if(debug) {			
 				struct rusage ru;
@@ -304,7 +308,8 @@ int main(int argc, char **argv)
 
 		/* try writing... */
 		if(FD_ISSET(fd2, &wfds)) {
-			l = len < BLKSIZE? len : BLKSIZE;
+			l = len;
+			if(l > BLKSIZE) l = BLKSIZE;
 			if(l + pos > bufsize) l = bufsize - pos;
 
 			if((w = write(fd2, buf + pos, l)) == -1) {
@@ -313,30 +318,45 @@ int main(int argc, char **argv)
 				break;
 			}
 			len -= w;
+			if(debug) {
+				fprintf(stderr, "wrote %8d bytes at %8d. len now %8d\n",
+					w, pos, len);
+			}
 			pos = (pos + w) % bufsize;
 
 			/* flush data in soundcard driver if we are out of data */
 			if(len == 0) ioctl(fd2, SNDCTL_DSP_POST, 0);
 
+			/* if readeof == 1, we don't select() on fd1. Therefore, select
+			   always waits until fd2 is ready. If we continue here we'd
+			   never try reading */
 			if(!readeof) continue;
 		}
 
 		/* try reading... */
 		if(readeof || FD_ISSET(fd1, &rfds)) {
-			p = buf + (pos + len) % bufsize;
-			l = (bufsize - len) < BLKSIZE? (bufsize - len) : BLKSIZE;
+			int dst;
+
+			dst = (pos + len) % bufsize;
+			l = bufsize - len;
+			if(l > BLKSIZE) l = BLKSIZE;
+			if(l > bufsize - dst) l = bufsize - dst;
 			
-			if((r = read(fd1, p, l)) == -1) {
+			if((r = read(fd1, buf + dst, l)) == -1) {
 				if(errno == EINTR) continue;
 				perror("read");
 				break;
 			}
 			len += r;
+			if(debug) {
+				fprintf(stderr, "read  %8d bytes at %8d. len now %8d\n",
+					r, dst, len);
+			}
 			readeof = (r == 0); /* end-of-file */
-			if(debug && readeof) printf("readeof ");
+			if(debug && readeof) fprintf(stderr,"readeof ");
 		}
 	}
-	if(verbose) printf("\n");
+	if(verbose) fprintf(stderr,"\n");
 	close(fd1);
 	buf[0] = buf[1] = buf[2] = buf[3] = 0;
 	write(fd2, buf, 4);
@@ -346,8 +366,8 @@ int main(int argc, char **argv)
 		struct rusage ru;
 			
 		getrusage(RUSAGE_SELF, &ru);
-		printf("minflt=%ld, majflt=%ld, nswap=%ld, nivcsw=%ld\n",
-			 ru.ru_minflt - s_minflt,
+		fprintf(stderr,"minflt=%ld, majflt=%ld, nswap=%ld, nivcsw=%ld\n",
+			ru.ru_minflt - s_minflt,
 			ru.ru_majflt - s_majflt,
 			ru.ru_nswap - s_nswap,
 			ru.ru_nivcsw - s_nivcsw);
