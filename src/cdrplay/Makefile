@@ -5,17 +5,12 @@ CC=gcc
 CFLAGS=-O2 -Wall
 LDFLAGS=-s
 
-all: cdrplay simpleplay
+all: cdrplay
 
 cdrplay: cdrplay.c
 
-simpleplay: simpleplay.c
-
-install: cdrplay simpleplay
+install: cdrplay
 	install -o root -m 4755 cdrplay /usr/local/bin
-	install simpleplay /usr/local/bin
 
 clean:
-	rm -f cdrplay simpleplay
-
-
+	rm -f cdrplay
