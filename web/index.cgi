@@ -251,7 +251,7 @@ sub print_artistlist_table($$) {
 EOF
 
 	my $query = "SELECT DISTINCT artist, album, count(*)" .
-			" FROM songs WHERE artist REGEXP ?".
+			" FROM songs WHERE present AND artist REGEXP ?".
 			" GROUP BY artist,album ORDER BY artist,album";
 	my $sth = $dbh->prepare($query);
 	my $rv = $sth->execute($val);
@@ -316,7 +316,7 @@ EOF
 EOF
 	if(scalar keys %artists == 1) {
 		my $query = "SELECT DISTINCT album, count(*)" .
-				" FROM songs WHERE artist = ?".
+				" FROM songs WHERE present AND artist = ?".
 				" GROUP BY album ORDER BY album";
 		my $sth = $dbh->prepare($query);
 		my $rv = $sth->execute(keys %artists);
@@ -365,6 +365,7 @@ sub print_edit_page($$) {
 	my $t = $_->{track} || "";
 	my $size = sprintf("%dk", ((-s $_->{filename}) + 512) / 1024);
 	my $lp = $lp? localtime($_->{lp}) : "-";
+	my $pr = $_->{present}? "Yes" : "No";
 
 	print <<EOF;
 <script language="Javascript">
@@ -382,6 +383,7 @@ function verifydelete() {
   <form action="$self" method=get>
   <input type=hidden name=id value="$id">
     <input type=hidden name=cmd value=changefile>
+  <tr><td>Present:</td><td>$pr</td></tr>
   <tr><td>Artist:</td><td><input type=text size=60 name=artist value="$_->{artist}"></td></tr>
   <tr><td>Title:</td> <td><input type=text size=60 name=title  value="$_->{title}"></td></tr>
   <tr><td>Album:</td> <td><input type=text size=60 name=album  value="$_->{album}"></td></tr>
@@ -532,7 +534,7 @@ elsif($cmd eq 'alllist') {
 	my $v = $args{'v'};
 	$v =~ s/[^-^\$ _0-9a-z]+/.*/ig;
 	print_alllist_table($dbh, sprintf($args{'cap'}, $args{'v'}),
-		"SELECT * FROM songs WHERE $args{'f'} REGEXP ?" .
+		"SELECT * FROM songs WHERE present AND $args{'f'} REGEXP ?" .
 		" ORDER BY $args{'f'},album,track,artist,title", $v);
 	printftr;
 }
@@ -541,7 +543,7 @@ elsif($cmd eq 'recent') {
 	printhdr($allstyle);
 	my $n = (0 + $args{'num'}) || 40;
 	print_alllist_table($dbh, "Most recent $n songs",
-		"SELECT * FROM songs ORDER BY time_added DESC LIMIT ?", $n);
+		"SELECT * FROM songs WHERE present ORDER BY time_added DESC LIMIT ?", $n);
 	printftr;
 }
 elsif($cmd eq 'maint') {
@@ -576,7 +578,7 @@ elsif($cmd eq 'delfile') {
 		or die "id $id not found in database\n";
 	if(unlink $file) {
 		print "$file deleted from disk.\n";
-		$dbh->do("DELETE FROM songs WHERE id=$id");
+		$dbh->do("UPDATE songs SET present=0 WHERE id=$id");
 	} else {
 		print "$file: <b>$!</b>\n";
 	}

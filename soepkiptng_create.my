@@ -17,6 +17,7 @@ CREATE TABLE songs (
   length smallint DEFAULT '0' NOT NULL,
   last_played timestamp,
   time_added timestamp,
+  present tinyint NOT NULL,
   PRIMARY KEY (id),
   KEY artist (artist(4)),
   KEY title (title(4)),

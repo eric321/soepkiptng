@@ -128,7 +128,7 @@ if(@ARGV) {
 		}
 		push @q, $q;
 	}
-	$q = "SELECT title,artist,album,id,track FROM songs WHERE" . join(" AND ", @q) .
+	$q = "SELECT title,artist,album,id,track FROM songs WHERE present AND " . join(" AND ", @q) .
 		" ORDER BY artist,album,track,title";
 #warn $q;
 	$sth = $dbh->prepare($q);

@@ -176,7 +176,7 @@ for(;;) {
 	($song_id, $song_order, $filename) = $dbh->selectrow_array(
 		"SELECT queue.song_id,queue.song_order,songs.filename" .
 		" FROM queue,songs" .
-		" WHERE queue.song_id=songs.id" .
+		" WHERE queue.song_id=songs.id AND songs.present" .
 		" ORDER BY queue.song_order" .
 		" LIMIT 1"
 	);
@@ -194,11 +194,17 @@ for(;;) {
 	#  if nothing in queue, get random song
 	if(!$song_id) {
 		$songtype = 'R';
-		($song_id, $filename) = $dbh->selectrow_array(
-			"SELECT id,filename FROM songs " .
-			"WHERE unix_timestamp(now()) - unix_timestamp(last_played) > $min_random_time " .
-			"ORDER BY rand() LIMIT 1"
-		);
+		my $min = $min_random_time;
+		for(;;) {
+			($song_id, $filename) = $dbh->selectrow_array(
+				"SELECT id,filename FROM songs WHERE present AND " .
+				"unix_timestamp(now()) - unix_timestamp(last_played) > $min " .
+				"ORDER BY rand() LIMIT 1"
+			);
+			last if $song_id || $min == 0;
+			$min >>= 1;
+			warn "no random song found, retrying with min_random_time=$min\n";
+		}
 		warn "playing random $filename\n";
 	}
 

@@ -76,15 +76,15 @@ read_eric_files();
 if($ARGV[0]) {
 	chdir $ARGV[0] or die "$ARGV[0]: $!\n";
 	@paths = (cwd);
-	$sth = $dbh->prepare("SELECT id,filename,unix_timestamp(last_played) FROM songs WHERE filename LIKE ?");
+	$sth = $dbh->prepare("SELECT id,filename,unix_timestamp(last_played),present FROM songs WHERE filename LIKE ?");
 	$sth->execute("$paths[0]/%");
 } else {
-	$sth = $dbh->prepare("SELECT id,filename,unix_timestamp(last_played) FROM songs");
+	$sth = $dbh->prepare("SELECT id,filename,unix_timestamp(last_played),present FROM songs");
 	$sth->execute();
 	@paths = split /\s+/, $mp3dirs;
 }
-while(($id, $f, $l) = $sth->fetchrow_array) {
-	$filename{$f} = $id;
+while(($id, $f, $l, $pres) = $sth->fetchrow_array) {
+	$filename{$f} = $id if $pres;
 	$last_played{$f} = $l;
 	$f =~ m|([^/]*)$|;
 	$longname{$1} = $f;
@@ -139,9 +139,9 @@ while(<FILES>) {
 		# exists with the same filename (without path)
 		/([^\/]*)$/;
 		my $oldname = $longname{$1};
-		if($oldname && ! -e $oldname) {
-			$dbh->do("UPDATE songs SET filename=?, time_added=NULL WHERE id=?",
-				undef, $_, $filename{$oldname}) or die "can't do sql command: " . $dbh->errstr . "\n";
+		if($oldname && ($oldname eq $_ || ! -e $oldname)) {
+			$dbh->do("UPDATE songs SET filename=?, time_added=NULL, present=1 WHERE filename=?",
+				undef, $_, $oldname) or die "can't do sql command: " . $dbh->errstr . "\n";
 			delete $filename{$oldname};
 			$num_moved++;
 			$oldname =~ s|[^/]+$||;
@@ -184,7 +184,7 @@ while(<FILES>) {
 #	warn "a=$artist, t=$title, al=$album, tr=$track, file=$_, len=$len, desc=$desc\n";
 
 	# insert song into database
-	$q = "REPLACE INTO songs SET id=?, artist=?, title=?, album=?, track=?, " .
+	$q = "REPLACE INTO songs SET id=?, artist=?, title=?, album=?, track=?, present=1, " .
 		"filename=?, length=?, encoding=?, last_played=from_unixtime(?), time_added=NULL";
 	$dbh->do($q, undef, $filename{$_}, $artist, $title, $album, $track, $_, $len,
 		$desc, $last_played{$_} || 0)
@@ -193,7 +193,7 @@ while(<FILES>) {
 }
 
 # delete all filenames in database what were not found on disk
-$sth = $dbh->prepare("DELETE FROM songs WHERE filename=?");
+$sth = $dbh->prepare("UPDATE songs SET present=0 WHERE filename=?");
 foreach(keys %filename) {
 	$sth->execute($_);
 	print "Deleting $_\n";
