@@ -677,7 +677,7 @@ sub print_shoutcast_page($$) {
 
 	$args->{name} =~ s/^\s+|\s+$//g;
 	$args->{url} =~ s/^\s+|\s+$//g;
-	$args->{url} =~ s|^/*(?!http:)|http://|;
+	$args->{url} =~ s|^/*(?!http:)(.)|http://$1|;
 	foreach(keys %$args) {
 		if(/^delete_(\d+)$/) {
 			$dbh->do("DELETE FROM song WHERE id=?", undef, $1)
