@@ -47,7 +47,7 @@ use Cwd;
 use DBI;
 use Getopt::Std;
 use MP3::Tag;
-use MPEG::MP3Info;
+use MP3::Info;
 #use Data::Dumper;
 
 use vars qw/$opt_c $opt_d $opt_e $opt_f $opt_r $opt_q $opt_v/;
@@ -61,6 +61,7 @@ sub getinfo_flac($\%);
 sub getinfo_raw($\%);
 sub read_eric_files();
 sub extract_artist_title($\%);
+sub is_nfs($);
 
 getopts('cfredqv');
 $force = 1 if $opt_f;
@@ -149,6 +150,11 @@ while(<FILES>) {
 		$info{encoding} .= ", ${s}kHz";
 	}
 	$info{encoding} .= " mono" if $info{chan} == 1;
+
+	# check "nolocal" setting (only files on NFS are allowed)
+	if($conf{nolocal} && !is_nfs($_)) {
+		die "Error: file on local filesystem: $_\n";
+	}
 
 	# skip if already in database (unless "force" was given)
 	if($filename{$_}) {
@@ -605,4 +611,12 @@ sub extract_artist_title($\%) {
 	$info->{track} = $tr;
 
 	return 1;
+}
+
+sub is_nfs($) {
+	my ($file) = @_;
+
+	# major device number must be 0
+	my $maj = (stat $file)[0] >> 8;
+	return $maj == 0;
 }
