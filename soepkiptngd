@@ -26,7 +26,6 @@
 ############################################################################
 
 $configfile = "/etc/soepkiptng.conf";
-$ENV{'PATH'} = "/usr/local/bin:/usr/bin:/bin";
 
 use DBI;
 use IO::Handle;
@@ -134,6 +133,7 @@ $SIG{'CHLD'} = sub {
 };
 
 warn "********** starting (pid=$$) **********\n";
+warn "PATH=$ENV{'PATH'}\n";
 
 $SIG{'TERM'} = sub {
 	unlink $statusfile;
@@ -165,6 +165,7 @@ for(;;) {
 		$dbh->disconnect;
 		$killsock_conn and $killsock_conn->close();
 		$killsock->close();
+		unlink $statusfile;
 
 		warn "execing myself\n";
 		exec $0, '-r', $cdrplaypid;
@@ -229,6 +230,7 @@ $$
 $cdrplaypid
 $killhost
 $killport
+$songtype
 EOF
 		close ST;
 	} else {
@@ -244,6 +246,7 @@ $$
 $cdrplaypid
 $killhost
 $killport
+$songtype
 EOF
 		$killsock_conn->close();
 		undef $killsock_conn;

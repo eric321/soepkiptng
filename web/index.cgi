@@ -477,7 +477,7 @@ my $nowplaying;
 
 if($cmd eq 'empty') {
 	printhtmlhdr;
-	print "<body $body></body>\n";
+	print "$bframe_start\n";
 	exit;
 }
 

@@ -41,7 +41,7 @@ Requirements: (you can get things with (*) from my homepage)
 
 
 On a Debian system,
-   apt-get install libapache-dbi-perl libdbd-mysql-perl \
+   apt-get install libapache-mod-perl libapache-dbi-perl libdbd-mysql-perl \
       mysql-server libmpeg-mp3info-perl libterm-readkey-perl \
       splay libvorbis-dev
 will install all the necessary software (except the programs marked with (*)).
