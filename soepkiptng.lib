@@ -144,7 +144,7 @@ sub kill_song_internal() {
 }
 
 sub pause(;$) {
-	my $cmd = defined($_[0])? ($_[0]? "pause":"resume") : "pausetoggle";
+	my $cmd = $_[0] || "pausetoggle";
 
 	my $sock = IO::Socket::INET->new('localhost:2222') or return undef;
 	$sock->autoflush(1);
