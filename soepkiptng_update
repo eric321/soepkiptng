@@ -208,6 +208,11 @@ foreach(keys %filename) {
 	$num_deleted++;
 }
 
+print "Optimizing Tables.\n";
+$dbh->do("optimize table song");
+$dbh->do("optimize table album");
+$dbh->do("optimize table artist");
+
 $dbh->disconnect();
 
 printf <<EOF, $num_added, $num_updated, $num_deleted, $num_moved, $num_skipped;
