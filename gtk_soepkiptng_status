@@ -149,6 +149,7 @@ $vbox->pack_start($button_kill, 0, 0, 1);
 
 #$splashimage = new Gtk::Pixmap($p,$pause_xpm)
 
+$mtime = -1;
 update_song();
 my $id = Gtk->timeout_add(1000, \&update_song);
 
@@ -185,6 +186,8 @@ sub update_song() {
 			} else {
 				$label->set_text("\n\n\n");
 			}
+		} else {
+			$label->set_text("** soepkiptngd not running!\n\n");
 		}
 	}
 	return 1;
