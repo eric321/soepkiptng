@@ -1,0 +1,107 @@
+#!/usr/bin/perl
+############################################################################
+# soepkiptng (c) copyright 2000 Eric Lammerts <eric@lammerts.org>.
+# $Id$
+############################################################################
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# A copy of the GNU General Public License is available on the World Wide Web
+# at `http://www.gnu.org/copyleft/gpl.html'.  You can also obtain it by
+# writing to the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+# Boston, MA 02111-1307, USA.
+############################################################################
+
+BEGIN {
+	$configfile = "/etc/soepkiptng.conf";
+
+	open F, $configfile or die "$configfile: $!\n";
+	while(<F>) {
+		/^#/ and next;
+		s/\s+$//;
+		/./ or next;
+		if(/^(\w+)\s*=\s*(.*?)\s*$/) {
+			$f = $1;
+			$conf{$f} = $2;
+		} elsif(/^\s+(.*?)\s*$/) {
+			# continuation line
+			$conf{$f} .= "\n$1";
+		} else {
+			die "$configfile line $.: invalid format\n";
+		}
+	}
+	close F;
+}
+
+$ENV{'PATH'} = "$conf{'progdir'}/bin:$ENV{'PATH'}";
+require "$conf{'progdir'}/soepkiptng.lib";
+use lib "$conf{'progdir'}/lib";
+
+sub add_shout($$) {
+	my ($url, $desc) = @_;
+	
+	my $arid = get_id($dbh, "artist", '') or die;
+	my $alid = get_id($dbh, "album", '') or die;
+	$dbh->do("REPLACE INTO song SET title=?, filename=?, album_id=?, " .
+		"artist_id=?, present=1, encoding=\"Shoutcast\", track=0, " .
+		"length=0", undef,
+		$desc, $url, $alid, $arid) or die;
+
+	warn "Added $url: $desc\n";
+	if($have_stream{$url}) { $num_updated++; }
+	else { $num_added++; }
+}
+
+
+use DBI;
+
+$dbh = DBI->connect("DBI:$conf{'db_type'}:$conf{'db_name'}:$conf{'db_host'}", $conf{'db_user'}, $conf{'db_pass'})
+	or die "can't connect to database";
+
+my $shc = $dbh->selectcol_arrayref("SELECT filename FROM song WHERE filename LIKE \"http:%\"");
+foreach(@$shc) {
+	$have_stream{$_} = 1;
+	warn "have $_\n";
+}
+
+foreach(@ARGV) {
+	open F, $_ or do {
+		warn "$_: $!\n";
+		next;
+	};
+	my (@url, @title);
+	while(<F>) {
+		if(/^File(\d+)\s*=\s*(http:\S+)/) {
+			$url[$1] = $2;
+			next;
+		}
+		if(/^Title(\d+)\s*=\s*(.*\S+)/) {
+			$title[$1] = $2;
+			next;
+		}
+		if(/^(http:\S+)/) {
+			add_shout($1, $1);
+			next;
+		}
+	}
+	close F;
+
+	for($i = 0; $i < @url; $i++) {
+		add_shout($url[$i], $title[$i] || $url[$i])
+			if $url[$i];
+	}
+}
+
+$dbh->disconnect();
+
+printf <<EOF, $num_added, $num_updated;
+%4d Shoutcast streams added.
+%4d Shoutcast streams updated.
+EOF
