@@ -41,6 +41,8 @@ if($@) {
 	$omitmp3info = 1;
 }
 
+use vars qw/$db_host $mp3dirs $db_name $opt_d $opt_e $opt_f $db_type $db_user $description_files $db_pass/;
+
 getopts('fred');
 $force = 1 if $opt_f;
 $| = 1;
