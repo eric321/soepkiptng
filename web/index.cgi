@@ -229,7 +229,8 @@ EOF
 
 sub table_entry($;$$$$) {
 	my ($q, $col1, $title_href, $ids, $extra) = @_;
-	my $fmt = <<EOF;
+
+	return sprintf <<EOF,
  <tr>
   <td %s>&nbsp;%s&nbsp;</td>
   <td %s>&nbsp;<a id=a href="%s?cmd=alllist&artist_id=%s&cap=%s" target=bframe>%s</a>&nbsp;</td>
@@ -238,11 +239,10 @@ sub table_entry($;$$$$) {
   <td %s>&nbsp;%s%s%s&nbsp;</td>
   <td %s>&nbsp;%d:%02d&nbsp;</td>
   <td %s>&nbsp;%s&nbsp;</td>
-  <td %s> <a id=a href="%s?cmd=edit&id=%d&ids=%s" title="Edit" target=%s>*</a>%s</td>
+  <td %s> %s</td>
   %s
  </tr>
 EOF
-	return sprintf $fmt, 
 		$td_left, $col1,
 		$td_artist, $self, $q->{arid}, encurl("Artist: $q->{artist}"), enchtml($q->{artist}),
 		$td_album, $self, $q->{alid}, encurl("Album: $q->{album}"), enchtml($q->{album}),
@@ -250,8 +250,11 @@ EOF
 		$td_song, $title_href, enchtml($q->{title}), $title_href? "</a>":"",
 		$td_time, $q->{length} / 60, $q->{length} % 60,
 		$td_enc, enchtml($q->{encoding}, 1),
-		$td_edit, $self, $q->{id}, $ids,
-		$edit_target || 'bframe', $listch, $extra;
+		$td_edit,
+		$q->{id} < 0? "" : sprintf(<<EOF, $self, $q->{id}, $ids, $edit_target || 'bframe'),
+<a id=a href="%s?cmd=edit&id=%d&ids=%s" title="Edit" target=%s>*</a>
+EOF
+		$listch, $extra;
 }
 
 sub albumlist_entry($) {
@@ -284,21 +287,6 @@ sub print_playlist_table($) {
 		push @ids, $_->{id};
 		push @records, $_;
 	}
-	my $fmt = <<EOF;
-<table border=0 cellspacing=0>
- <tr>
-  <th %s>&nbsp;%s&nbsp;</th>
-  <th %s>&nbsp;Artist&nbsp;</th>
-  <th %s>&nbsp;Album&nbsp;</th>
-  <th %s>&nbsp;#&nbsp;</th>
-  <th %s>&nbsp;Song&nbsp;</th>
-  <th %s>&nbsp;Time&nbsp;&nbsp;</th>
-  <th %s>&nbsp;Encoding&nbsp;</th>
-  <th %s>&nbsp;&nbsp;</th>
- </tr>
- <tr><td colspan=7></td></tr>
-%s%s</table>
-EOF
 
 	local *F;
 	if(open F, $statusfile) {
@@ -360,16 +348,25 @@ EOF
 	}
 
 	my $ids = ids_encode(@ids);
-	printf $fmt,
+	printf <<EOF,
+<table border=0 cellspacing=0>
+ <tr>
+  <th %s>&nbsp;%s&nbsp;</th>
+  <th %s>&nbsp;Artist&nbsp;</th>
+  <th %s>&nbsp;Album&nbsp;</th>
+  <th %s>&nbsp;#&nbsp;</th>
+  <th %s>&nbsp;Song&nbsp;</th>
+  <th %s>&nbsp;Time&nbsp;&nbsp;</th>
+  <th %s>&nbsp;Encoding&nbsp;</th>
+  <th %s>&nbsp;&nbsp;</th>
+ </tr>
+ <tr><td colspan=7></td></tr>
+%s%s</table>
+EOF
 		$th_left, @ids? sprintf(qq|<a id=a href="%s?cmd=del&ids=%s">| .
 			qq|$delalltext</a>|, $self, ids_encode(@ids)) : "",
-		$th_artist,
-		$th_album,
-		$th_track,
-		$th_song,
-		$th_time,
-		$th_enc,
-		$th_edit,
+		$th_artist, $th_album, $th_track, $th_song,
+		$th_time, $th_enc, $th_edit,
 		$killline,
 		join("", map { table_entry($_, sprintf(
 			qq|<a id=a href="%s?cmd=del&ids=%s">%s</a> | .
@@ -568,7 +565,30 @@ sub print_edit_page($$) {
 	$sth->execute();
 	$_ = $sth->fetchrow_hashref() or die "id $$argsref{'id'} not found.\n";
 
-	my $fmt = <<EOF;
+	my $i = 0;
+	my @ids = ids_decode($$argsref{'ids'});
+	foreach(@ids) {
+		last if $_ == $$argsref{'id'};
+		$i++;
+	}
+	my $prev = '&nbsp;&nbsp;&nbsp;&nbsp;';
+	if($i > 0) {
+		$prev = "<input type=submit name=go_$ids[$i-1] value=Prev>";
+	}
+	my $next = '&nbsp;&nbsp;&nbsp;&nbsp;';
+	if($i < $#ids) {
+		$next .= "<input type=submit name=go_$ids[$i+1] value=Next>";
+	}
+
+	my $f = $_->{'filename'};
+	$f =~ s|.*/||;
+	$f =~ s|\\|_|g;
+	$f = encurl($f);
+	$_->{filename} =~ m|^(.*)/(.*?)$|;
+	my ($dir, $file) = ($1, $2);
+	my $dir_ = $dir;
+	$dir_ =~ s/ /_/g;
+	printf <<EOF,
 <script language="Javascript">
 <!--
 function verifydelete() {
@@ -635,27 +655,7 @@ function closethis() {
 </table>
 </form>
 EOF
-	my $i = 0;
-	my @ids = ids_decode($$argsref{'ids'});
-	foreach(@ids) {
-		last if $_ == $$argsref{'id'};
-		$i++;
-	}
-	my $prev = '&nbsp;&nbsp;&nbsp;&nbsp;';
-	if($i > 0) {
-		$prev = "<input type=submit name=go_$ids[$i-1] value=Prev>";
-	}
-	my $next = '&nbsp;&nbsp;&nbsp;&nbsp;';
-	if($i < $#ids) {
-		$next .= "<input type=submit name=go_$ids[$i+1] value=Next>";
-	}
-
-	my $f = $_->{'filename'};
-	$f =~ s|.*/||;
-	$f =~ s|\\|_|g;
-	$f = encurl($f);
-	$_->{filename} =~ m|^(.*)/(.*?)$|;
-	printf $fmt, $#ids + 1, $self, $$argsref{'id'}, $$argsref{'ids'},
+		$#ids + 1, $self, $$argsref{'id'}, $$argsref{'ids'},
 		$_->{present}? "Yes" : "No",
 		enchtml($_->{artist}),
 		enchtml($_->{title}),
@@ -666,8 +666,8 @@ EOF
 		$_->{ta}? scalar localtime($_->{ta}) : "-",
 		$_->{lp}? scalar localtime($_->{lp}) : "-",
 		$_->{lp}? " <font size=-1><input type=submit name=action_clearlp value=Reset></font>":"",
-		"$self?cmd=alllist&sort=artist&filename=" . encurl($1), $1,
-		"$self/$f?cmd=download&id=$$argsref{'id'}", $2,
+		"$self?cmd=alllist&sort=artist&filename=" . encurl($dir_), $dir,
+		"$self/$f?cmd=download&id=$$argsref{'id'}", $file,
 		((-s $_->{filename}) + 512) / 1024,
 		$prev, $next,
 		can_delete($_->{filename})? qq'<input type=submit ' .
