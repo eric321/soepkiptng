@@ -416,9 +416,13 @@ if($opt_r) {
 	$cdrplaypid = $opt_r;
 	warn "cdrplaypid=$cdrplaypid (from -r)\n";
 } else {
+	# just to be sure to avoid sending pcm data to the terminal
+	open STDOUT, ">/dev/null";
+
 	# when $playercmd fails instantly, we might get SIGCHLD
 	# before $cdrplaypid is set !!!
-	$cdrplaypid = open STDOUT, "|$conf{playercmd}";
+	$cdrplaypid = open STDOUT, "|$conf{playercmd}"
+		or die "failed to start $conf{playercmd}: $!\n";
 	warn "cdrplaypid=$cdrplaypid\n";
 
 	# play 2 sec. of silence to get my external DAC going

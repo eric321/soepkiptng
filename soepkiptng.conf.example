@@ -16,7 +16,8 @@ db_pass=soepkiptng
 
 ####### daemon ############################################################
 
-playercmd=cdrplay -D /dev/dsp -wb2000
+playercmd=soepkiptng_play -b1000 -D/dev/dsp0
+
 min_random_time=286400
 
 # probability that a recently added song will be played
