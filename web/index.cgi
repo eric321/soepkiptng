@@ -74,11 +74,11 @@ sub print_frame() {
 <title>$title</title>
 </head>
 <frameset rows="$frameheights" frameborder=yes>
- <frame name=playlist src="$self?cmd=playlist&t=$t" marginheight="0">
- <frameset cols="$framewidths" frameborder=no>
-  <frame name=artistlist src="$self?cmd=artistlist&t=$t" marginheight="0">
-  <frame name=albumlist src="$self?cmd=albumlist&t=$t" marginheight="0">
-  <frame name=songlist src="$self?cmd=songlist&t=$t" marginheight="0">
+ <frame name=playlist src="$self?cmd=playlist&t=$t" marginheight="$marginheight">
+ <frameset cols="$framewidths" frameborder=yes>
+  <frame name=artistlist src="$self?cmd=artistlist&t=$t" marginheight="$marginheight">
+  <frame name=albumlist src="$self?cmd=albumlist&t=$t" marginheight="$marginheight">
+  <frame name=songlist src="$self?cmd=songlist&t=$t" marginheight="$marginheight">
  </frameset>
 </frameset>
 <body bgcolor=white>
@@ -93,10 +93,10 @@ sub print_az_table {
 <a id=a href="$self?cmd=playlist&t=$t" target=playlist>Refresh</a>&nbsp;&nbsp;
 EOF
 	$_ = encode("^[^a-zA-Z]");
-	print qq|<a id=a href="$self?cmd=artistlist&a=$_&t=$t">0-9</a>&nbsp;|;
+	print qq|<a id=a href="$self?cmd=artistlist&a=$_&t=$t" target=artistlist>0-9</a>&nbsp;|;
 	foreach('A'..'Z') {
 		my $e = encode("^$_");
-		print qq|<a id=a href="$self?cmd=artistlist&a=$e&t=$t">$_</a>&nbsp;|;
+		print qq|<a id=a href="$self?cmd=artistlist&a=$e&t=$t" target=artistlist>$_</a>&nbsp;|;
 	}
 	print <<EOF;
 </td>
@@ -388,7 +388,7 @@ foreach($q->param) { $args{$_} = $q->param($_); }
 my $dbh = DBI->connect("DBI:mysql:$db_name:$db_host",$db_user,$db_pass, {mysql_client_found_rows =>1 })
 	or die "can't connect to database...$!\n";
 
-my $t = time;
+my $t = 0;#time;
 	
 my $cmd = $args{'cmd'};
 
@@ -430,7 +430,6 @@ elsif($cmd eq 'playlist') {
 <META HTTP-EQUIV="Refresh" CONTENT="$r;URL=$self?cmd=playlist&s=$args{'s'}&t=$t">
 EOF
 	printhdr($plstyle);
-	print "<base target=artistlist>\n";
 	print $topwindow_title;
 	print_az_table();
 	print_playlist_table($dbh, $nowplaying);
