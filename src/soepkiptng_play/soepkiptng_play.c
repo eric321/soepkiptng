@@ -50,8 +50,8 @@ int main(int argc, char **argv)
 		switch(c) {
 			case 'b':
 				buffer_size = atoi(optarg) * 1024;
-				if(buffer_size == 0) {
-					fprintf(stderr, "ERROR: buffer_size 0\n");
+				if(buffer_size == < 16) {
+					fprintf(stderr, "ERROR: buffer_size < 16\n");
 					exit(1);
 				}
 				break;

@@ -13,7 +13,7 @@
 
 static void input_pre(int fd, long cookie)
 {
-	if(buffer_length < buffer_size) {
+	if(buffer_length <= buffer_size - BLKSIZE) {
    	set_fd_mask(fd, POLLIN);
    } else {
    	set_fd_mask(fd, 0);
