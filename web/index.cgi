@@ -6,9 +6,8 @@
 
 ############################################################################
 # This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
-# (at your option) any later version.
+# it under the terms of the GNU General Public License, version 2, as 
+# published by the Free Software Foundation.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -105,7 +104,7 @@ sub print_frame() {
 <head>
 <title>$title</title>
 </head>
-<frameset rows="$frameheights" frameborder=yes>
+<frameset rows="$frameheights">
  <frame name=tframe src="$self?cmd=playlist" marginheight="$marginheight">
  <frame name=bframe src="$self?cmd=empty" marginheight="$marginheight">
 </frameset>
@@ -543,7 +542,8 @@ EOF
 sub print_edit_page($$) {
 	my ($dbh, $argsref) = @_;
 
-	my $sth = $dbh->prepare("SELECT artist.name as artist,album.name as album,song.*," .
+	my $sth = $dbh->prepare("SELECT artist.name as artist,album.name as album," .
+		" reverse(bin(song.sets)) as setbin,song.*," .
 		" unix_timestamp(last_played) as lp," .
 		" unix_timestamp(time_added) as ta" .
 		" FROM song,artist,album WHERE song.id=$argsref->{id}" .
@@ -579,6 +579,25 @@ sub print_edit_page($$) {
 	my ($dir, $file) = ($1, $2);
 	my $dir_ = $dir;
 	$dir_ =~ s/ /_/g;
+
+	my $sets = '';
+	$sth = $dbh->prepare("SELECT * FROM sets");
+	$sth->execute();
+	my $i = 0;
+	while($set = $sth->fetchrow_hashref()) {
+		$sets .= sprintf <<EOF,
+<tr>
+ <td colspan=2>%s</td>
+ <td><input type=checkbox name=sets_%d%s> %s
+     <input type=submit name=action_sets_all_%d value=\"Set Entire List\"></td>
+</tr>
+EOF
+			$i == 0? "Sets:" : "&nbsp;", $set->{num},
+			substr($_->{setbin}, $set->{num}, 1)? " checked" : "",
+			$set->{name}, $set->{num};
+		$i++;
+	}
+
 	printf <<EOF,
 <script language="Javascript">
 <!--
@@ -630,7 +649,7 @@ function closethis() {
   <tr><td colspan=2>Directory:</td>       <td><a href="%s">%s</a></td></tr>
   <tr><td colspan=2>Filename:</td>        <td><a href="%s">%s</a></td></tr>
   <tr><td colspan=2>Size:</td>            <td>%dk</td></tr>
-  <tr>
+%s  <tr>
    <td align=center>%s</td>
    <td align=center>%s</td>
    <td>
@@ -660,7 +679,7 @@ EOF
 			"<input type=submit name=action_clearlpall value=\"Reset Entire List\"></font>":"",
 		"$self?cmd=alllist&sort=artist&filename=" . encurl($dir_), $dir,
 		"$self/$f?cmd=download&id=$argsref->{id}", $file,
-		((-s $_->{filename}) + 512) / 1024,
+		((-s $_->{filename}) + 512) / 1024, $sets,
 		$prev, $next,
 		can_delete($_->{filename})? qq'<input type=submit ' .
 		  qq'name=action_delete value="Delete Song" ' .
@@ -1023,7 +1042,33 @@ elsif($cmd eq 'changefile') {
 	my $arid = get_id($dbh, "artist", $args{artist}) or die;
 	my $alid = get_id($dbh, "album", $args{album}) or die;
 
-	$dbh->do("UPDATE song SET artist_id=?, title=?, album_id=?, track=? WHERE id=?",
+	foreach(keys %args) {
+		/^action_sets_all_(\d+)$/ or next;
+
+		if($args{"sets_$1"}) {
+			$upd = "sets=(sets | 1 << $1)";
+		} else {
+			$upd = "sets=(sets & ~(1 << $1))";
+		}
+
+		my @ids = ids_decode($args{ids});
+		while(@ids) {
+			my @ids2 = splice(@ids, 0, 50);
+			$dbh->do("UPDATE song SET $upd WHERE " .
+				join(" OR ", map { "id=$_" }  @ids2),
+				undef, $all_field_arg, @ids2)
+				or die "can't do sql command: " . $dbh->errstr;
+		}
+	}
+
+	my $sets = '0';
+	foreach(keys %args) {
+		/^sets_(\d+)$/ or next;
+		$sets .= " | (1 << $1)";
+	}
+	
+
+	$dbh->do("UPDATE song SET artist_id=?, title=?, album_id=?, track=?, sets=($sets) WHERE id=?",
 		undef, $arid, $args{title}, $alid, $args{track}, $args{id})
 		or die "can't do sql command: " . $dbh->errstr;
 

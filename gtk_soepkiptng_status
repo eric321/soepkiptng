@@ -4,9 +4,8 @@
 # $Id$
 ############################################################################
 # This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
-# (at your option) any later version.
+# it under the terms of the GNU General Public License, version 2, as 
+# published by the Free Software Foundation.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -48,9 +47,6 @@ close F;
 
 
 require "$progdir/soepkiptng.lib";
-
-$dbh = DBI->connect("DBI:$db_type:$db_name:$db_host", $db_user, $db_pass)
-	or die "can't connect to database";
 
 $SIG{'HUP'} = sub {
 	exec $0;
@@ -115,6 +111,8 @@ my $label = new Gtk::Label("Artist\nTitle\nAlbum");
 $label->set_justify('left');
 #$label->set_usize(300,40);
 
+my $label2 = new Gtk::Label("");
+
 $button_pause = Gtk::Widget->new("GtkButton",
  -label   => "Pause",
  -border_width => 1,
@@ -155,7 +153,8 @@ $window->add($hbox);
 
 $vbox = new Gtk::VBox 0, 1;
 
-$hbox->pack_start($label, 1, 1, 3);
+$hbox->pack_start($label, 0, 1, 3);
+$hbox->pack_start($label2, 1, 1, 3);
 $hbox->pack_start($vbox, 0, 0, 0);
 
 $vbox->pack_start($button_pause, 0, 0, 1);
@@ -189,6 +188,11 @@ sub update_song() {
 			chop($filename = <F>);
 			<F>;
 			$playerpid = 0 + <F>;
+			chop ((undef, undef, undef, undef,
+			    $now_playing->{artist},
+			    $now_playing->{title},
+			    $now_playing->{album},
+			    $now_playing->{track}) = <F>);
 			close F;
 
 			if($nowplaying > 0) {
@@ -196,17 +200,21 @@ sub update_song() {
 					 " FROM song,artist,album" .
 					 " WHERE song.id=?" .
 					 " AND song.artist_id=artist.id AND song.album_id=album.id";
-				my $sth = $dbh->prepare($query);
-				my $rv = $sth->execute($nowplaying);
-				if($now_playing = $sth->fetchrow_hashref) {
-					$label->set_text(sprintf("%s\n%s\n[%02d] %s\r",
-						$now_playing->{artist},
-						$now_playing->{title},
-						$now_playing->{track},
-						$now_playing->{album}));
-				} else {
-					$label->set_text("\n\n\n");
+
+				if($dbh = DBI->connect("DBI:$db_type:$db_name:$db_host", $db_user, $db_pass)) {
+					my $sth = $dbh->prepare($query);
+					my $rv = $sth->execute($nowplaying);
+					if(my $n = $sth->fetchrow_hashref) {
+						$now_playing = $n;
+					}
+					$sth->finish;
+					$dbh->disconnect;
 				}
+				$label->set_text(sprintf("%s\n%s\n[%02d] %s\r",
+					$now_playing->{artist},
+					$now_playing->{title},
+					$now_playing->{track},
+					$now_playing->{album}));
 			} else {
 				$filename =~ /^(.*)\/(.*?)$/;
 				$label->set_text("$1\n$2\n");

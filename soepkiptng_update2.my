@@ -1,0 +1,8 @@
+
+use soepkiptng;
+drop table seealso;
+
+CREATE TABLE seealso (
+  id1 int NOT NULL,
+  id2 int NOT NULL,
+);

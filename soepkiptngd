@@ -10,9 +10,8 @@
 # $Id$
 ############################################################################
 # This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
-# (at your option) any later version.
+# it under the terms of the GNU General Public License, version 2, as 
+# published by the Free Software Foundation.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -36,7 +35,7 @@ use Sys::Hostname;
 
 use integer;
 use strict;
-use vars qw(%conf $dbh $restart $opt_d $opt_p $opt_r $opt_s $cdrplaypid
+use vars qw(%conf $dbh $restart $opt_d $opt_r $opt_s $cdrplaypid
 	$pid_status $pid_signal $pid @preload);
 
 
@@ -200,7 +199,7 @@ sub get_song_random() {
 sub update_preload() {
 	local *PRELOAD;
 
-	$opt_p or return;
+	$conf{preloadfile} or return;
 
 	my $sth = $dbh->prepare(
 		"SELECT song.id, song.filename, artist.name, album.name,".
@@ -212,14 +211,14 @@ sub update_preload() {
 	);
 
 	$sth->execute() or return;
-	open PRELOAD, ">$opt_p" or return;
+	open PRELOAD, ">$conf{preloadfile}" or return;
 	while(my @s = $sth->fetchrow_array) {
 		printf PRELOAD "%s\n", join("\t", @s);
 	}
 	close PRELOAD;
 
-	warn "update preload $opt_p\n";
-	$opt_p = undef;
+	warn "update preload $conf{preloadfile}\n";
+	delete $conf{preloadfile};
 }
 
 sub get_song_preload() {
@@ -319,7 +318,7 @@ sub perish {
 	exit;
 };
 
-getopts('dp:r:s:');
+getopts('dr:s:');
 my $debug = 1 if $opt_d;
 
 my $field;
@@ -389,14 +388,14 @@ $SIG{'USR1'} = sub {
 
 $SIG{'PIPE'} = 'IGNORE';
 
-if($opt_p) {
+if($conf{preloadfile}) {
 	local *PRELOAD;
 
-	if(open PRELOAD, $opt_p) {
+	if(open PRELOAD, $conf{preloadfile}) {
 		chop(@preload = <PRELOAD>);
 		close PRELOAD;
 	} else {
-		warn "$opt_p: $!\n";
+		warn "$conf{preloadfile}: $!\n";
 	}
 }
 
@@ -474,6 +473,15 @@ for(;;) {
 	# write to log file
 	logprintf("%s %6d %s", $song->{type}, $song->{id}, $song->{filename});
 
+	# launch player
+	my $starttime = time;
+	if($debug) {
+		my ($a, $b, $c, $d) = times;
+		$childtime = $c + $d;
+	}
+	start_play($song->{filename});
+	warn "pid=$pid\n";
+
 	# write status file
 	my $status = <<EOF;
 $song->{id}
@@ -506,15 +514,6 @@ EOF
 		$killsock_conn->close();
 		undef $killsock_conn;
 	}
-
-	# launch player
-	my $starttime = time;
-	if($debug) {
-		my ($a, $b, $c, $d) = times;
-		$childtime = $c + $d;
-	}
-	start_play($song->{filename});
-	warn "pid=$pid\n";
 
 	# wait until player is done or we get a connect on $killsock
 	my ($rin, $rout);

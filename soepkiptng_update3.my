@@ -1,0 +1,12 @@
+
+use soepkiptng;
+
+ALTER TABLE song add (sets BIGINT UNSIGNED NOT NULL DEFAULT 0);
+
+CREATE TABLE sets (
+  num int NOT NULL,
+  name varchar(255) NOT NULL,
+  UNIQUE(num),
+  UNIQUE(name)
+);
+

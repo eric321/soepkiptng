@@ -4,9 +4,8 @@
 # $Id$
 ############################################################################
 # This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
-# (at your option) any later version.
+# it under the terms of the GNU General Public License, version 2, as 
+# published by the Free Software Foundation.
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -51,7 +50,7 @@ use MP3::Tag;
 use MPEG::MP3Info;
 #use Data::Dumper;
 
-use vars qw/$opt_d $opt_e $opt_f $opt_r $opt_q/;
+use vars qw/$opt_d $opt_e $opt_f $opt_r $opt_q $opt_v/;
 
 sub get_wav_params($\%;$);
 sub getinfo_mp3($\%);
@@ -63,7 +62,7 @@ sub getinfo_raw($\%);
 sub read_eric_files();
 sub extract_artist_title($\%);
 
-getopts('fredq');
+getopts('fredqv');
 $force = 1 if $opt_f;
 $| = 1;
 $do_delete = !$opt_d && !$opt_r;
@@ -118,6 +117,8 @@ while(<FILES>) {
 	next unless -s;
 	m|(.*?)[^/]*$|;
 	next if -e "$1/.nosoepkiptng";
+
+	print "$_\n" if $opt_v;
 
 	if(length($_) > 255) {
 		print STDERR "Skipping $_, filename >255 chars.\n" unless $opt_q;
