@@ -409,7 +409,8 @@ sub print_albums_row($$$$$) {
 		print ".<br>\n";
 	}
 
-	$query = "SELECT DISTINCT album.name as album, artist.name as artist," .
+	$query = "SELECT DISTINCT binary album.name as album," .
+		" binary artist.name as artist," .
 		" count(*) as c, song.artist_id as arid, song.album_id as alid " .
 		" FROM song,artist,album WHERE present AND song.artist_id = ?".
 		" AND song.artist_id=artist.id AND song.album_id=album.id".
@@ -692,9 +693,9 @@ EOF
 		"$self/$f?cmd=download&id=$argsref->{id}", $file,
 		((-s $_->{filename}) + 512) / 1024, $sets,
 		$prev, $next,
-		can_delete($_->{filename})? qq'<input type=submit ' .
+		(can_delete($_->{filename})? qq'<input type=submit ' .
 		  qq'name=action_delete value="Delete Song" ' .
-		  qq'onclick="return verifydelete();">&nbsp;&nbsp;':'';
+		  qq'onclick="return verifydelete();">&nbsp;&nbsp;':'');
 }
 
 sub print_shoutcast_page($$) {
@@ -1257,24 +1258,33 @@ elsif($cmd eq 'sql') {
 	printhtmlhdr;
 	printhdr($conf{allstyle});
 
-	printf <<EOF, enchtml($args{sql});
+	printf <<EOF, enchtml($args{sql}), $args{countonly}? "checked":"";
 SQL-query:<br>
 <form action="$self" method=get>
   <input type=hidden name=cap value="SQL-query">
   <input type=hidden name=cmd value=sql>
 <code>
 SELECT ... FROM ... WHERE ... AND <input type=text size=80 name=sql value="%s">
+<input type=checkbox name=countonly %s> count only
 </code>
 </form>
 EOF
 
 	if($args{sql}) {
-		print_alllist_table($dbh, \%args, \%session, "User SQL-query",
-			"SELECT artist.name as artist,album.name as album,song.*," .
-			"song.artist_id as arid, song.album_id as alid" .
-			" FROM song,artist,album WHERE present " .
-			" AND song.artist_id=artist.id AND song.album_id=album.id AND " .
-			$args{sql});
+		if($args{countonly}) {
+			my ($count) = $dbh->selectrow_array("SELECT COUNT(*)".
+				" FROM song,artist,album WHERE present " .
+				" AND song.artist_id=artist.id AND song.album_id=album.id AND " .
+				$args{sql});
+			print "Count: $count\n";
+		} else {
+			print_alllist_table($dbh, \%args, \%session, "User SQL-query",
+				"SELECT artist.name as artist,album.name as album,song.*," .
+				"song.artist_id as arid, song.album_id as alid" .
+				" FROM song,artist,album WHERE present " .
+				" AND song.artist_id=artist.id AND song.album_id=album.id AND " .
+				$args{sql});
+		}
 	}
 	printftr;
 }
