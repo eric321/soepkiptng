@@ -286,19 +286,19 @@ sub cleanup_name {
 	my ($s) = @_;
 	$s =~ s/\.mp3\s*$//i;
 	$s =~ s/%([0-9a-f][0-9a-f])/chr(hex($1))/eig;
-	$s =~ s/([a-zA-Z])([A-Z][a-z])/\1 \2/g;
+	$s =~ s/([a-zA-Z])([A-Z][a-z])/$1 $2/g;
 	$s = lc($s);
 	$s =~ s/_/ /g;
 	if($s !~ / /) { $s =~ s/\./ /g; }
 	$s =~ s/^\s+|\s+$//g;
-	$s =~ s/([^'\w\xc0-\xff]|^)(\w)/\1\U\2/g;
-	$s =~ s/\b(o'\w)/\U\1/ig;
+	$s =~ s/([^'\w\xc0-\xff]|^)(\w)/$1\U$2/g;
+	$s =~ s/\b(o'\w)/\U$1/ig;
 	$s =~ s/n T\b/n't/g;
 	$s =~ s/ S\b/'s/g;
 	$s =~ s/\bI M\b/I'm/g;
 	$s =~ s/ ll\b/'ll/ig;
-	$s =~ s/\b(i+)\b/\U\1/ig;
-	$s =~ s/([eiuy]) ([rv]e)\b/\1'\L\2/ig;
+	$s =~ s/\b(i+)\b/\U$1/ig;
+	$s =~ s/([eiuy]) ([rv]e)\b/$1'\L$2/ig;
 	$s =~ s/\s*-\s*/ - /g;
 	$s;
 }
