@@ -850,7 +850,8 @@ sub getlyrics($;$) {
 
 	getlyrics_purelyrics_com($info) || getlyrics_lyricsdomain_com($info);
 
-	$info->{lyrics} =~ s/^\s+|\s+$//g;
+	$info->{lyrics} =~ s/^\s+//;
+	$info->{lyrics} =~ s/\s+$/\n/g;
 
 	# restore artist/title/album
 	($info->{artist}, $info->{title}, $info->{album}) = ($ar, $ti, $al);
@@ -896,6 +897,7 @@ sub print_lyrics_page($$) {
 		$downloaded = "<tr><td colspan=2><b>(";
 		if($f->{lyrics} eq "") {
 			$downloaded .= "No lyrics found";
+			delete $f->{description};
 		} else {
 			$downloaded .= sprintf "Downloaded lyrics from <a href=\"%s\">%s</a>",
 				$f->{description}, enchtml($f->{description});
