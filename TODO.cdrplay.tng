@@ -1,0 +1,48 @@
+
+
+soepkiptngd-+-cdrplay(1)---splay
+            |
+            +-cdrplay(2)---ogg2raw
+
+cdrplay(1) krijgt van soepkiptngd commando's:
+  -> soepkiptgnd start cdrplay(2) met als argument de filename.
+     cdrplay(2) verwacht /dev/dsp op stdout met parameters al gezet.
+     (de allereerste krijgt een optie mee dat de parameters goed gezet moeten worden)
+  -> cdrplay(2) gaat goeie decoder starten als child process en buffert de output.
+     (zonder realtime maar met mlockall) als buffer == vol -> wachten
+  -> als cdrplay(1) (huidige nummer) exit: soepkiptngd zoekt nieuwe nummer op;
+     als dat hetzelfde is als waar de cdrplay voor was opgestart:
+        aan cdrplay(2) wordt een seintje gegeven dat hij mag beginnen.
+        cdrplay(2) zet de realtime-shit aan (ook voor het child proces)
+        !! zorgen dat het child process zelf geen children heeft want daar
+           kunnen we de realtime scheduling niet voor zetten.
+     anders:
+        cdrplay(2) wordt gekilld en een nieuwe opgestart met wel het goeie nummer, en
+        een optie dat hij direkt mag beginnen met spelen.
+
+
+
+* random nummer moet altijd in reserve staan
+* idee: soepkiptngd opent een pipe van cdrplay(1) naar zichzelf.
+  als cdrplay(1) exit stuurt hij de laatste n samples door de pipe.
+  deze worden vervolgens aan cdrplay(2) doorgegeven tbv interpolatie
+* cdrplay kan ook directe support voor filetypes hebben
+  (zeer makkelijk te doen voor ogg/wav/lpac, code slopen uit *2raw)
+* idee: als de buffer nog niet vol genoeg zit en cdrplay krijgt het sein
+  om te beginnen -> nullen schrijven (met interpolatie) tot buffer wel vol zit
+
+
+todo's voor cdrplay:
+- optie die de soepkiptng-mode activeert:
+  * starten zonder real-time sch.
+  * wachten op seintje
+  * schrijven naar stdout
+- optie om /dev/dsp-parameters op stdout in te stellen
+- (evt) resampling/mono->stereo
+- SIGxxx/SIGyyy -> pause/resume (release/get /dev/dsp)
+  nog even opletten wat er gebeurt als cdrplay(1) net exit
+  als het signal gestuurd wordt.
+  soepkiptngd moet de pause/resume toestand bijhouden en zorgen
+  dat cdrplay(2) pas het seintje 'go' krijgt als er niet gepauzeerd is.
+  cdrplay moet ook fade-out/dsp_close/dsp_open/fade-in doen.
+

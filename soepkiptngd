@@ -161,7 +161,7 @@ for(;;) {
 	}
 
 	# write to log file
-	logprintf("%s %d %s", $songtype, $song_id, $filename);
+	logprintf("%s %6d %s", $songtype, $song_id, $filename);
 
 	# write status file
 	if(open ST, ">$statusfile") {
@@ -237,12 +237,12 @@ EOF
 			$socket_open = 1;
 
 			# write to log file
-			logprintf("K %d", $song_id);
+			logprintf("K %6d", $song_id);
 		}
 	}
-	if($pid_status || $pid_signal) {
+	if(($pid_status || $pid_signal) && !$socket_open) {
 		# write to log file
-		logprintf("E %d status=%d signal=%d", $song_id, $pid_status, $pid_signal);
+		logprintf("E %6d status=%d signal=%d", $song_id, $pid_status, $pid_signal);
 	}
 
 	if($debug) {
