@@ -175,7 +175,7 @@ if(open F, $statusfile) {
 	$nowplaying = <F>;
 	close F;
 
-	my $query = "SELECT song.title,artist.name,album.name,song.track" .
+	my $query = "SELECT song.title,artist.name as artist,album.name as album,song.track" .
 		    " FROM song,artist,album" .
 		    " WHERE song.id=$nowplaying" .
 		    " AND song.artist_id=artist.id AND song.album_id=album.id";
