@@ -182,7 +182,7 @@ sub print_playlist_table($) {
 	$rv = $sth->execute;
 	my @ids;
 	while($_ = $sth->fetchrow_hashref) {
-		next if $_->{id} == $nowplaying;
+#		next if $_->{id} == $nowplaying;
 		push @ids, $_->{id};
 		$output .= get_playlist_table_entry
 			"$self?cmd=del&id=$_->{id}&t=$t", $deltext,
