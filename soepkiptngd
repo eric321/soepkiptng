@@ -598,7 +598,7 @@ EOF
 	# reset time counter
 	warn "kill -ALRM $cdrplaypid\n";
 	kill 'SIGALRM', $cdrplaypid
-		or warn "kill -USR1 $cdrplaypid: $!\n";
+		or warn "kill -ALRM $cdrplaypid: $!\n";
 
 	# launch player
 	my $starttime = time;
