@@ -574,10 +574,15 @@ sub print_edit_page($$) {
 	my $prev = '&nbsp;&nbsp;&nbsp;&nbsp;';
 	if($i > 0) {
 		$prev = "<input type=submit name=go_$ids[$i-1] value=Prev>";
+	} elsif($disabled_buttons) {
+		$prev = "<input type=submit name=go_$ids[0] value=Prev disabled>";
 	}
-	my $next = '&nbsp;&nbsp;&nbsp;&nbsp;';
+
+	my $next = $disabled_buttons? '':'&nbsp;&nbsp;&nbsp;&nbsp;';
 	if($i < $#ids) {
-		$next .= "<input type=submit name=go_$ids[$i+1] value=Next>";
+		$next = "<input type=submit name=go_$ids[$i+1] value=Next>";
+	} elsif($disabled_buttons) {
+		$next = "<input type=submit name=go_$ids[$#ids] value=Next disabled>";
 	}
 
 	my $f = $_->{'filename'};
