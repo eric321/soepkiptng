@@ -61,6 +61,7 @@ sub getinfo_pac($\%);
 sub getinfo_flac($\%);
 sub getinfo_raw($\%);
 sub getinfo_video($\%);
+sub getinfo_ac3($\%);
 sub read_eric_files();
 sub extract_artist_title($\%);
 sub is_nfs($);
@@ -155,6 +156,7 @@ while(<FILES>) {
 	getinfo_pac($_, %info) ||
 	getinfo_flac($_, %info) ||
 	getinfo_video($_, %info) ||
+	getinfo_ac3($_, %info) ||
 	getinfo_raw($_, %info);
 	$/ = "\0";
 
@@ -489,6 +491,19 @@ sub getinfo_video($\%) {
 		or return undef;
 
 	$info->{encoding} = "Video: $1";
+	$info->{freq} = 0;
+	$info->{chan} = 0;
+	$info->{len} = 0;
+	return 1;
+}
+
+sub getinfo_ac3($\%) {
+	my ($file, $info) = @_;
+
+	$file =~ /\.(ac3)$/i
+		or return undef;
+
+	$info->{encoding} = "AC3";
 	$info->{freq} = 0;
 	$info->{chan} = 0;
 	$info->{len} = 0;
