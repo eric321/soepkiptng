@@ -62,9 +62,10 @@ for(;; sleep 1) {
 		$nowplaying = <F>;
 		close F;
 
-		my $query =  "SELECT title,artist,album,id,track" .
-			" FROM songs" .
-			" WHERE id = ?";
+		my $query = "SELECT song.title,artist.name,album.name,song.id,song.track" .
+			    " FROM song,artist,album" .
+			    " WHERE song.id=?" .
+			    " AND song.artist_id=artist.id AND song.album_id=album.id";
 		my $sth = $dbh->prepare($query);
 		my $rv = $sth->execute($nowplaying);
 		if($now_playing = $sth->fetchrow_hashref) {

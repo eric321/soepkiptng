@@ -91,7 +91,10 @@ sub splitrange($$) {
 sub killit() {
 	($song_id) = kill_song();
 	($t, $a, $al, $tr) = $dbh->selectrow_array(
-		"SELECT title,artist,album,track FROM songs WHERE id = $song_id"
+		"SELECT song.title,artist.name,album.name,song.track" .
+		" FROM song,artist,album" .
+		" WHERE song.id=$song_id" .
+		" AND song.artist_id=artist.id AND song.album_id=album.id"
 	);
 	printf "next: %s - %02d. %s [%s]\n", $a, $tr, $t, $al;
 }
@@ -115,21 +118,24 @@ if(@ARGV) {
 		s/\$$// or $_ .= "%";
 
 		if($0 =~ /qa$/) {
-			$q .= " artist LIKE ?";
+			$q .= " artist.name LIKE ?";
 			push @a, $_;
 		}
 		elsif($0 =~ /qt$/) {
-			$q .= " title LIKE ?";
+			$q .= " song.title LIKE ?";
 			push @a, $_;
 		}
 		else {
-			$q .= " (title LIKE ? OR artist LIKE ? OR album LIKE ?)";
+			$q .= " (song.title LIKE ? OR artist.name LIKE ? OR album.name LIKE ?)";
 			push @a, $_, $_, $_;
 		}
 		push @q, $q;
 	}
-	$q = "SELECT title,artist,album,id,track FROM songs WHERE present AND " . join(" AND ", @q) .
-		" ORDER BY artist,album,track,title";
+	$q = "SELECT song.title,artist.name,album.name,song.track" .
+	     " FROM song,artist,album" .
+	     " WHERE song.artist_id=artist.id AND song.album_id=album.id" .
+	     " AND present AND " . join(" AND ", @q) .
+	     " ORDER BY artist.name,album.name,song.track,song.title";
 #warn $q;
 	$sth = $dbh->prepare($q);
 	$sth->execute(@a);
@@ -169,9 +175,10 @@ if(open F, $statusfile) {
 	$nowplaying = <F>;
 	close F;
 
-	my $query =  "SELECT title,artist,album,id,track" .
-		" FROM songs" .
-		" WHERE id = $nowplaying";
+	my $query = "SELECT song.title,artist.name,album.name,song.track" .
+		    " FROM song,artist,album" .
+		    " WHERE song.id=$nowplaying" .
+		    " AND song.artist_id=artist.id AND song.album_id=album.id";
 	my $sth = $dbh->prepare($query);
 	my $rv = $sth->execute;
 	if($now_playing = $sth->fetchrow_hashref) {
@@ -183,8 +190,11 @@ if(open F, $statusfile) {
 	}
 }
 
-$query =  "SELECT songs.title,songs.artist,songs.album,songs.id,songs.track FROM songs,queue" .
-	" WHERE songs.id = queue.song_id ORDER BY queue.song_order";
+$query = "SELECT song.title,artist.name,album.name,song.id,song.track" .
+	" FROM song,artist,album,queue" .
+	" WHERE song.id=queue.song_id" .
+	" AND song.artist_id=artist.id AND song.album_id=album.id" .
+	" ORDER BY queue.song_order";
 $sth = $dbh->prepare($query);
 $rv = $sth->execute;
 while(@q = $sth->fetchrow_array) {

@@ -119,4 +119,17 @@ sub kill_song_internal() {
 	return @status;
 }
 
+sub get_id($$$) {
+	my ($db, $table, $value) = @_;
+
+	my $sth = $dbh->prepare("SELECT id FROM $table WHERE name=?");
+	if($sth->execute($value) >= 1) {
+		return ($sth->fetchrow_array)[0];
+	} else {
+		$dbh->do("REPLACE INTO $table SET name=?", undef, $value)
+			or die;
+		return $dbh->{'mysql_insertid'};
+	}
+}
+
 1;

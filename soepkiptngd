@@ -186,11 +186,11 @@ for(;;) {
 	}
 
 	# get queued song
-	$dbh->do("LOCK TABLES queue WRITE, songs READ");
+	$dbh->do("LOCK TABLES queue WRITE, song READ");
 	($song_id, $song_order, $filename) = $dbh->selectrow_array(
-		"SELECT queue.song_id,queue.song_order,songs.filename" .
-		" FROM queue,songs" .
-		" WHERE queue.song_id=songs.id AND songs.present" .
+		"SELECT queue.song_id,queue.song_order,song.filename" .
+		" FROM queue,song" .
+		" WHERE queue.song_id=song.id AND song.present" .
 		" ORDER BY queue.song_order" .
 		" LIMIT 1"
 	);
@@ -211,7 +211,7 @@ for(;;) {
 		my $min = $min_random_time;
 		for(;;) {
 			($song_id, $filename) = $dbh->selectrow_array(
-				"SELECT id,filename FROM songs WHERE present AND " .
+				"SELECT id,filename FROM song WHERE present AND " .
 				"unix_timestamp(now()) - unix_timestamp(last_played) > $min " .
 				"ORDER BY rand() LIMIT 1"
 			);
@@ -229,7 +229,7 @@ for(;;) {
 	}
 
 	# update database
-	$dbh->do("UPDATE songs set last_played=NULL where id=$song_id");
+	$dbh->do("UPDATE song set last_played=NULL where id=$song_id");
 
 	# write to log file
 	logprintf("%s %6d %s", $songtype, $song_id, $filename);

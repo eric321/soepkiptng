@@ -6,11 +6,11 @@ grant select,insert,update,delete,create,drop
 	to soepkiptng identified by 'soepkiptng';
 use soepkiptng;
 
-CREATE TABLE songs (
+CREATE TABLE song (
   id int(11) NOT NULL auto_increment,
-  artist varchar(255) DEFAULT '' NOT NULL,
+  artist_id int DEFAULT 0 NOT NULL,
   title varchar(255) DEFAULT '' NOT NULL,
-  album varchar(255) DEFAULT '' NOT NULL,
+  album_id int DEFAULT 0 NOT NULL,
   encoding varchar(255) DEFAULT '' NOT NULL,
   track int(4) unsigned DEFAULT '0',
   filename varchar(255) DEFAULT '' NOT NULL,
@@ -19,10 +19,22 @@ CREATE TABLE songs (
   time_added timestamp,
   present tinyint NOT NULL,
   PRIMARY KEY (id),
-  KEY artist (artist(4)),
+  KEY artist_id (artist_id),
   KEY title (title(4)),
-  KEY album (album(4)),
+  KEY album_id (album_id),
   UNIQUE (filename)
+);
+
+CREATE TABLE artist (
+  id int(11) NOT NULL auto_increment,
+  name varchar(255) DEFAULT '' NOT NULL,
+  PRIMARY KEY (id)
+);
+
+CREATE TABLE album (
+  id int(11) NOT NULL auto_increment,
+  name varchar(255) DEFAULT '' NOT NULL,
+  PRIMARY KEY (id)
 );
 
 CREATE TABLE queue (
@@ -30,3 +42,12 @@ CREATE TABLE queue (
   song_id int NOT NULL,
   timestamp timestamp
 );
+
+
+CREATE TABLE list_contents (
+  song_order int NOT NULL,
+  list_id int NOT NULL,
+  type ENUM("artist", "album", "song", "list") NOT NULL,
+  content_id int NOT NULL
+);
+

@@ -50,7 +50,10 @@ $dbh = DBI->connect("DBI:$db_type:$db_name:$db_host", $db_user, $db_pass)
 
 ($song_id) = kill_song();
 ($t, $a, $al, $tr) = $dbh->selectrow_array(
-	"SELECT title,artist,album,track FROM songs WHERE id = $song_id"
+	"SELECT song.title,artist.name,album.name,song.track" .
+	" FROM song,artist,album" .
+	" WHERE song.id=$song_id" .
+	" AND song.artist_id=artist.id AND song.album_id=album.id"
 );
 printf "next: %s - %02d. %s [%s]\n", $a, $tr, $t, $al;
 

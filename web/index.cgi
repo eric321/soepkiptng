@@ -23,7 +23,7 @@
 # CONFIG
 
 BEGIN {
-	$configfile = "/etc/soepkiptng.conf";
+	$configfile = "/etc/soepkiptng2.conf";
 	my $f;
 
 	local *F;
@@ -152,8 +152,8 @@ sub get_playlist_table_entry($$$$$) {
 	my $fmt = <<EOF;
  <tr>
   <td $td_left>&nbsp;<a id=a href="%s">%s</a> <a id=a href="%s">%s</a>&nbsp;</td>
-  <td $td_artist>&nbsp;<a href="$self?cmd=alllist&artist=%s&cap=%s" target=bframe>%s</a>&nbsp;</td>
-  <td $td_album>&nbsp;<a href="$self?cmd=alllist&album=%s&cap=%s" target=bframe>%s</a>&nbsp;</td>
+  <td $td_artist>&nbsp;<a href="$self?cmd=alllist&artist_id=$_[4]->{arid}&cap=%s" target=bframe>%s</a>&nbsp;</td>
+  <td $td_album>&nbsp;<a href="$self?cmd=alllist&album_id=$_[4]->{alid}&cap=%s" target=bframe>%s</a>&nbsp;</td>
   <td $td_track>&nbsp;%s&nbsp;</td>
   <td $td_song>&nbsp;%s&nbsp;</td>
   <td $td_time>&nbsp;%s&nbsp;</td>
@@ -162,8 +162,8 @@ sub get_playlist_table_entry($$$$$) {
  </tr>
 EOF
 	return sprintf $fmt, $_[0], $_[1], $_[2], $_[3],
-		encode("^$_[4]->{artist}"), encode("Artist: $_[4]->{artist}"), $_[4]->{artist},
-		encode("^$_[4]->{album}"), encode("Album: $_[4]->{album}"), $_[4]->{album},
+		encode("Artist: $_[4]->{artist}"), $_[4]->{artist},
+		encode("Album: $_[4]->{album}"), $_[4]->{album},
 		$tr, $_[4]->{title}, $l, $e, $_[4]->{id};
 }
 
@@ -182,9 +182,12 @@ sub print_playlist_table($$) {
 		}
 	}
 	if($nowplaying) {
-		my $query =  "SELECT title,artist,album,id,track,length,encoding" .
-			" FROM songs" .
-			" WHERE id = $nowplaying";
+		my $query =  "SELECT title,artist.name as artist,album.name as album," .
+			"song.id as id,track,length,encoding," .
+			"song.artist_id as arid,song.album_id as alid" .
+			" FROM song,artist,album" .
+			" WHERE song.artist_id=artist.id AND song.album_id=album.id" .
+			" AND song.id = $nowplaying";
 		my $sth = $dbh->prepare($query);
 		my $rv = $sth->execute;
 		$_ = $sth->fetchrow_hashref or do {
@@ -201,9 +204,11 @@ sub print_playlist_table($$) {
 			"$self?cmd=kill", $killtext, "", "", $_;
 	}
 
-	$query =  "SELECT songs.title,songs.artist,songs.album,songs.id,songs.track,songs.length,songs.encoding" .
-		" FROM songs,queue" .
-		" WHERE songs.id = queue.song_id ORDER BY queue.song_order";
+	$query =  "SELECT title,artist.name as artist,album.name as album,song.id as id,track,length,encoding," .
+		"song.artist_id as arid,song.album_id as alid" .
+		" FROM song,queue,artist,album" .
+		" WHERE song.artist_id=artist.id AND song.album_id=album.id" .
+		" AND song.id = queue.song_id ORDER BY queue.song_order";
 	$sth = $dbh->prepare($query);
 	$rv = $sth->execute;
 	my @ids;
@@ -250,32 +255,34 @@ sub print_artistlist_table($$) {
  </tr>
 EOF
 
-	my $query = "SELECT DISTINCT artist, album, count(*)" .
-			" FROM songs WHERE present AND artist REGEXP ?".
-			" GROUP BY artist,album ORDER BY artist,album";
+	my $query = "SELECT DISTINCT artist.name as artist, album.name as album," .
+			" count(*), song.artist_id, song.album_id" .
+			" FROM song,artist,album WHERE present AND artist.name REGEXP ?".
+			" AND song.artist_id=artist.id AND song.album_id=album.id".
+			" GROUP BY artist.name,album.name ORDER BY artist.name,album.name";
 	my $sth = $dbh->prepare($query);
 	my $rv = $sth->execute($val);
-	my ($a, $al, $c);
-	my @artists;
+	my ($ar, $al, $c, $arid, $alid);
+	my %artistname;
 	my %al;
-	while(($a, $al, $c) = $sth->fetchrow_array) {
-		$al{$a} or push @artists, $a;
+	while(($ar, $al, $c, $arid, $alid) = $sth->fetchrow_array) {
+		$artistname{$arid} = $ar;
 		if($al) {
 			$al =~ /(.?)(.*)/;
-			$al{$a} .= sprintf(<<EOF, encode("^$al\$"), encode("Album: $al"), $1, $2, $c);
-<a id=a href="$self?cmd=alllist&album=%s&cap=%s"><b>%s</b>%s</a> (%d)&nbsp;&nbsp;
+			$al{$arid} .= sprintf(<<EOF, encode("Album: $al"), $1, $2, $c);
+<a id=a href="$self?cmd=alllist&album_id=$alid&cap=%s"><b>%s</b>%s</a> (%d)&nbsp;&nbsp;
 EOF
 		} else {
-			$al{$a} .= sprintf(<<EOF, encode("^$a\$"), encode("Artist: $a; Album: ?"), $c);
-<a id=a href="$self?cmd=alllist&artist=%s&album=%%5E%%24&cap=%s"><b>?</b></a> (%d)&nbsp;&nbsp;
+			$al{$arid} .= sprintf(<<EOF, encode("Artist: $a; Album: ?"), $c);
+<a id=a href="$self?cmd=alllist&artist_id=$arid&album_id=$alid&cap=%s"><b>?</b></a> (%d)&nbsp;&nbsp;
 EOF
 		}
 	}
-	foreach(@artists) {
+	foreach(sort {$artistname{$a} cmp $artistname{$b}} keys %artistname) {
 		$al{$_} =~ s/, $//;
-		printf <<EOF, encode("^$_\$"), encode("Artist: $_"), $_, $al{$_};
+		printf <<EOF, encode("Artist: $artistname{$_}"), $artistname{$_}, $al{$_};
 <tr>
- <td>&nbsp;<a id=a href="$self?cmd=alllist&artist=%s&cap=%s">%s</a>&nbsp;</td>
+ <td>&nbsp;<a id=a href="$self?cmd=alllist&artist_id=$_&cap=%s">%s</a>&nbsp;</td>
  <td>&nbsp;%s&nbsp;</td>
 </tr>
 EOF
@@ -304,8 +311,8 @@ sub print_alllist_table($$@) {
 		my $fmt = <<EOF;
  <tr>
   <td $td_left>&nbsp;<a id=a href="$self?cmd=add&id=%d" target=tframe>$addtext</a>&nbsp;</td>
-  <td $td_artist>&nbsp;<a id=a href="$self?cmd=alllist&artist=%s&cap=%s">%s</a>&nbsp;</td>
-  <td $td_album>&nbsp;<a id=a href="$self?cmd=alllist&album=%s&cap=%s">%s</a>&nbsp;</td>
+  <td $td_artist>&nbsp;<a id=a href="$self?cmd=alllist&artist_id=$_->{arid}&cap=%s">%s</a>&nbsp;</td>
+  <td $td_album>&nbsp;<a id=a href="$self?cmd=alllist&album_id=$_->{alid}&cap=%s">%s</a>&nbsp;</td>
   <td $td_track>&nbsp;%s&nbsp;</td>
   <td $td_song>&nbsp;<a id=a href="$self?cmd=add&id=%d" target=tframe>%s</a>&nbsp;</td>
   <td $td_time>&nbsp;%s&nbsp;</td>
@@ -314,29 +321,31 @@ sub print_alllist_table($$@) {
  </tr>
 EOF
 		$output .= sprintf $fmt, $_->{id},
-			encode("^$_->{artist}\$"), encode("Artist: $_->{artist}"), $_->{artist},
-			encode("^$_->{album}\$"), encode("Album: $_->{album}"), $_->{album},
+			encode("Artist: $_->{artist}"), $_->{artist},
+			encode("Album: $_->{album}"), $_->{album},
 			$tr, $_->{id}, $_->{title}, $l, $e, $_->{id};
 	}
 	print <<EOF;
 <center id=hdr>$caption</center>
 EOF
 	if(scalar keys %artists == 1) {
-		my $query = "SELECT DISTINCT album, artist, count(*)" .
-				" FROM songs WHERE present AND artist = ?".
-				" GROUP BY album ORDER BY album";
+		my $query = "SELECT DISTINCT album.name as album, artist.name as artist, count(*)," .
+				"song.artist_id, song.album_id" .
+				" FROM song,artist,album WHERE present AND artist.name = ?".
+				" AND song.artist_id=artist.id AND song.album_id=album.id".
+				" GROUP BY album.name ORDER BY album.name";
 		my $sth = $dbh->prepare($query);
 		my $rv = $sth->execute(keys %artists);
-		my ($al, $a, $c, @al);
-		while(($al, $a, $c) = $sth->fetchrow_array) {
+		my ($al, $a, $c, $arid, $alid, @al);
+		while(($al, $a, $c, $arid, $alid) = $sth->fetchrow_array) {
 			if($al) {
 				$al =~ /(.?)(.*)/;
-				push @al, sprintf(<<EOF, encode("^$al\$"), encode("Album: $al"), $1, $2, $c);
-<a id=a href="$self?cmd=alllist&album=%s&cap=%s"><b>%s</b>%s</a> (%d)
+				push @al, sprintf(<<EOF, encode("Album: $al"), $1, $2, $c);
+<a id=a href="$self?cmd=alllist&album_id=$alid&cap=%s"><b>%s</b>%s</a> (%d)
 EOF
 			} else {
-				push @al, sprintf(<<EOF, encode("^$a\$"), encode("Artist: $a; Album: ?"), $c);
-<a id=a href="$self?cmd=alllist&artist=%s&album=%%5E%%24&cap=%s"><b>?</b></a> (%d)
+				push @al, sprintf(<<EOF, encode("Artist: $a; Album: ?"), $c);
+<a id=a href="$self?cmd=alllist&artist_id=$arid&album_id=$alid&cap=%s"><b>?</b></a> (%d)
 EOF
 			}
 		}
@@ -380,7 +389,9 @@ EOF
 sub print_edit_page($$) {
 	my ($dbh, $id) = @_;
 
-	my $sth = $dbh->prepare("SELECT *, unix_timestamp(last_played) as lp FROM songs WHERE id=$id");
+	my $sth = $dbh->prepare("SELECT artist.name as artist,album.name as album,song.*," .
+		" unix_timestamp(last_played) as lp FROM song,artist,album WHERE song.id=$id" .
+		" AND song.artist_id=artist.id AND song.album_id=album.id");
 	$sth->execute();
 	$_ = $sth->fetchrow_hashref() or die "id $id not found.\n";
 
@@ -557,34 +568,53 @@ elsif($cmd eq 'alllist') {
 	printhtmlhdr;
 	printhdr($allstyle);
 	$args{'f'} =~ /^\w*$/ or die;
-	my $q = "SELECT * FROM songs WHERE present";
+	my $q = "SELECT artist.name as artist,album.name as album,song.*," .
+		"song.artist_id as arid, song.album_id as alid" .
+		" FROM song,artist,album" .
+		" WHERE song.artist_id=artist.id AND song.album_id=album.id" .
+		" AND present";
 	my @qa;
 	my $cap;
 	my $s = $args{'sort'};
 	$s =~ s/\W//g;
 	if($args{'artist'}) {
-		$q .= " AND artist REGEXP ?";
+		$q .= " AND artist.name REGEXP ?";
 		push @qa, $args{'artist'};
 		$qa[$#qa] =~ s/[^-^\$_0-9a-z]+/.*/ig;
-		$s = "artist" unless $s;
+		$s = "artist.name" unless $s;
 		$cap = sprintf($args{'cap'}, $args{'artist'});
 	}
 	if($args{'album'}) {
-		$q .= " AND album REGEXP ?";
+		$q .= " AND album.name REGEXP ?";
 		push @qa, $args{'album'};
 		$qa[$#qa] =~ s/[^-^\$_0-9a-z]+/.*/ig;
-		$s = "album" unless $s;
+		$s = "album.name" unless $s;
 		$cap = sprintf($args{'cap'}, $args{'album'});
 	}
 	if($args{'title'}) {
-		$q .= " AND title REGEXP ?";
+		$q .= " AND title.name REGEXP ?";
 		push @qa, $args{'title'};
 		$qa[$#qa] =~ s/[^-^\$_0-9a-z]+/.*/ig;
-		$s = "title" unless $s;
+		$s = "title.name" unless $s;
 		$cap = sprintf($args{'cap'}, $args{'title'});
 	}
+
+	if($args{'artist_id'}) {
+		$q .= " AND song.artist_id=?";
+		push @qa, $args{'artist_id'};
+		$s = "artist.name" unless $s;
+		$cap = sprintf($args{'cap'}, $args{'artist_id'});
+	}
+	if($args{'album_id'}) {
+		$q .= " AND song.album_id=?";
+		push @qa, $args{'album_id'};
+		$s = "album.name" unless $s;
+		$cap = sprintf($args{'cap'}, $args{'album_id'});
+	}
+
 	$s =~ s/^r_(.*)/\1 DESC/;
-	$q .= " ORDER BY $s,album,track,artist,title";
+	$q .= " AND song.artist_id=artist.id AND song.album_id=album.id ".
+	      " ORDER BY $s,album.name,track,artist.name,title";
 	print_alllist_table($dbh, \%args, $cap, $q, @qa);
 	printftr;
 }
@@ -596,7 +626,11 @@ elsif($cmd eq 'recent') {
 	$s =~ s/\W//g;
 	$s =~ s/^r_(.*)/\1 DESC/;
 	print_alllist_table($dbh, \%args, "Most recent $n songs",
-		"SELECT * FROM songs WHERE present ORDER BY $s LIMIT $n");
+		"SELECT artist.name as artist,album.name as album,song.*," .
+		"song.artist_id as arid, song.album_id as alid" .
+		" FROM song,artist,album WHERE present " .
+		" AND song.artist_id=artist.id AND song.album_id=album.id" .
+		" ORDER BY $s LIMIT $n");
 	printftr;
 }
 elsif($cmd eq 'maint') {
@@ -627,11 +661,11 @@ elsif($cmd eq 'delfile') {
 	printhdr($allstyle);
 	$args{'id'} =~ /(\d+)/;
 	my $id = $1;
-	my ($file) = $dbh->selectrow_array("SELECT filename FROM songs WHERE id=$id")
+	my ($file) = $dbh->selectrow_array("SELECT filename FROM song WHERE id=$id")
 		or die "id $id not found in database\n";
 	if(unlink $file) {
 		print "$file deleted from disk.\n";
-		$dbh->do("UPDATE songs SET present=0 WHERE id=$id");
+		$dbh->do("UPDATE song SET present=0 WHERE id=$id");
 	} else {
 		print "$file: <b>$!</b>\n";
 	}
@@ -640,7 +674,7 @@ elsif($cmd eq 'delfile') {
 elsif($cmd eq 'download') {
 	$args{'id'} =~ /(\d+)/;
 	my $id = $1;
-	my ($file) = $dbh->selectrow_array("SELECT filename FROM songs WHERE id=$id")
+	my ($file) = $dbh->selectrow_array("SELECT filename FROM song WHERE id=$id")
 		or die "id $id not found in database\n";
 
 	open F, $file or die "$file: $!\n";
