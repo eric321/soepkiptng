@@ -82,91 +82,119 @@ sub child_reaper {
 };
 
 sub get_song_jingle() {
+	my $s = undef;
 	local *JINGLEDIR;
-	my ($song_id, $filename);
 
-	$song_id = 0;
 	if($conf{jingledir} && opendir JINGLEDIR, $conf{jingledir}) {
 		foreach(sort readdir JINGLEDIR) {
 			next if /^\./;
+
 			warn "playing jingle $conf{jingledir}/$_\n";
-			$song_id = -1;
-			$filename = "$conf{jingledir}/$_";
+
+			$s->{id} = -1;
+			$s->{type} = 'J';
+			$s->{filename} = "$conf{jingledir}/$_";
+			$s->{artist} = '** Jingle **';
+			$s->{album} = '';
+			$s->{track} = 0;
+			$s->{title} = $_;
+			$s->{user} = '';
+			$s->{length} = 0;
+			$s->{encoding} = '';
 			last;
 		}
 		closedir JINGLEDIR;
 	}
-	$song_id or return undef;
-	return ($song_id, 'J', $filename, '');
+	return $s;
 }
 
 sub get_song_queued() {
-	my ($song_id, $song_order, $filename, $pres, $user);
+	my $s = undef;
 
 	# get queued song
-	$dbh->do("LOCK TABLES queue WRITE, song READ");
+	$dbh->do("LOCK TABLES queue WRITE, song READ, artist READ, album READ");
 	for(;;) {
-		($song_id, $song_order, $filename, $pres, $user) = $dbh->selectrow_array(
-			"SELECT queue.song_id,queue.song_order,song.filename," .
-			"       song.present,queue.user" .
-			" FROM queue,song" .
-			" WHERE queue.song_id=song.id" .
+		my $sth = $dbh->prepare(
+			"SELECT queue.song_id as id,queue.song_order as song_order,".
+			"       queue.user as user, artist.name as artist,".
+			"       album.name as album, song.*".
+			" FROM queue,song,artist,album" .
+			" WHERE queue.song_id=song.id AND artist.id=song.artist_id" .
+			"       AND album.id=song.album_id" .
 			" ORDER BY queue.song_order" .
 			" LIMIT 1"
 		);
-		last if !$song_id || $pres;
-		warn "deleting non-present song $song_id ($filename)\n";
-		$dbh->do("DELETE FROM queue WHERE song_id = $song_id");
-	}
-		
+		$sth->execute or last;
+		$s = $sth->fetchrow_hashref or last;
+		if($s->{present}) {
+			warn "playing queued $s->{filename}\n";
+			$s->{type} = 'Q';
 
-	if($song_id) {
-		warn "playing queued $filename\n";
+			# delete it from the queue
+			$dbh->do("DELETE FROM queue WHERE song_id = $s->{id}");
+			$dbh->do("UPDATE queue SET song_order = song_order - $s->{song_order} - 1");
+			last;
+		}
 
-		# delete it from the queue
-		$dbh->do("DELETE FROM queue WHERE song_id = $song_id");
-		$dbh->do("UPDATE queue SET song_order = song_order - $song_order - 1");
+		warn "deleting non-present song $s->{id} ($s->{filename})\n";
+		$dbh->do("DELETE FROM queue WHERE song_id = $s->{id}");
+		$s = undef;
 	}
 	$dbh->do("UNLOCK TABLES");
-	$song_id or return undef;
-	return ($song_id, 'Q', $filename, $user);
+	return $s;
 }
 
 sub get_song_random_recent() {
 	no integer;
-	my ($song_id, $filename);
+	my $s = undef;
 
-	if(rand() < $conf{recent_prob}) {
-		my $maxage = $conf{recent_age} * 86400;
-		($song_id, $filename) = $dbh->selectrow_array(
-			"SELECT id,filename FROM song WHERE present AND filename LIKE '/%' AND " .
-			"unix_timestamp(now()) - unix_timestamp(time_added) < $maxage AND " .
-			"unix_timestamp(now()) - unix_timestamp(last_played) > $conf{min_random_time} " .
-			"ORDER BY rand() LIMIT 1"
-		);
-		warn "playing recent $filename\n" if $song_id;
-	}
-	$song_id or return undef;
-	return ($song_id, 'r', $filename, '');
+	rand() < $conf{recent_prob} or return undef;
+
+	my $sth = $dbh->prepare(
+		"SELECT artist.name as artist, album.name as album,song.*".
+		" FROM song,artist,album WHERE present AND filename LIKE '/%' AND" .
+		"      artist.id=song.artist_id AND album.id=song.album_id AND" .
+		" unix_timestamp(now()) - unix_timestamp(time_added) < ? AND" .
+		" unix_timestamp(now()) - unix_timestamp(last_played) > ?" .
+		" ORDER BY rand() LIMIT 1"
+	);
+	$sth->execute($conf{recent_age} * 86400, $conf{min_random_time}) or return undef;
+	$s = $sth->fetchrow_hashref or return undef;
+
+	warn "playing recent $s->{filename}\n";
+	$s->{type} = 'r';
+	$s->{user} = '';
+	return $s;
 }
 
 sub get_song_random() {
-	my ($song_id, $filename);
+	my $s = undef;
+
+	my $sth = $dbh->prepare(
+		"SELECT artist.name as artist, album.name as album,song.*".
+		" FROM song,artist,album WHERE present AND filename LIKE '/%' AND" .
+		"      artist.id=song.artist_id AND album.id=song.album_id AND" .
+		" unix_timestamp(now()) - unix_timestamp(last_played) > ?" .
+		" ORDER BY rand() LIMIT 1"
+	);
 
 	my $min = $conf{min_random_time};
 	for(;;) {
-		($song_id, $filename) = $dbh->selectrow_array(
-			"SELECT id,filename FROM song WHERE present AND filename LIKE '/%' AND " .
-			"unix_timestamp(now()) - unix_timestamp(last_played) > $min " .
-			"ORDER BY rand() LIMIT 1"
-		);
-		last if $song_id || $min == 0;
+		$sth->execute($min) or return undef;
+		$s = $sth->fetchrow_hashref and last;
+
+		# no song at all
+		if($min == 0) { return undef; }
+
 		$min >>= 1;
 		warn "no random song found, retrying with min_random_time=$min\n";
 	}
-	warn "playing random $filename\n";
-	$song_id or return undef;
-	return ($song_id, 'R', $filename, '');
+
+	warn "playing random $s->{filename}\n";
+	$s->{type} = 'R';
+	$s->{user} = '';
+
+	return $s;
 }
 
 sub logprintf($@) {
@@ -342,8 +370,7 @@ srand;
 my $num_errors = 0;
 my ($killsock_conn);
 for(;;) {
-	my ($song_id, $songtype, $filename, $user);
-	my ($childtime);
+	my ($song, $childtime);
 
 	if($restart) {
 		# close-on-exec apparently doesn't work
@@ -373,14 +400,11 @@ for(;;) {
 		};
 	}
 
-	($song_id, $songtype, $filename, $user) = get_song_jingle();
-	$song_id or ($song_id, $songtype, $filename, $user) = get_song_queued();
-	$song_id or ($song_id, $songtype, $filename, $user) = get_song_random_recent();
-	$song_id or ($song_id, $songtype, $filename, $user) = get_song_random();
+	$song = get_song_jingle() || get_song_queued() || get_song_random_recent() || get_song_random();
 
-	if($song_id) {
+	if($song->{id}) {
 		# update database
-		$dbh->do("UPDATE song set last_played=NULL where id=$song_id");
+		$dbh->do("UPDATE song set last_played=NULL where id=$song->{id}");
 	} else {
 		warn "no song found.\n";
 		$dbh->disconnect;
@@ -390,18 +414,24 @@ for(;;) {
 	}
 
 	# write to log file
-	logprintf("%s %6d %s", $songtype, $song_id, $filename);
+	logprintf("%s %6d %s", $song->{type}, $song->{id}, $song->{filename});
 
 	# write status file
 	my $status = <<EOF;
-$song_id
-$filename
+$song->{id}
+$song->{filename}
 $$
 $cdrplaypid
 $killhost
 $killport
-$songtype
-$user
+$song->{type}
+$song->{user}
+$song->{artist}
+$song->{title}
+$song->{album}
+$song->{track}
+$song->{length}
+$song->{encoding}
 EOF
 	if(open ST, ">$conf{statusfile}.tmp") {
 		print ST $status;
@@ -425,7 +455,7 @@ EOF
 		my ($a, $b, $c, $d) = times;
 		$childtime = $c + $d;
 	}
-	start_play($filename);
+	start_play($song->{filename});
 	warn "pid=$pid\n";
 
 	# wait until player is done or we get a connect on $killsock
@@ -455,12 +485,12 @@ EOF
 			$killsock_conn = $killsock->accept();
 
 			# write to log file
-			logprintf("K %6d", $song_id);
+			logprintf("K %6d", $song->{id});
 		}
 	}
 	if(($pid_status || $pid_signal) && !$killsock_conn) {
 		# write to log file
-		logprintf("E %6d status=%d signal=%d", $song_id, $pid_status, $pid_signal);
+		logprintf("E %6d status=%d signal=%d", $song->{id}, $pid_status, $pid_signal);
 		$num_errors++;
 	} else {
 		$num_errors = 0;
@@ -473,8 +503,8 @@ EOF
 	}
 
 	# delete jingle files
-	if($songtype eq 'J') {
-		unlink "$filename" or warn "unlink $filename: $!\n";
+	if($song->{type} eq 'J') {
+		unlink "$song->{filename}" or warn "unlink $song->{filename}: $!\n";
 	}
 
 	# prevent us from eating 100% cpu time in case of misconfiguration

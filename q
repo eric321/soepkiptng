@@ -217,23 +217,10 @@ printf "\n    %-${w_a}s %-${w_t}s %-${w_al}s\n    %s %s %s\n",
 	'Artist', 'Song', 'Album', '-'x$w_a, '-'x$w_t, '-'x$w_al;
 
 $i = 1;
-if(open F, $statusfile) {
-	$nowplaying = <F>;
-	close F;
-
-	my $query = "SELECT song.title,artist.name as artist,album.name as album,song.track" .
-		    " FROM song,artist,album" .
-		    " WHERE song.id=$nowplaying" .
-		    " AND song.artist_id=artist.id AND song.album_id=album.id";
-	my $sth = $dbh->prepare($query);
-	my $rv = $sth->execute;
-	if($now_playing = $sth->fetchrow_hashref) {
-		printf "1.* %-${w_a}.${w_a}s %-${w_t}.${w_t}s %-${w_al}.${w_al}s\n",
-			$now_playing->{artist}, $now_playing->{title},
-			albumtrack($now_playing->{album}, $now_playing->{track});
-		$delid[1] = $now_playing->{id};
-		$i++;
-	}
+if($_ = get_nowplaying($dbh)) {
+	printf "1.* %-${w_a}.${w_a}s %-${w_t}.${w_t}s %-${w_al}.${w_al}s\n",
+		$_->{artist}, $_->{title}, albumtrack($_->{album}, $_->{track});
+	if($_->{id}) { $delid[$i++] = $_->{id}; }
 }
 
 $query = "SELECT song.title,artist.name,album.name,song.id,song.track" .

@@ -224,6 +224,41 @@ sub get_playlist_contents($$) {
 	return keys %songids;
 }
 
+sub get_nowplaying(;$) {
+	my ($dbh) = @_;
+	local *F;
+	my $s = undef;
+
+	if(open F, $statusfile) {
+		chop (($s->{id}, $s->{filename}, $s->{pid}, $s->{cdrplaypid},
+			$s->{killhost}, $s->{killport}, $s->{type},
+			$s->{user}, $s->{artist}, $s->{title}, $s->{album},
+			$s->{track}, $s->{length}, $s->{encoding}) = <F>);
+		close F;
+	}
+
+	if($dbh) {
+		my $sth = $dbh->prepare(
+			"SELECT artist.name as artist,album.name as album," .
+			" song.artist_id as arid,song.album_id as alid, song.*" .
+			" FROM song,artist,album WHERE song.artist_id=artist.id" .
+			" AND song.album_id=album.id AND song.id=?");
+		$sth->execute($s->{id});
+		if(my $d = $sth->fetchrow_hashref) {
+			$s->{alid} = $d->{alid};
+			$s->{arid} = $d->{arid};
+			$s->{filename} = $d->{filename};
+			$s->{artist} = $d->{artist};
+			$s->{title} = $d->{title};
+			$s->{album} = $d->{album};
+			$s->{track} = $d->{track};
+			$s->{length} = $d->{length};
+			$s->{encoding} = $d->{encoding};
+		}
+	}
+	return $s;
+}
+
 sub construct_url($@) {
 	my ($baseurl, $argsref) = @_;
 	my $sep = "?";
