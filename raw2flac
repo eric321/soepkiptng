@@ -1,0 +1,205 @@
+#!/usr/bin/perl -w
+
+############################################################################
+# soepkiptng (c) copyright 2000 Eric Lammerts <eric@lammerts.org>.
+# $Id$
+############################################################################
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# A copy of the GNU General Public License is available on the World Wide Web
+# at `http://www.gnu.org/copyleft/gpl.html'.  You can also obtain it by
+# writing to the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+# Boston, MA 02111-1307, USA.
+############################################################################
+
+my $progdir;
+BEGIN {
+	use Cwd qw'cwd abs_path';
+
+	# find program directory
+	$_ = $0;
+	while(-l) {
+		my $l = readlink or die "readlink $_: $!\n";
+		if($l =~ m|^/|) { $_ = $l; } else { s|[^/]*$|/$l|; }
+	}
+	m|(.*)/| or die;
+	$progdir = abs_path($1);
+
+	unshift @INC, "$progdir/lib";
+}
+use DBI;
+use Digest::MD5;
+use Getopt::Std;
+
+require "$progdir/soepkiptng.lib";
+
+our ($opt_d, $opt_v, $opt_c);
+getopts('dvc:');
+
+my %conf;
+read_configfile(\%conf, $opt_c);
+
+$ENV{PATH} = "$progdir/bin:$ENV{PATH}";
+$cwd = cwd;
+
+@flac_stdin = qw'flac -8 --endian=little --channels=2 --bps=16
+	--sample-rate=44100 --sign=signed --force-raw-format';
+$flacd_stdin = 'flac -sdc --endian=little --sign=signed --force-raw-format -';
+
+sub convert_dir($);
+sub convert_raw($);
+
+$dbh = DBI->connect("DBI:$conf{db_type}:$conf{db_name}:$conf{db_host}",
+	$conf{db_user}, $conf{db_pass})
+	or die "can't connect to database";
+
+sub cleanup {
+	unlink $tmpfile or warn "$tmpfile: $!\n";
+	exit 1;
+}
+
+$SIG{'INT'} = \&cleanup;
+$SIG{'QUIT'} = \&cleanup;
+$SIG{'TERM'} = \&cleanup;
+
+
+foreach (@ARGV) {
+	if(-d $_) {
+		convert_dir($_);
+	} else {
+		convert_raw($_);
+	}
+}
+
+sub latin1_to_utf($) {
+	my ($s) = @_;
+
+	$s =~ s/(.)/pack("U", ord $1)/ge;
+	return $s;
+}
+
+
+sub convert_dir($) {   
+   my ($wdir) = @_;
+
+   print "Scanning for .raw files in $wdir\n" if $opt_v;
+    
+   opendir WDIR,$wdir or die "Can not open directory $wdir: $!\n";
+   my @files = sort readdir WDIR;
+   closedir WDIR;
+
+   foreach (@files) {
+	next if $_ eq "." || $_ eq "..";
+	if(/\.raw$/i) {
+		convert_raw("$wdir/$_");
+#		warn "test: $wdir/$_\n";
+	} elsif(-d "$wdir/$_") {
+		convert_dir("$wdir/$_");
+	}
+   }
+}
+
+sub convert_raw($) {
+	my ($rawfile) = @_;
+	my (@t, $t);
+
+	if($rawfile !~ m|^/|) { $rawfile = "$cwd/$rawfile"; }
+	$rawfile =~ s!(^|/)(\./)+!$1!g;
+
+	(my $qfile = $rawfile) =~ s/(.*)\.\w+?$/$1.%/;
+	my $q = "SELECT title,artist.name,album.name,track" .
+		" FROM song,artist,album" .
+		" WHERE song.artist_id=artist.id AND song.album_id=album.id" .
+		" AND present AND filename LIKE ?";
+	$sth = $dbh->prepare($q);
+	$sth->execute($qfile)
+		or die "can't do sql command: " . $dbh->errstr;
+
+	my ($ti, $ar, $al, $tr);
+	($ti, $ar, $al, $tr) = $sth->fetchrow_array or do {
+		$qfile =~ s|.*/|%/|;
+		$sth->execute($qfile)
+			or die "can't do sql command: " . $dbh->errstr;
+
+		($ti, $ar, $al, $tr) = $sth->fetchrow_array or do {
+			warn "$rawfile: not found in dbase\n";
+		};
+	};
+	my @flacargs = ();
+	if($ti) { $ti = latin1_to_utf($ti); push @flacargs, "-Ttitle=$ti"; print "title=$ti\n"; }
+	if($ar) { $ar = latin1_to_utf($ar); push @flacargs, "-Tartist=$ar"; print "artist=$ar\n";  }
+	if($al) { $al = latin1_to_utf($al); push @flacargs, "-Talbum=$al"; print "album=$al\n"; }
+	if($tr) { push @flacargs, "-Ttracknumber=$tr"; print "track=$tr\n"; }
+
+	@t = times;
+	$t = $t[0] + $t[1] + $t[2] + $t[3];
+
+	print "Packing file $rawfile\n" if $opt_v;
+	my $flacfile = $rawfile;
+	$flacfile =~ s/raw$/flac/i;
+	
+	if(-e $flacfile) {
+		warn "$flacfile: file exists\n";
+		return;
+	}
+	$tmpfile = "$flacfile.tmp";
+
+	open IN, $rawfile or do {
+		warn "$rawfile: $!\n";
+		return;
+	};
+	if(open(OUT, "|-") == 0) {
+		exec @flac_stdin, @flacargs, "-o$tmpfile", "-";
+		die join(" ", @flac_stdin, @flacargs) . " -o$tmpfile -: $!\n";
+	}
+
+	my $ctx = Digest::MD5->new;
+	while(read IN, $buf, 4096) {
+		$ctx->add($buf);
+		print OUT $buf or die;
+	}
+	close IN;
+	close OUT or die;
+	$digest = $ctx->digest;
+
+	@t = times;
+	$t = $t[0] + $t[1] + $t[2] + $t[3] - $t;
+
+	print "checking $tmpfile...\n" if $opt_v;
+
+	open STDIN, $tmpfile or die "$tmpfile: $!\n";
+	open IN, "$flacd_stdin|";
+	while(read IN, $buf, 4096) {
+		$ctx->add($buf);
+	}
+	close IN;
+	$digest2 = $ctx->digest;
+
+	if($digest eq $digest2) {
+		if(rename $tmpfile, "$flacfile") {
+			printf "$rawfile: compression done (%d%% left; %dm%02ds)\n",
+				100.0 * (-s $flacfile) / (-s $rawfile),
+				$t / 60, $t % 60;
+			if($opt_d) {
+				print "removing $rawfile\n" if $opt_v;
+				unlink "$rawfile" or warn "unlink $rawfile: $!\n";
+			}
+		} else {
+			warn "rename $tmpfile -> $flacfile: $!\n";
+			unlink $tmpfile or die "unlink $tmpfile: $!\n";
+			exit 1;
+		}
+	} else {
+		warn "$tmpfile: md5 mismatch\n";
+		unlink $tmpfile or die "unlink $tmpfile: $!\n";
+		exit 1;
+	}
+}
