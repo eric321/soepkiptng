@@ -401,6 +401,82 @@ EOF
 EOF
 }
 
+sub print_albums_row($$$$) {
+	my ($dbh, $argsref, $caption, $artistid) = @_;
+	
+	my $query = "SELECT seealso.id1 AS id1, seealso.id2 AS id2, ".
+		" artist.name AS artist FROM seealso,artist,song WHERE ".
+		" (seealso.id2=? AND seealso.id1=artist.id AND ".
+		"  seealso.id1=song.artist_id AND song.present) OR".
+		" (seealso.id1=? AND seealso.id2=artist.id AND ".
+		"  seealso.id2=song.artist_id AND song.present) ".
+		" GROUP BY id1, id2, artist ORDER BY artist";
+	my $sth = $dbh->prepare($query);
+	my $rv = $sth->execute($artistid, $artistid);
+	my %seealso;
+	my @ids;
+	while($_ = $sth->fetchrow_hashref()) {
+		if($_->{id1} == $artistid) {
+			push @ids, $_->{id2};
+			$seealso{$_->{id2}} = $_->{artist};
+		} else {
+			push @ids, $_->{id1};
+			$seealso{$_->{id1}} = $_->{artist};
+		}
+	}
+	$sth->finish;
+	if(@ids) {
+		print "See Also: ";
+		foreach(@ids) {
+			print ",&nbsp; " unless $_ == $ids[0];
+			print qq|<a id=a href="$self?cmd=seealso&artist_id=$_&cap=|.
+				encurl("Artist: $seealso{$_}") . qq|">$seealso{$_}</a>|;
+		}
+		print ".<br>\n";
+	}
+
+	$query = "SELECT DISTINCT album.name as album, artist.name as artist," .
+		" count(*) as c, song.artist_id as arid, song.album_id as alid " .
+		" FROM song,artist,album WHERE present AND song.artist_id = ?".
+		" AND song.artist_id=artist.id AND song.album_id=album.id".
+		" AND filename LIKE '/%'".
+		" GROUP BY album ORDER BY album";
+	$sth = $dbh->prepare($query);
+	$rv = $sth->execute($artistid);
+	my %al;
+	my @alids;
+	my $al_len_tot = 0;
+	my %al_len;
+	while($_ = $sth->fetchrow_hashref()) {
+		push @alids, $_->{alid};
+		$al{$_->{alid}} = albumlist_entry($_);
+		$al_len_tot += $al_len{$_->{alid}} = length($_->{album});
+	}
+	if($albumlist_length_threshold == 0 ||
+	   $al_len_tot < $albumlist_length_threshold ||
+	   $argsref->{expanded_albumlist}) {
+		my $sep = "&nbsp; ";
+		if($argsref->{expanded_albumlist}) { $sep = "<br>\n"; }
+		printf "Albums:%s%s.\n", $sep, join(",$sep",
+			map { $al{$_} } @alids);
+	} else {
+		my $len_left = $albumlist_length_threshold;
+		my %alids_shortlist;
+		foreach(sort { $al_len{$a} <=> $al_len{$b} } @alids) {
+			last if $al_len{$_} > $len_left;
+			$len_left -= $al_len{$_};
+			$alids_shortlist{$_} = 1;
+		}
+		my @alids2 = grep { $alids_shortlist{$_} } @alids;
+		printf "Albums: %s", join(",&nbsp;\n",
+			map { $al{$_} } @alids2);
+			
+		printf <<EOF, $baseurl, $argsref->{cmd}, $#alids - $#alids2;
+&nbsp; <a id=a href="%scmd=%s&expanded_albumlist=1">[%d more...].</a>
+EOF
+	}
+}
+
 sub print_alllist_table($$$$@) {
 	my ($dbh, $argsref, $session, $caption, $query, @val) = @_;
 	my ($output, $addall);
@@ -459,46 +535,7 @@ EOF
 	}
 
 	if(scalar keys %artistids == 1) {
-		my $query = "SELECT DISTINCT album.name as album, artist.name as artist," .
-			" count(*) as c, song.artist_id as arid, song.album_id as alid " .
-			" FROM song,artist,album WHERE present AND song.artist_id = ?".
-			" AND song.artist_id=artist.id AND song.album_id=album.id".
-			" AND filename LIKE '/%'".
-			" GROUP BY album ORDER BY album";
-		my $sth = $dbh->prepare($query);
-		my $rv = $sth->execute(keys %artistids);
-		my %al;
-		my @alids;
-		my $al_len_tot = 0;
-		my %al_len;
-		while($_ = $sth->fetchrow_hashref()) {
-			push @alids, $_->{alid};
-			$al{$_->{alid}} = albumlist_entry($_);
-			$al_len_tot += $al_len{$_->{alid}} = length($_->{album});
-		}
-		if($albumlist_length_threshold == 0 ||
-		   $al_len_tot < $albumlist_length_threshold ||
-		   $argsref->{expanded_albumlist}) {
-			my $sep = "&nbsp; ";
-			if($argsref->{expanded_albumlist}) { $sep = "<br>\n"; }
-			printf "Albums:%s%s.\n", $sep, join(",$sep",
-				map { $al{$_} } @alids);
-		} else {
-			my $len_left = $albumlist_length_threshold;
-			my %alids_shortlist;
-			foreach(sort { $al_len{$a} <=> $al_len{$b} } @alids) {
-				last if $al_len{$_} > $len_left;
-				$len_left -= $al_len{$_};
-				$alids_shortlist{$_} = 1;
-			}
-			my @alids2 = grep { $alids_shortlist{$_} } @alids;
-			printf "Albums: %s", join(",&nbsp;\n",
-				map { $al{$_} } @alids2);
-			
-			printf <<EOF, $baseurl, $argsref->{cmd}, $#alids - $#alids2;
-&nbsp; <a id=a href="%scmd=%s&expanded_albumlist=1">[%d more...].</a>
-EOF
-		}
+		print_albums_row($dbh, $argsref, $cap, (keys %artistids)[0]);
 	}
 
 	print "<table border=0 cellspacing=0>\n";
@@ -1164,6 +1201,15 @@ elsif($cmd eq 'alllist') {
 	} else {
 		print "Error: No search terms specified.\n";
 	}
+	printftr;
+}
+elsif($cmd eq 'seealso') {
+	printhtmlhdr;
+	printhdr($allstyle);
+	print <<EOF;
+<center id=hdr>$args{cap}</center>
+EOF
+	print_albums_row($dbh, \%args, $args{cap}, $args{artist_id});
 	printftr;
 }
 elsif($cmd eq 'sql') {
