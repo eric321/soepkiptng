@@ -68,7 +68,7 @@ $dbh = DBI->connect("DBI:$conf{'db_type'}:$conf{'db_name'}:$conf{'db_host'}", $c
 my $shc = $dbh->selectcol_arrayref("SELECT filename FROM song WHERE filename LIKE \"http:%\"");
 foreach(@$shc) {
 	$have_stream{$_} = 1;
-	warn "have $_\n";
+#	warn "have $_\n";
 }
 
 foreach(@ARGV) {
