@@ -539,6 +539,12 @@ EOF
     <input type=submit value="Download">
    </form>
   </td></tr>
+  <tr><td>&nbsp;</td></tr>
+  <tr><td>
+   <form action="javascript:window.close()">
+    <input type=submit value="Close">
+   </form>
+  </td></tr>
 </table>
 EOF
 }
