@@ -1,0 +1,4 @@
+
+use soepkiptng;
+
+ALTER TABLE song add (uuid char(36));

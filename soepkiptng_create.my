@@ -17,13 +17,14 @@ CREATE TABLE song (
   encoding varchar(255) DEFAULT '' NOT NULL,
   track int(4) unsigned DEFAULT '0' NOT NULL,
   filename varchar(255) BINARY DEFAULT '' NOT NULL,
+  filesize int,
   length smallint DEFAULT '0' NOT NULL,
   mtime timestamp,
   last_played timestamp,
   time_added timestamp,
   present tinyint NOT NULL,
   random_pref INT DEFAULT 10000 NOT NULL,
-  sets BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  uuid char(36),
   PRIMARY KEY (id),
   KEY artist_id (artist_id),
   KEY title (title(4)),
@@ -54,13 +55,6 @@ CREATE TABLE queue (
 CREATE TABLE seealso (
   id1 int NOT NULL,
   id2 int NOT NULL
-);
-
-CREATE TABLE sets (
-  num int NOT NULL,
-  name varchar(255) NOT NULL,
-  UNIQUE(num),
-  UNIQUE(name)
 );
 
 CREATE TABLE list (

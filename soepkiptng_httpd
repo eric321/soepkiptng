@@ -48,8 +48,20 @@ my $cgiquery;
 ############################################################################
 # SUBROUTINES
 
-sub printhttphdr() {
-	print $cgiquery->header(-type=>"text/html; charset=ISO-8859-15");
+sub printhttphdr($) {
+	my ($cookies) = @_;
+
+	my $cookie;
+	if($cookies) {
+		$cookie = $cgiquery->cookie(
+			-name=>'sv',
+			-value=>$cookies,
+			-path=>'/',
+			-expires=>'+365d');
+	}
+	print $cgiquery->header(
+		-type=>"text/html; charset=ISO-8859-15",
+		-cookie=>$cookie);
 }
 
 sub require_write_access() {
@@ -142,6 +154,7 @@ sub run_instance() {
 			die "invalid request\n";
 		}
 
+		$ENV{HTTP_COOKIE} = $r->header('cookie');
 		$cgiquery = new CGI($content || "");
 
 		my $req;
@@ -149,7 +162,8 @@ sub run_instance() {
 		$req->{cgiquery} = $cgiquery;
 		$req->{self} = "/";
 		$req->{host} = inet_ntoa($conn->peeraddr);
-
+		my %cookies = $cgiquery->cookie('sv');
+		$req->{cookies} = \%cookies;
 		open STDOUT, ">&=" . $conn->fileno;
 		handle_request($req);
 		close STDOUT;

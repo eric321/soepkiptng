@@ -18,6 +18,8 @@
 
 ############################################################################
 
+use Digest::MD5 'md5_hex';
+
 sub can_delete($) {
 	my ($file) = @_;
 
@@ -242,14 +244,14 @@ EOF
 			$req->{self}, $q->{id}, $ids, $conf{edit_target} || 'bframe',
 			$furl, $q->{id}
 		) : "",
-		$req->{args}->{list}? sprintf(<<EOF,
-<a id=a href="%s?list=%d&ids=%d&pq=%s&cmd=%s" title="%s playlist">%s "%s"</a>
+		$req->{list}? sprintf(<<EOF,
+<a id=a href="%s?list_id=%d&ids=%d&pq=%s&cmd=%s" title="%s playlist">%s "%s"</a>
 EOF
-			$req->{self}, $req->{args}->{list}, $q->{id},
+			$req->{self}, $req->{list}, $q->{id},
 				encurl($req->{cgiquery}->query_string()), ($q->{in_list}?
 					("delfromlist", "Remove from", "Remove from") :
 					("addtolist", "Add to", "Add to"),
-				$req->{args}->{list_name})
+				enchtml($req->{list_name}))
 		) : "",
 		$extra;
 }
@@ -627,7 +629,7 @@ sub print_edit_page($) {
 	}
 
 	my $sth = $req->{dbh}->prepare("SELECT artist.name as artist,album.name as album," .
-		" reverse(bin(song.sets)) as setbin,song.*," .
+		" song.*," .
 		" unix_timestamp(last_played) as lp," .
 		" unix_timestamp(time_added) as ta" .
 		" FROM song,artist,album WHERE song.id=$req->{args}->{id}" .
@@ -662,24 +664,6 @@ EOF
 	} else {
 		$file = enchtml($f);
 		$dir = "";
-	}
-
-	my $sets = '';
-	$sth = $req->{dbh}->prepare("SELECT * FROM sets");
-	$sth->execute();
-	my $i = 0;
-	while($set = $sth->fetchrow_hashref()) {
-		$sets .= sprintf <<EOF,
-<tr>
- <td colspan=2>%s</td>
- <td><input type=checkbox name=sets_%d%s> %s
-     <input type=submit name=action_sets_all_%d value=\"Set entire list\"></td>
-</tr>
-EOF
-			$i == 0? "Sets:" : "&nbsp;", $set->{num},
-			substr($_->{setbin}, $set->{num}, 1)? " checked" : "",
-			$set->{name}, $set->{num};
-		$i++;
 	}
 
 	printf <<EOF,
@@ -736,7 +720,7 @@ function closethis() {
   <tr><td valign=bottom colspan=2>Directory:</td>       <td valign=bottom>%s</td></tr>
   <tr><td valign=bottom colspan=2>Filename:</td>        <td valign=bottom>%s</td></tr>
   <tr><td valign=bottom colspan=2>Size:</td>            <td valign=bottom>%dk</td></tr>
-%s  <tr>
+  <tr>
    <td valign=bottom align=center>%s</td>
    <td valign=bottom align=center>%s</td>
    <td valign=bottom>
@@ -765,7 +749,7 @@ EOF
 		$_->{lp}? " <font size=-1><input type=submit name=action_clearlp value=Reset> " .
 			"<input type=submit name=action_clearlpall value=\"Reset entire list\"></font>":"",
 		$_->{random_pref}, $dir, $file,
-		((-s $_->{filename}) + 512) / 1024, $sets,
+		((-s $_->{filename}) + 512) / 1024,
 		$prev, $next,
 		(can_delete($_->{filename})? qq'<input type=submit ' .
 		  qq'name=action_delete value="Delete Song" ' .
@@ -1233,34 +1217,38 @@ EOF
 		printf <<EOF,
  <tr>
   <td %s>&nbsp;<a href="%s?cmd=dellist&id=%d" %s>del</a>&nbsp;</td>
-  <td>&nbsp;<a id=a href="%s?cmd=alllist&list=%d&list_name=%s&cap=%s&no_artist_rows=1">%s</a>&nbsp;</td>
-  <td %s>&nbsp;%d&nbsp;</td>
+  <td>&nbsp;<a id=a href="%s?cmd=lists&list=%d&list_name=%s">%s</a>&nbsp;</td>
+  <td %s>&nbsp;<a id=a href="%s?cmd=alllist&qlist=%d&cap=%s&no_artist_rows=1">%d</a>&nbsp;</td>
   <td id=t>&nbsp;%d:%02d:%02d&nbsp;</td>
   <td %s id=t>&nbsp;%.1f&nbsp;</td>
+  <td>&nbsp;%s&nbsp;</td>
  </tr>
 EOF
 		$conf{td_left}, $req->{self}, $d->{list_id}, ($d->{count}? 'onclick="return verifydelete();"':""),
-		$req->{self}, $d->{list_id}, encurl($d->{name}), encurl("Playlist \"$d->{name}\""), $d->{name},
-		$conf{td_left}, $d->{count},
+		$req->{self}, $d->{list_id}, encurl($d->{name}), $d->{name},
+		$conf{td_left}, req->{self}, $d->{list_id}, encurl("Playlist \"$d->{name}\""), $d->{count},
 		$d->{length} / 3600, ($d->{length} / 60) % 60, $d->{length} % 60,
-		$conf{td_left}, $d->{size} / 1024;
+		$conf{td_left}, $d->{size} / 1024,
+		$d->{list_id} == $req->{list}? "(selected)":"";
 	}
-
 	my ($count, $len, $size) = $req->{dbh}->selectrow_array(
 		"SELECT COUNT(*),SUM(length),SUM(FLOOR((song.filesize + 1023) / 1024)) FROM song WHERE present");
 	printf <<EOF,
  <tr>
   <td %s>&nbsp;</td>
-  <td>&nbsp;(all songs)</a>&nbsp;</td>
+  <td>&nbsp;<a id=a href="%s?cmd=lists&list=&list_name=">(all songs)</a>&nbsp;</td>
   <td %s>&nbsp;%d&nbsp;</td>
   <td id=t>&nbsp;%d:%02d:%02d&nbsp;</td>
   <td %s id=t>&nbsp;%.1f&nbsp;</td>
+  <td>&nbsp;%s&nbsp;</td>
  </tr>
 EOF
 		$conf{td_left},
+		$req->{self},
 		$conf{td_left}, $count,
 		$len / 3600, ($len / 60) % 60, $len % 60,
-		$conf{td_left}, $size / 1024;
+		$conf{td_left}, $size / 1024,
+		$req->{list}? "":"(selected)";
 	print <<EOF;
 </table>
 <p>
@@ -1272,8 +1260,10 @@ EOF
 EOF
 }
 
-sub printhtmlhdr() {
-	printhttphdr();
+sub printhtmlhdr(;$) {
+	my ($req) = @_;
+
+	printhttphdr($req->{cookies});
 	print <<EOF;
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
 EOF
@@ -1334,7 +1324,7 @@ sub delete_file($$) {
 
 	require_write_access;
 
-	printhtmlhdr;
+	printhtmlhdr($req);
 	printhdr($conf{allstyle});
 	$id =~ /(\d*)/;
 	$id = $1;
@@ -1372,7 +1362,19 @@ sub handle_request($) {
 		warn "\$args{$_} = $args{$_}\n";
 	}
 	$req->{args} = \%args;
-
+#	if($args{sid}) {
+#		$req->{sid} = $args{$sid};
+#	} elsif($req->{cookie} =~ /SID=(\w+)/i) {
+#		$req->{sid} = $1;
+#	} else {
+#		$req->{sid} = substr(md5_hex(time . ".$$." . rand), 0, 10);
+#	}
+	if(exists $args{list}) {
+		$req->{cookies}->{list} = $args{list};
+		$req->{cookies}->{list_name} = $args{list_name};
+	}
+	$req->{list} = $req->{cookies}->{list};
+	$req->{list_name} = $req->{cookies}->{list_name};
 	$SIG{__DIE__} = sub {
 		printhtmlhdr;
 		print "<p><p>$_[0]\n";
@@ -1383,7 +1385,7 @@ sub handle_request($) {
 	my $rt = $conf{refreshtime};
 
 	if($cmd eq 'empty') {
-		printhtmlhdr;
+		printhtmlhdr($req);
 		print "$conf{bframe_start}\n";
 		return;
 	}
@@ -1439,7 +1441,7 @@ sub handle_request($) {
 	elsif($cmd eq 'addtolist') {
 		require_write_access;
 		$req->{dbh}->do("REPLACE INTO list_contents SET list_id=?, song_id=?", undef,
-			$args{list}, $args{ids})
+			$args{list_id}, $args{ids})
 			or die;
 	 	printredir_pq($req);
 		return;
@@ -1447,7 +1449,7 @@ sub handle_request($) {
 	elsif($cmd eq 'delfromlist') {
 		require_write_access;
 		$req->{dbh}->do("DELETE FROM list_contents WHERE list_id=? AND song_id=?", undef,
-			$args{list}, $args{ids})
+			$args{list_id}, $args{ids})
 			or die;
 	 	printredir_pq($req);
 		return;
@@ -1523,33 +1525,7 @@ sub handle_request($) {
 		my $arid = get_id($req->{dbh}, "artist", $args{artist}) or die;
 		my $alid = get_id($req->{dbh}, "album", $args{album}) or die;
 
-		foreach(keys %args) {
-			/^action_sets_all_(\d+)$/ or next;
-
-			if($args{"sets_$1"}) {
-				$upd = "sets=(sets | 1 << $1)";
-			} else {
-				$upd = "sets=(sets & ~(1 << $1))";
-			}
-
-			my @ids = ids_decode($args{ids});
-			while(@ids) {
-				my @ids2 = splice(@ids, 0, 50);
-				$req->{dbh}->do("UPDATE song SET $upd WHERE " .
-					join(" OR ", map { "id=$_" }  @ids2),
-					undef, $all_field_arg, @ids2)
-					or die "can't do sql command: " . $req->{dbh}->errstr;
-			}
-		}
-
-		my $sets = '0';
-		foreach(keys %args) {
-			/^sets_(\d+)$/ or next;
-			$sets .= " | (1 << $1)";
-		}
-		
-
-		$req->{dbh}->do("UPDATE song SET artist_id=?, title=?, album_id=?, track=?, random_pref=?, sets=($sets) WHERE id=?",
+		$req->{dbh}->do("UPDATE song SET artist_id=?, title=?, album_id=?, track=?, random_pref=? WHERE id=?",
 			undef, $arid, $args{title}, $alid, $args{track}, $args{random_pref}, $args{id})
 			or die "can't do sql command: " . $req->{dbh}->errstr;
 
@@ -1580,7 +1556,7 @@ sub handle_request($) {
 
 	if($cmd eq 'search') {
 		if(!$args{stype}) {
-			printhtmlhdr;
+			printhtmlhdr($req);
 			printhdr($conf{allstyle});
 			print "Error: No search type specified.\n";
 			printftr;
@@ -1596,11 +1572,11 @@ sub handle_request($) {
 
 
 	if($cmd eq '') {
-		printhtmlhdr;
+		printhtmlhdr($req);
 		print_frame($req);
 	}
 	elsif($cmd eq 'playlist') {
-		printhtmlhdr;
+		printhtmlhdr($req);
 		print <<EOF;
 <META HTTP-EQUIV="Refresh" CONTENT="$rt;URL=$req->{self}?cmd=playlist&s=$args{s}&nofocus=1">
 EOF
@@ -1611,7 +1587,7 @@ EOF
 		printftr;
 	}
 	elsif($cmd eq 'artistlist') {
-		printhtmlhdr;
+		printhtmlhdr($req);
 		printhdr($conf{artiststyle});
 
 		my ($cap, $s, @qw, @qwa);
@@ -1644,7 +1620,7 @@ EOF
 		printftr;
 	}
 	elsif($cmd eq 'alllist') {
-		printhtmlhdr;
+		printhtmlhdr($req);
 		printhdr($conf{allstyle});
 		my @qs = (
 			"artist.name as artist",
@@ -1666,10 +1642,14 @@ EOF
 		my $s = $args{sort};
 		my $filename_restriction = "/%";
 		$s =~ s/\W//g;
-		if($args{list} =~ /\S/) {
+		if($args{qlist}) {
+			push @qj, "LEFT JOIN list_contents AS qlist ON qlist.song_id=song.id AND qlist.list_id=?";
+			push @qja, $args{qlist};
+		}
+		if($req->{list}) {
 			push @qs, "list_contents.list_id > 0 as in_list";
 			push @qj, "LEFT JOIN list_contents ON list_contents.song_id=song.id AND list_contents.list_id=?";
-			push @qja, $args{list};
+			push @qja, $req->{list};
 		}
 		if($args{any} =~ /\S/) {
 			add_search_args(\@qw, \@qwa, \$s, $args{any},
@@ -1728,10 +1708,10 @@ EOF
 		push @qw, "filename LIKE ?";
 		push @qwa, $filename_restriction;
 
-		if(!$s && $args{list}) {
-			push @qw, "list_contents.list_id";
+		if(!$s && $args{qlist}) {
+			push @qw, "qlist.list_id";
 			$cap = $args{cap};
-			$s = "song_order";
+			$s = "qlist.song_order";
 		}
 		if($s) {
 			$s =~ s/^r_(.*)/\1 DESC/;
@@ -1747,7 +1727,7 @@ EOF
 		printftr;
 	}
 	elsif($cmd eq 'albumlist') {
-		printhtmlhdr;
+		printhtmlhdr($req);
 		printhdr($conf{allstyle});
 		print <<EOF;
 <center id=hdr>$args{cap}</center>
@@ -1761,7 +1741,7 @@ EOF
 
 		if($args{limit} > 500) { $args{limit} = 500; }
 
-		printhtmlhdr;
+		printhtmlhdr($req);
 		printhdr($conf{allstyle});
 
 		printf <<EOF, enchtml($args{sql}), defined($args{limit})? $args{limit} : 500;
@@ -1802,7 +1782,7 @@ EOF
 		printftr;
 	}
 	elsif($cmd eq 'recent') {
-		printhtmlhdr;
+		printhtmlhdr($req);
 		printhdr($conf{allstyle});
 		my $maxage = $args{days} * 86400;
 		my $s = $args{sort} || "r_time_added";
@@ -1821,7 +1801,7 @@ EOF
 		printftr;
 	}
 	elsif($cmd eq 'maint') {
-		printhtmlhdr;
+		printhtmlhdr($req);
 		printhdr($conf{allstyle});
 		print <<EOF;
 </script>
@@ -1840,13 +1820,13 @@ EOF
 		print `$progdir/soepkiptng_update 2>&1`;
 	}
 	elsif($cmd eq 'edit') {
-		printhtmlhdr;
+		printhtmlhdr($req);
 		printhdr($conf{editstyle});
 		print_edit_page($req);
 		printftr;
 	}
 	elsif($cmd eq 'lyrics') {
-		printhtmlhdr;
+		printhtmlhdr($req);
 		printhdr($conf{editstyle});
 		print_lyrics_page($req);
 		printftr;
@@ -1855,7 +1835,7 @@ EOF
 		print_lyrics_google_redir($req);
 	}
 	elsif($cmd eq 'shoutcast') {
-		printhtmlhdr;
+		printhtmlhdr($req);
 		printhdr($conf{allstyle});
 		print_shoutcast_page($req);
 		printftr;
@@ -1892,9 +1872,10 @@ EOF
 		close F;
 	}
 	elsif($cmd eq 'lists') {
-	        printhtmlhdr;
+	        printhtmlhdr($req);
 		printhdr($conf{allstyle});
 		print_lists($req);
+		$req->{cookies}->{list} = $args{list};
 		printftr;
 	}
 	elsif($cmd eq 'cdda') {
@@ -1925,7 +1906,7 @@ EOF
 	 	printredir($req, 'alllist', \%args);
 	}
 	else {
-		printhtmlhdr;
+		printhtmlhdr($req);
 		print "oei: $cmd\n";
 	}
 }

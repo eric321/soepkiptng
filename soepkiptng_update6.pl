@@ -35,21 +35,43 @@ my $progdir = abs_path($1);
 
 require "$progdir/soepkiptng.lib";
 
-getopts('c:');
+getopts('avnc:gt:');
 
 read_configfile(\%conf, $opt_c);
+
+
+sub uuid_gen() {
+	local *F;
+	my $buf;
+	
+	open F, "/dev/urandom" or die "/dev/urandom: $!\n";
+	read F, $buf, 16;
+	close F;
+	
+	my @w = unpack("n*", $buf);
+	$w[3] &= 0x0fff; $w[3] |= 0x4000;
+	$w[4] &= 0x3fff; $w[4] |= 0x8000;
+
+	$buf = pack("n8", @w);
+	return $buf;
+}
+
+sub uuid_ascii($)
+{
+	my @w = unpack("n*", $_[0]);
+	return sprintf "%04x%04x-%04x-%04x-%04x-%04x%04x%04x", @w;
+}
+
+
+$| = 1;
 
 $dbh = DBI->connect("DBI:$conf{db_type}:$conf{db_name}:$conf{db_host}",
 	$conf{db_user}, $conf{db_pass}) or die "can't connect to database";
 
-$files = $dbh->selectcol_arrayref("SELECT filename FROM song WHERE present AND filesize IS NULL AND filename LIKE '/%'");
-$num = 0;
-foreach(@$files) {
-	defined($size = -s $_) or next;
-	$dbh->do("UPDATE song SET filesize=? WHERE filename=?", undef, $size, $_)
-		or die "can't do sql command: " . $dbh->errstr . "\n";
-	$num++;
-}
-END {
-	print "$num records updated\n";
+$ids = $dbh->selectcol_arrayref("SELECT id FROM song WHERE present AND filename LIKE '/%' AND uuid IS NULL");
+
+foreach(@$ids) {
+	$uuid = uuid_ascii(uuid_gen);
+	$dbh->do("UPDATE song SET uuid=? WHERE id=?", undef, $uuid, $_);
+	printf "%s %s\n", $uuid, $_;
 }
