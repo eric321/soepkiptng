@@ -25,6 +25,10 @@ recent_prob=0.25
 # a recently added song is one that was added at most this number of days ago
 recent_age=7
 
+# ancient technology support (CD discs)
+cdda_prog=soepkiptng_cdda
+#cdda_prog=rsh othermachine soepkiptng_cdda -d /dev/scd1
+
 ####### add_songs ###########################################################
 
 mp3dirs=/disk1/mp3

@@ -1,0 +1,52 @@
+#!/usr/bin/perl
+
+use Getopt::Std;
+
+getopts('s:d:C:h');
+
+$opt_h and die <<EOF;
+
+usage: cdda [-s cddb_server] [-d cdrom_device] [-p proxy] [-C cachedir]
+
+EOF
+
+if(@ARGV) {
+	# stream track(s) to stdout
+	my @prog = qw/cdparanoia -qr/;
+	if(defined($opt_d)) { push @prog, "-d$opt_d"; }
+	exec @prog, @ARGV, "-";
+}
+
+use FreeDB::FreeDB;
+
+# shut up FreeDB
+open STDERR, ">/dev/null";
+
+my $cddb = new FreeDB;
+if(defined($opt_s)) { $cddb->cdb_server($opt_s); }
+if(defined($opt_d)) { $cddb->cdrom_device($opt_d); }
+if(defined($opt_p)) { $cddb->proxy_value($opt_p); }
+if(defined($opt_C)) {
+	if($opt_C eq "") { $cddb->ignore_cache(1); }
+	else { $cddb->cache_directory($opt_C); }
+}
+			
+if($cddb->fetch) {
+	push @out, $cddb->artist;
+	push @out, $cddb->title;
+	while($cddb->next_track) {
+		push @out, sprintf "%d %s",
+			$cddb->current_track_time_in_seconds,
+			$cddb->current_track_info;
+	}
+} else {
+	$cddb->create_new;
+	push @out, "?";
+	push @out, "?";
+	while($tr = $cddb->next_track) {
+		push @out, sprintf "%d Track %d",
+			$cddb->current_track_time_in_seconds, $tr;
+	}
+}
+
+print map { s/\s+/ /g; "$_\n"; } @out;

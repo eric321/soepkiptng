@@ -138,6 +138,7 @@ EOF
    <option value=title>Title
    <option value=album>Album
    <option value=filename>Filename
+   <option value=encoding>Encoding
   </select>
   <noscript><input type=submit value="Go"></noscript>
  </form>
@@ -179,6 +180,7 @@ print <<EOF;
  <td id=az>&nbsp;&nbsp;<a id=az href="$self?cmd=alllist&rand=50" target=bframe>Random</a></td>
  <td id=az>&nbsp;&nbsp;<a id=az href="$self?cmd=alllist&encoding=^Video" target=bframe>Video</a></td>
 <!-- <td id=az>&nbsp;&nbsp;<a id=az target=_blank href="$self?cmd=maint">*</a></td>-->
+ <td id=az>&nbsp;&nbsp;<a id=az target=bframe href="$self?cmd=cdda">CD-DA</a></td>
  <td id=az>&nbsp;&nbsp;<a id=az target=bframe href="$self?cmd=shoutcast">Shoutcast</a></td>
  <td id=az width=100%>&nbsp;&nbsp;<a id=az target=bframe href="$self?cmd=sql">SQL</a></td>
 
@@ -1184,6 +1186,7 @@ EOF
 		my $cap;
 		my $limit = $conf{alllist_limit};
 		my $s = $args{sort};
+		my $filename_restriction = "/%";
 		$s =~ s/\W//g;
 		if($args{any} =~ /\S/) {
 			add_search_args(\$q, \@qargs, \$s, $args{any},
@@ -1228,12 +1231,18 @@ EOF
 			$limit = 0 + $args{rand};
 			$s = "rand()";
 		}
+		if($args{cdda}) {
+			$s = "track";
+			$filename_restriction = "cdda:%";
+			$cap = "CD-DA";
+		}
 
 		if($s) {
 			$s =~ s/^r_(.*)/\1 DESC/;
 			$q .= " AND song.artist_id=artist.id AND song.album_id=album.id ".
-			      " AND filename LIKE '/%' ".
+			      " AND filename LIKE ? ".
 			      " ORDER BY $s,album.name,track,artist.name,title,time_added";
+			push @qargs, $filename_restriction;
 			print_alllist_table($dbh, \%args, \%session, $cap, $q, $limit, @qargs);
 		} else {
 			print "Error: No search terms specified.\n";
@@ -1365,6 +1374,32 @@ EOF
 		printhdr($conf{allstyle});
 		print_lists($dbh);
 		printftr;
+	}
+	elsif($cmd eq 'cdda') {
+		local *F;
+		if(!$conf{cdda_prog}) {
+			die "CD-DA not configured\n";
+		}
+		$dbh->do("DELETE FROM song WHERE filename LIKE 'cdda:%'");
+		open F, "$conf{cdda_prog}|";
+		chop($_ = <F>);
+		my $arid = get_id($dbh, "artist", $_) or die;
+		chop($_ = <F>);
+		my $alid = get_id($dbh, "album", $_) or die;
+		my $nr = 1;
+		while(<F>) {
+			chop;
+			s/^(\d+) //;
+			my $len = $1;
+			$dbh->do("REPLACE INTO song SET title=?, filename=?, album_id=?, " .
+				"artist_id=?, present=1, encoding='CD-DA', track=?, " .
+				"length=?, time_added=NULL", undef,
+				$_, "cdda:$nr", $alid, $arid, $nr, $len) or die;
+			$nr++;
+		}
+		close F;
+		$args{cdda} = 1;
+	 	printredir($cgiquery, $self, 'alllist', \%args);
 	}
 	else {
 		printhtmlhdr;

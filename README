@@ -153,6 +153,8 @@ TODO:
 * smooth transition between 2 songs (interpolation)
 * id3/id3v2 support for flac
 * synchronize update of statusfile with cdrplay
+* CD-DA support: don't re-enter info into db every time you click "CD-DA"
+  maybe use persistent info and cddb disc_id?
 
 $Id$
 
