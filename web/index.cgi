@@ -129,15 +129,15 @@ sub print_az_table($$) {
 	}
 
 	printf <<EOF, $self;
-<table cellpadding=0 cellspacing=0><tr><td id=az nowrap>
-<a id=a href="%s?cmd=playlist">Refresh</a>&nbsp;&nbsp;
+<table cellpadding=2 cellspacing=0 width=100%><tr><td id=az nowrap>
+<a id=az href="%s?cmd=playlist">Refresh</a>&nbsp;&nbsp;
 EOF
 	foreach('A'..'Z') {
-		printf qq|<a id=a href="%s?cmd=%s&artist=%s" target=bframe>%s</a>&nbsp;|,
+		printf qq|<a id=az href="%s?cmd=%s&artist=%s" target=bframe>%s</a>&nbsp;|,
 			$self, $artistlistcmd, encurl("^$_"), $_;
 	}
 	printf <<EOF, $self, $artistlistcmd, encurl("^([^a-zA-Z]|\$)");
-<a id=a href="%s?cmd=%s&artist=%s" target=bframe>Other</a>&nbsp;
+<a id=az href="%s?cmd=%s&artist=%s" target=bframe>Other</a>&nbsp;
 EOF
 
 	my $sz = $searchformsize || 10;
@@ -161,24 +161,6 @@ EOF
   <noscript><input type=submit value="Go"></noscript>
  </form>
 </td>
-<!--
-<td id=az nowrap>Album:</td>
-<td id=az>
- <form id=search action="$self" method=get target=bframe>
-  <input type=hidden name=cap value="Album search: %s">
-  <input type=hidden name=cmd value=artistlist>
-   <input type=text size=5 name=album style="$searchformstyle">
- </form>
-</td>
-<td id=az nowrap>Title:</td>
-<td id=az>
- <form id=search action="$self" method=get target=bframe>
-  <input type=hidden name=cap value="Song search: %s">
- <input type=hidden name=cmd value=alllist>
-   <input type=text size=5 name=title style="$searchformstyle">
- </form>
-</td>
--->
 
 <!--
 <td id=az>Play:</td>
@@ -211,16 +193,16 @@ $editlistopts
 -->
 
  <td id=az>&nbsp;&nbsp;
-   <a id=a href="$self?cmd=shuffle">Shuffle</a>
+   <a id=az href="$self?cmd=shuffle">Shuffle</a>
  </td>
  <td id=az>&nbsp;&nbsp;
-   <a id=a href="$self?cmd=recent&days=7" target=bframe>Recent</a>
+   <a id=az href="$self?cmd=recent&days=7" target=bframe>Recent</a>
  </td>
  <td id=az>&nbsp;&nbsp;
-   <a id=a target=_blank href="$self?cmd=maint">*</a>
+   <a id=az target=_blank href="$self?cmd=maint">*</a>
  </td>
- <td id=az>&nbsp;&nbsp;
-   <a id=a target=bframe href="$self?cmd=sql">SQL</a>
+ <td id=az width=100%>&nbsp;&nbsp;
+   <a id=az target=bframe href="$self?cmd=sql">SQL</a>
  </td>
 
 </tr></table>
