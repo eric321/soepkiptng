@@ -6,6 +6,7 @@ use Apache::Session::MySQL ();
 use Apache ();
 
 use CGI (); CGI->compile(':all');
+use IO::Socket ();
 use Socket ();
 
 $configfile = "/etc/soepkiptng.conf";
