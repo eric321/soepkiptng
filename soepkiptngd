@@ -172,6 +172,19 @@ for(;;) {
 		die "$0: $!\n";
 	}
 
+	if($jingledir && opendir JINGLEDIR, $jingledir) {
+		foreach(readdir JINGLEDIR) {
+			next if /^\./;
+			warn "playing jingle $jingledir/$_\n";
+			start_play("$jingledir/$_");
+			kill 'HUP', $cdrplaypid;
+			while($pid) { select undef, undef, undef, 0.1; }
+			unlink "$jingledir/$_"
+				or warn "unlink $jingledir/$_: $!\n";
+		}
+		close JINGLEDIR;
+	}
+
 	# get queued song
 	$dbh->do("LOCK TABLES queue WRITE, songs READ");
 	($song_id, $song_order, $filename) = $dbh->selectrow_array(
@@ -262,27 +275,7 @@ EOF
 		($a, $b, $c, $d) = times;
 		$childtime = $c + $d;
 	}
-	if(($pid = fork) == 0) {
-		# damn! a race condition occurs: the program can terminate and
-		# SIGCHLD be delivered to the parent _before_ $pid was set!
-		# maybe a little wait helps...
-		select undef, undef, undef, 0.3;
-
-		$SIG{'PIPE'} = 'DEFAULT';
-		setpgrp;
-		if($ext eq "mp2" || $ext eq "mp3") {
-			exec "mp3toraw", $filename;
-		} elsif($ext eq "ogg") {
-			exec "ogg2raw", $filename;
-		} elsif($ext eq "wav") {
-			exec "wav2raw", $filename;
-		} elsif($ext eq "pac") {
-			exec "lpac2raw", $filename;
-		} else {
-			warn "no player for .$ext files.\n";
-		}
-		die "exec failed";
-	}
+	start_play($filename);
 	warn "pid=$pid\n";
 
 	# wait until player is done or we get a connect on $killsock
@@ -341,3 +334,29 @@ sub logprintf($@) {
 		warn "cannot open logfile $logfile: $!\n";
 	}
 }
+
+sub start_play($) {
+	my ($filename) = @_;
+	if(($pid = fork) == 0) {
+		# damn! a race condition occurs: the program can terminate and
+		# SIGCHLD be delivered to the parent _before_ $pid was set!
+		# maybe a little wait helps...
+		select undef, undef, undef, 0.3;
+
+		$SIG{'PIPE'} = 'DEFAULT';
+		setpgrp;
+		if($ext eq "mp2" || $ext eq "mp3") {
+			exec "mp3toraw", $filename;
+		} elsif($ext eq "ogg") {
+			exec "ogg2raw", $filename;
+		} elsif($ext eq "wav") {
+			exec "wav2raw", $filename;
+		} elsif($ext eq "pac") {
+			exec "lpac2raw", $filename;
+		} else {
+			warn "no player for .$ext files.\n";
+		}
+		die "exec failed";
+	}
+}
+
