@@ -156,6 +156,7 @@ if($opt_r) {
 }
 
 $SIG{'PIPE'} = 'IGNORE';
+srand;
 
 for(;;) {
 	my ($song_id, $songtype, $filename);
@@ -212,7 +213,20 @@ for(;;) {
 	}
 	$dbh->do("UNLOCK TABLES");
 
-	#  if nothing in queue, get random song
+	#  if nothing in queue, get recent random song
+	if(!$song_id && rand() < $recent_prob) {
+		$songtype = 'r';
+		my $maxage = $recent_age * 86400;
+		($song_id, $filename) = $dbh->selectrow_array(
+			"SELECT id,filename FROM song WHERE present AND " .
+			"unix_timestamp(now()) - unix_timestamp(time_added) < $maxage AND " .
+			"unix_timestamp(now()) - unix_timestamp(last_played) > $min_random_time " .
+			"ORDER BY rand() LIMIT 1"
+		);
+		warn "get recent song: song_id='$song_id'\n";
+	}
+
+	#  if no recent song found, get normal random song
 	if(!$song_id) {
 		$songtype = 'R';
 		my $min = $min_random_time;

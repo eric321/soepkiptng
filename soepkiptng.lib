@@ -149,8 +149,8 @@ sub get_id($$$) {
 sub get_playlist_contents($$) {
 	my ($dbh, $list) = @_;
 	my %songids;
-	my %artistids, %albumsids, %listids;
-	my %artistids_done, %albumsids_done, %listids_done;
+	my (%artistids, %albumsids, %listids);
+	my (%artistids_done, %albumsids_done, %listids_done);
 
 	my $sth_list = $dbh->prepare("SELECT type,entity_id" .
 		" FROM list_contents WHERE list_id=?");
