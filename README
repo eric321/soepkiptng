@@ -56,6 +56,8 @@ Installation:
 * cp soepkiptng.conf /etc
   (or edit all scripts if you want a different location)
 * edit /etc/soepkiptng.conf
+* make the directory /var/local/soepkiptng and make sure
+  it's writable for the user that will run soepkiptngd
 * Add something like the following to /etc/apache/httpd.conf:
 
   Alias /soepkiptng /usr/local/soepkiptng/web

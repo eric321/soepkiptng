@@ -187,13 +187,20 @@ for(;;) {
 
 	# get queued song
 	$dbh->do("LOCK TABLES queue WRITE, song READ");
-	($song_id, $song_order, $filename) = $dbh->selectrow_array(
-		"SELECT queue.song_id,queue.song_order,song.filename" .
-		" FROM queue,song" .
-		" WHERE queue.song_id=song.id AND song.present" .
-		" ORDER BY queue.song_order" .
-		" LIMIT 1"
-	);
+	for(;;) {
+		my $pres;
+		($song_id, $song_order, $filename, $pres) = $dbh->selectrow_array(
+			"SELECT queue.song_id,queue.song_order,song.filename,song.present" .
+			" FROM queue,song" .
+			" WHERE queue.song_id=song.id" .
+			" ORDER BY queue.song_order" .
+			" LIMIT 1"
+		);
+		last if !$song_id || $pres;
+		warn "deleting non-present song $song_id ($filename)\n";
+		$dbh->do("DELETE FROM queue WHERE song_id = $song_id");
+	}
+		
 
 	if($song_id) {
 		$songtype = 'Q';
