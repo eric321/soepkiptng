@@ -51,7 +51,7 @@ CREATE TABLE queue (
 
 CREATE TABLE seealso (
   id1 int NOT NULL,
-  id2 int NOT NULL,
+  id2 int NOT NULL
 );
 
 CREATE TABLE sets (
