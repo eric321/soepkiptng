@@ -950,30 +950,10 @@ sub get_user($) {return '';
 	return $user;
 }
 
-sub handle_request() {
+sub handle_request($) {
+	my ($dbh) = @_;
 	my $pathinfo = $cgiquery->path_info();
-	#if($pathinfo =~ s|^/*([.\d]+)/([^/]*)||) {
-	#	$sessionid = $1;
-	#	$cmd = $2;
-	##	$bla = "ja,$pathinfo,$sessionid,$cmd";
-	#} else {
-	#	$sessionid = sprintf "%d.%d.%d", $$, time, rand 1e9;
-	##	$bla = "nee,$pathinfo,$sessionid,$cmd";
-	#
-	#	# remove expired entries (>= 1 week old) from session hash
-	#	my $threshold = time - 7 * 86400;
-	#	foreach(keys %sessiontime) {
-	#		if($_ < $threshold) {
-	#			delete $sessiontime{$_};
-	#			delete $sessiondata{$_};
-	#		}
-	#	}
-	#}
-	#$sessiontime{$sessionid} = time;
-	#$bla = "s=$sessiondata{$sessionid},\$\$=$$";
-	#$self = $cgiquery->script_name() . "/$sessionid/";
-#	$self = $cgiquery->script_name();
-#	warn "\$self=$self\n";
+
 	$self = "/";
 	my %args;
 	foreach($cgiquery->param) {
@@ -987,13 +967,7 @@ sub handle_request() {
 		exit 0;
 	};
 	
-	my $dbh = DBI->connect("DBI:mysql:$conf{db_name}:$conf{db_host}",$conf{db_user},$conf{db_pass}, {mysql_client_found_rows =>1 })
-		or die "can't connect to database...$!\n";
-	
-#	my $r = Apache->request;
-#	$r->no_cache(1);
 	my $r = "";
-	
 	my $cmd = $args{cmd};
 	my $rt = $conf{refreshtime};
 	
@@ -1443,13 +1417,10 @@ EOF
 		printhtmlhdr;
 		print "oei: $cmd\n";
 	}
-	
-	untie %session;
-	$dbh->disconnect();
 }
 
 sub run_instance() {
-	$dbh = DBI->connect("DBI:$conf{db_type}:$conf{db_name}:$conf{db_host}",
+	my $dbh = DBI->connect("DBI:$conf{db_type}:$conf{db_name}:$conf{db_host}",
 	        $conf{db_user}, $conf{db_pass}) or die "can't connect to database";
 
 	my $lifetime = $opt_l || $conf{httpd_lifetime} || 100;
@@ -1467,7 +1438,7 @@ sub run_instance() {
 		}
 		$cgiquery = new CGI($content);
 		open STDOUT, ">&=" . $conn->fileno;
-		handle_request();
+		handle_request($dbh);
 		close STDOUT;
 		$conn = undef;
 	}
