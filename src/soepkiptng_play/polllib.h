@@ -9,7 +9,7 @@
 
 
 /* register file descriptor handler */
-int register_fd(int fd, short events,
+int register_fd(int fd,
 	void (*callback_pre)(int fd, long cookie),
 	void (*callback_post)(int fd, short events, long cookie),
 	long cookie);

@@ -18,7 +18,7 @@ int fd_alloc;
 struct pollfd *pollfds;
 struct fd_info *fd_infos;
 
-int register_fd(int fd, short events,
+int register_fd(int fd,
 	void (*callback_pre)(int fd, long cookie),
 	void (*callback_post)(int fd, short events, long cookie),
 	long cookie)
@@ -42,7 +42,8 @@ int register_fd(int fd, short events,
 	}
 
 	pollfds[fd_num].fd = fd;
-	pollfds[fd_num].events = events;
+	pollfds[fd_num].events = 0;
+	pollfds[fd_num].revents = 0;
 	fd_infos[fd_num].callback_pre = callback_pre;
 	fd_infos[fd_num].callback_post = callback_post;
 	fd_infos[fd_num].cookie = cookie;
@@ -63,6 +64,11 @@ int unregister_fd(int fd)
 				fd_infos[i] = fd_infos[fd_num - 1];
 			}
 			fd_num--;
+
+			// just in case we're in a pre/post for loop
+			pollfds[fd_num].events = 0;
+			pollfds[fd_num].revents = 0;
+
 			return 0;
 		}
 	}
@@ -110,16 +116,20 @@ int mainloop()
 {
 	int i, num;
 
+	signal(SIGPIPE, SIG_IGN);
+
 	for(;;) {
 		for(i = 0; i < fd_num; i++) {
-			fd_infos[i].callback_pre(pollfds[i].fd, fd_infos[i].cookie);
+			if(fd_infos[i].callback_pre) {
+				fd_infos[i].callback_pre(pollfds[i].fd, fd_infos[i].cookie);
+			}
 		}
 		
 		num = poll(pollfds, fd_num, 1000);
 		if(num == 0) DEBUG("poll: 0\n");
 
 		for(i = 0; i < fd_num; i++) {
-			if(pollfds[i].revents) {
+			if(pollfds[i].revents && fd_infos[i].callback_post) {
 				fd_infos[i].callback_post(pollfds[i].fd, pollfds[i].revents, fd_infos[i].cookie);
 			}
 		}

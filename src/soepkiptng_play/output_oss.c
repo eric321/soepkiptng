@@ -67,7 +67,7 @@ static void output_oss_post(int fd, short events, long cookie)
 	DDEBUG("output_oss_post: start=%6d, writing %d bytes\n", buffer_start, l);
 
 	if((l = write(fd, buffer + buffer_start, l)) == -1) {
-		if(errno == EINTR) return;
+		if(errno == EINTR || errno == EAGAIN) return;
 		perror("write");
 		exit(1);
 	}
@@ -128,9 +128,11 @@ int output_oss_start()
 		fprintf(stderr, "warning: sound ioctls failed\n");
 	}
 	
+	fcntl(oss_fd, F_SETFL, O_NONBLOCK);
+	
 	oss_do_init = 1;
 	
-	return register_fd(oss_fd, 0, output_oss_pre, output_oss_post, 0);
+	return register_fd(oss_fd, output_oss_pre, output_oss_post, 0);
 }
 
 void output_oss_stop()

@@ -7,6 +7,7 @@
 
 #include "polllib.h"
 #include "buffer.h"
+#include "input.h"
 
 #define BLKSIZE 4096
 
@@ -29,7 +30,7 @@ static void input_post(int fd, short events, long cookie)
 	if(l > buffer_size - dst) l = buffer_size - dst;
 
 	if((l = read(fd, buffer + dst, l)) == -1) {
-		if(errno == EINTR) return;
+		if(errno == EINTR || errno == EAGAIN) return;
 		perror("read");
 		exit(1);
 	}
@@ -45,7 +46,9 @@ static void input_post(int fd, short events, long cookie)
 
 void input_start()
 {
-	if(register_fd(0, 0, input_pre, input_post, 0) < 0) {
+	fcntl(0, F_SETFL, O_NONBLOCK);
+
+	if(register_fd(0, input_pre, input_post, 0) < 0) {
 		exit(1);
 	}
 }

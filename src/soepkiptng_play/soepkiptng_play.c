@@ -10,6 +10,7 @@
 #include "input.h"
 #include "output_oss.h"
 #include "signals.h"
+#include "socket.h"
 
 void usage(FILE *f)
 {
@@ -42,10 +43,10 @@ int playing = 1;
 
 int main(int argc, char **argv)
 {
-	int c;
+	int c, port = 2222;
 	char *dev = "/dev/dsp";
 	
-	while((c = getopt(argc, argv, "+b:dhD:")) != EOF) {
+	while((c = getopt(argc, argv, "+b:dhp:D:")) != EOF) {
 		switch(c) {
 			case 'b':
 				buffer_size = atoi(optarg) * 1024;
@@ -60,6 +61,9 @@ int main(int argc, char **argv)
 			case 'h':
 				usage(stdout);
 				exit(0);
+			case 'p':
+				port = atoi(optarg);
+				break;
 			case 'D':
 				dev = optarg;
 				break;
@@ -78,6 +82,7 @@ int main(int argc, char **argv)
 	input_start();
 	output_oss_init("/dev/dsp");
 	signals_init();
+	socket_init(port);
 
 	output_oss_start();
 	mainloop();
