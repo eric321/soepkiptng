@@ -26,11 +26,17 @@ static void sigusr2(int s)
 	}
 }
 
+static void sigalarm(int s)
+{
+   byte_counter_resetcountdown = buffer_size;
+}
+
 
 void signals_init()
 {
 	register_signal(SIGUSR1, sigusr1);
 	register_signal(SIGUSR2, sigusr2);
+	register_signal(SIGALRM, sigalarm);
 	register_signal(SIGHUP, sighup);
 }
 

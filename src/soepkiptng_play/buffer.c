@@ -9,6 +9,9 @@ int buffer_size;
 int buffer_start;
 int buffer_length;
 
+int byte_counter;
+int byte_counter_resetcountdown;
+
 void buffer_init()
 {
 	buffer_size = 500 * 1024;

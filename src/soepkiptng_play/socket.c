@@ -106,7 +106,10 @@ static void handle_cmd(int fd, struct socket_t *p, char *s)
 	}
 
 	else if(strcasecmp(cmd, "status") == 0) {
-		sockprintf(p, "+running=%d\n", output_oss_running());
+		sockprintf(p, "+running=%d time=%d.%02d\n",
+		   output_oss_running(),
+		   byte_counter / 44100 / 4,
+		   (byte_counter * 100 / 44100 / 4) % 100);
 	}
 
 	else {
