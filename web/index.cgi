@@ -267,7 +267,7 @@ sub albumlist_entry($) {
 
 sub print_playlist_table($) {
 	my ($dbh) = @_;
-	my ($nowplaying, $nowfile, $nowuser);
+	my ($nowplaying, $nowfile, $nowtype, $nowuser);
 	my $killline;
 
 	$query =  "SELECT title,artist.name as artist,album.name as album," .
@@ -304,30 +304,41 @@ EOF
 	if(open F, $statusfile) {
 		chop($nowplaying = <F>);
 		chop($nowfile = <F>);
-		<F>; <F>; <F>; <F>; <F>;
+		<F>; <F>; <F>; <F>;
+		chop($nowtype = <F>);
 		chop($nowuser = <F>);
 		close F;
 	}
 
 	if($nowplaying) {
-		my $query =  "SELECT title,artist.name as artist,album.name as album," .
-			"song.id as id,track,length,encoding," .
-			"song.artist_id as arid,song.album_id as alid" .
-			" FROM song,artist,album" .
-			" WHERE song.artist_id=artist.id AND song.album_id=album.id" .
-			" AND song.id = $nowplaying";
-		my $sth = $dbh->prepare($query);
-		my $rv = $sth->execute;
-		$_ = $sth->fetchrow_hashref or do {
-			$nowfile =~ m|(.*/)?(.*)|;
-			$_->{artist} = 'ERROR: Not in database';
-			$_->{album} = $1;
-			$_->{title} = $2;
-			$_->{id} = $nowplaying;
+		if($nowtype eq 'J') {
+			$_->{artist} = '** Jingle **';
+			$_->{album} = '';
+			($_->{title} = $nowfile) =~ s|.*/||;
+			$_->{id} = -1;
 			$_->{track} = '';
 			$_->{length} = 0;
 			$_->{encoding} = '?';
-		};
+		} else {
+			my $query =  "SELECT title,artist.name as artist,album.name as album," .
+				"song.id as id,track,length,encoding," .
+				"song.artist_id as arid,song.album_id as alid" .
+				" FROM song,artist,album" .
+				" WHERE song.artist_id=artist.id AND song.album_id=album.id" .
+				" AND song.id = $nowplaying";
+			my $sth = $dbh->prepare($query);
+			my $rv = $sth->execute;
+			$_ = $sth->fetchrow_hashref or do {
+				$nowfile =~ m|(.*/)?(.*)|;
+				$_->{artist} = 'ERROR: Not in database';
+				$_->{album} = $1;
+				$_->{title} = $2;
+				$_->{id} = $nowplaying;
+				$_->{track} = '';
+				$_->{length} = 0;
+				$_->{encoding} = '?';
+			};
+		}
 		unshift @ids, $_->{id};
 		$killline = table_entry($_,
 			sprintf(qq|<a id=a href="%s?cmd=kill&id=%s">%s</a>|,
