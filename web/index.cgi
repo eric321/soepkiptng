@@ -162,7 +162,6 @@ EOF
 </td>
 <td id=az nowrap>
   <select name=stype style="$conf{searchformstyle}" onChange="form.submit()">
-   <option value="">
    <option value=any>Any
    <option value=artist>Artist
    <option value=title>Title
