@@ -2,15 +2,35 @@
                   Soepkip The Next Generation
      ----------------------------------------------------
              by Eric Lammerts <eric@lammerts.org>
-              http://www.lammerts.org/software/
+
+
+Download:
+---------
+A daily cvs snapshot .tar.gz is available from
+http://www.lammerts.org/software/soepkiptng/.
+
+Direct (read-only) cvs access is also possible. Set your CVSROOT to
+:pserver:anonymous@lammerts.org:/var/local/cvs, do "cvs login"
+(empty password) and "cvs checkout soepkiptng".
 
 
 Features:
 ---------
-* mp3 (+id3/id3v2), wav, lpac, flac & Ogg-Vorbis support.
-* (My)SQL database with songs.
-* nice web interface
+* supports mp3 (+id3/id3v2), wav, lpac, flac & Ogg-Vorbis audio files.
+* player uses real-time scheduling and memory locking for uninterrupted music
+  playback; zero silence period between two songs (very nice for consecutive
+  songs of a live cd).
+* song information is kept in a MySQL database.
+* plays from request queue; plays random songs if nothing is on the request
+  queue
+* versatile web interface:
+  + supports browsing, searching, requesting songs,
+    killing current song, editing song information etc.
+  + very fast (thanks to mod_perl)
+  + configurable look (CSS style)
+  + tested with Netscape, Mozilla, Konqueror, Opera & MSIE.
 * commandline interface
+
 
 Requirements: (you can get things with (*) from my homepage)
 -------------
@@ -94,6 +114,7 @@ Installation:
 TODO:
 -----
 * improve docs
+* put support programs (the ones marked with (*)) in soepkiptng tree
 * make music format more modular; maybe support xmms plugins
 * silence before random songs
 * fade-out/fade-in in pause/resume
