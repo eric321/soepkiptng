@@ -1,0 +1,11 @@
+
+use soepkiptng;
+
+drop table if exists lyrics;
+
+CREATE TABLE lyrics (
+  id int(11) NOT NULL,
+  lyrics mediumblob,
+  source blob,
+  PRIMARY KEY (id)
+);

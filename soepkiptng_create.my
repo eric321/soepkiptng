@@ -82,3 +82,10 @@ CREATE TABLE sessions (
   id char(32) not null primary key,
   a_session text
 );
+
+CREATE TABLE lyrics (
+  id int(11) NOT NULL,
+  lyrics mediumblob,
+  source blob,
+  PRIMARY KEY (id)
+);
