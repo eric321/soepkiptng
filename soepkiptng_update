@@ -202,6 +202,11 @@ while(<FILES>) {
 		extract_artist_title($_, %info);
 	}
 
+	if(!$info{track} && m~(^|/)(\d\d+)[^/]+$~) {
+		$info{track} = $2;
+		warn " (taking track ($2) from filename)\n";
+	}
+
 	printf <<EOF,
    Info from: %s
    Artist:    %s
