@@ -131,7 +131,7 @@ sub run_instance() {
 		my $content;
 		if($r->method eq "GET") {
 			$r->uri =~ /\?(.*)/ and $content = $1;
-			if($r->uri =~ m|^/(\w+\.gif)$|) {
+			if($r->uri =~ m~^/(\w+\.(gif|ico))$~) {
 				send_file($conn, "$progdir/web/$1", "image/gif");
 				$conn->close;
 				next;
