@@ -35,7 +35,7 @@ use Sys::Hostname;
 use integer;
 use strict;
 use vars qw(%conf $dbh $restart $opt_d $opt_r $opt_s $opt_c $cdrplaypid
-	$pid_status $pid_signal $pid @preload);
+	$pid_status $pid_signal $pid @preload $paused);
 
 # find program directory
 $_ = $0;
@@ -86,6 +86,11 @@ sub child_reaper {
 			$pid_status = $? >> 8;
 			$pid_signal = $? & 0x7f;
 			warn "player finished ($p)\n";
+			if($paused) {
+				warn "resuming output\n";
+				player_cmd("resume") or warn "error resuming output\n";
+				$paused = 0;
+			}
 		}
 	}
 };
@@ -267,7 +272,6 @@ sub playshoutcast($) {
 	my ($file) = @_;
 	my $starttime;
 	my $errors = 0;
-
 	# append trailing slash if necessary
 	# (mpg123 gets confused if it's missing)
 	$file =~ m|^http:/+[^/]+/| or $file .= "/";
@@ -292,8 +296,14 @@ sub playshoutcast($) {
 	}
 }
 
-sub start_play($) {
-	my ($filename) = @_;
+sub player_pause() {
+	warn "pausing output\n";
+	player_cmd("waitbufferempty", "pause") or warn "error pausing output\n";
+	$paused = 1;
+}
+
+sub exec_prog(;@) {
+	my (@prog) = @_;
 
 	if(($pid = fork) == 0) {
 		# get our own program group so our parent can kill us easily
@@ -302,38 +312,53 @@ sub start_play($) {
 		# restore broken pipe behavior
 		$SIG{'PIPE'} = 'DEFAULT';
 
-		# get file type
-		$filename =~ /([^.]*)$/;
-		my $ext = lc($1);
-
-		if($filename =~ /^http:/) {
-			playshoutcast($filename);
-		} elsif($filename =~ /^cdda:[^:]*:(\d+)/) {
-			exec "$conf{cdda_prog} $1";
-		} elsif($ext eq "mp2" || $ext eq "mp3") {
-			exec "mp3toraw", $filename;
-		} elsif($ext eq "ogg") {
-			exec "ogg2raw", $filename;
-		} elsif($ext =~ /^(mid|rcp|r36|g18|g36|mod)$/) {
-			exec "midi2raw", $filename;
-		} elsif($ext eq "wav") {
-			exec "wav2raw", $filename;
-		} elsif($ext eq "pac") {
-			exec "lpac2raw", $filename;
-		} elsif($ext eq "raw") {
-			exec "cat", $filename;
-		} elsif($ext eq "flac") {
-			exec qw/flac -sdc --endian=little --sign=signed/,
-				qw/--force-raw-format/, $filename;
-			#exec "flac", "-d", "-fl", $filename, "-";
-		} elsif($ext =~ /^(mpe?g|avi|asx|asf|vob|wmv|rm)$/) {
-			exec "soepkiptng_video", $filename;
-		} elsif($ext eq "ac3") {
-			exec "soepkiptng_ac3", $filename;
-		} else {
-			die "no player for .$ext files.\n";
+		if(@prog > 0) {
+			exec @prog;
+			die "exec $prog[0] failed: $!\n";
 		}
-		die "exec failed";
+	}
+}
+
+sub start_play($) {
+	my ($filename) = @_;
+
+	# get file type
+	$filename =~ /([^.]*)$/;
+	my $ext = lc($1);
+
+	if($filename =~ /^http:/) {
+		exec_prog();
+		$pid == 0 and playshoutcast($filename);
+	} elsif($filename =~ /^cdda:[^:]*:(\d+)/) {
+		exec_prog "$conf{cdda_prog} $1";
+	} elsif($ext eq "mp2" || $ext eq "mp3") {
+		exec_prog "mp3toraw", $filename;
+	} elsif($ext eq "ogg") {
+		#this does not handle mono->stereo, resampling:
+		#exec_prog qw/oggdec -Q -b16 -e0 -R1 -s1 -o-/, $filename;
+		exec_prog "ogg2raw", $filename;
+	} elsif($ext =~ /^(mid|rcp|r36|g18|g36|mod)$/) {
+		exec_prog "midi2raw", $filename;
+	} elsif($ext eq "wav") {
+		exec_prog "wav2raw", $filename;
+	} elsif($ext eq "pac") {
+		exec_prog "lpac2raw", $filename;
+	} elsif($ext eq "raw") {
+		exec_prog "cat", $filename;
+	} elsif($ext eq "flac") {
+		exec_prog qw/flac -sdc --endian=little --sign=signed/,
+			qw/--force-raw-format/, $filename;
+		#exec_prog "flac", "-d", "-fl", $filename, "-";
+	} elsif($ext eq "shn") {
+		exec_prog qw/shntool cat -nr -nh/, $filename;
+	} elsif($ext =~ /^(mpe?g|avi|asx|asf|vob|wmv|rm)$/) {
+		player_pause();
+		exec_prog "mp", "-m", $filename;
+	} elsif($ext eq "ac3") {
+		player_pause();
+		exec_prog "a52dec", "-o", "oss6", $filename;
+	} else {
+		warn "no player for .$ext files.\n";
 	}
 }
 

@@ -242,17 +242,18 @@ sub kill_song_internal($$) {
 	return @status;
 }
 
-sub pause(;$) {
-	my $cmd = $_[0] || "pausetoggle";
+sub player_cmd(;@) {
+	my $res = 1;
 
 	my $sock = IO::Socket::INET->new('localhost:2222') or return undef;
 	$sock->autoflush(1);
 	$response = <$sock>;	#greeting
-	$sock->print("$cmd\n");
-	$response = <$sock>;
+	foreach(@_) {
+		$sock->print("$_\n");
+		$res = 0 if <$sock> !~ /^\+/;
+	}
 	$sock->close;
-
-	return $response =~ /^\+/;
+	return $res;
 }
 
 

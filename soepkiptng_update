@@ -51,6 +51,7 @@ sub getinfo_mid($\%);
 sub getinfo_wav($\%);
 sub getinfo_pac($\%);
 sub getinfo_flac($\%);
+sub getinfo_shorten($\%);
 sub getinfo_raw($\%);
 sub getinfo_video($\%);
 sub getinfo_ac3($\%);
@@ -152,6 +153,7 @@ while(<FILES>) {
 	getinfo_wav($_, %info) ||
 	getinfo_pac($_, %info) ||
 	getinfo_flac($_, %info) ||
+	getinfo_shorten($_, %info) ||
 	getinfo_video($_, %info) ||
 	getinfo_ac3($_, %info) ||
 	getinfo_raw($_, %info);
@@ -489,6 +491,19 @@ sub getinfo_flac($\%) {
 
 	$info->{len} = $totsamp / $info->{freq};
 	$info->{info_origin} = "flac" if $info->{artist} && $info->{title};
+	return 1;
+}
+
+sub getinfo_shorten($\%) {
+	my ($file, $info) = @_;
+
+	$file =~ /\.shn$/i
+		or return undef;
+
+	$info->{encoding} = "Shorten";
+	$info->{len} = 0;
+	$info->{freq} = 44100;
+	$info->{chan} = 2;
 	return 1;
 }
 
