@@ -314,7 +314,7 @@ sub print_playlist_table($) {
 				$_->{id} = $nowplaying;
 				$_->{track} = '';
 				$_->{length} = 0;
-				$_->{encoding} = '?';
+				$_->{encoding} = "id=$nowplaying";
 			}
 		}
 		$killline = table_entry($_,
@@ -675,34 +675,45 @@ EOF
 sub print_shoutcast_page($$) {
 	my ($dbh, $args) = @_;
 
-	if($args->{url}) {
+	$args->{name} =~ s/^\s+|\s+$//g;
+	$args->{url} =~ s/^\s+|\s+$//g;
+	foreach(keys %$args) {
+		if(/^delete_(\d+)$/) {
+			$dbh->do("DELETE FROM song WHERE id=?", undef, $1)
+				or die "can't do sql command: " . $dbh->errstr;
+		}
+	}
+	if($args->{editid} && $args->{url}) {
+		if($args->{action_clear_name}) { $args->{name} = ""; }
+		$dbh->do("UPDATE song SET title=?,filename=? WHERE id=?",
+			undef, $args->{name}, $args->{url}, $args->{editid})
+			or die "can't do sql command: " . $dbh->errstr;
+	} elsif($args->{url}) {
 		my $arid = get_id($dbh, "artist", '') or die;
 		my $alid = get_id($dbh, "album", '') or die;
 		$dbh->do("REPLACE INTO song SET title=?, filename=?, album_id=?, " .
 			"artist_id=?, present=1, encoding=\"Shoutcast\", track=0, " .
 			"length=0", undef,
 			$args->{name}, $args->{url}, $alid, $arid) or die;
-	} elsif($args->{delid}) {
-		$dbh->do("DELETE FROM song WHERE id=?", undef, $args->{delid})
-			or die sprintf "Id %d not found\n", $args->{delid};
 	}
 
 	printf <<EOF,
 <center id=hdr>Shoutcast Radio Channels</center>
 <table border=0 cellspacing=0>
  <tr>
-  <th %s>&nbsp;&nbsp;</th>
+  <th %s>&nbsp;<a href="%s?cmd=shoutcast">Refresh</a>&nbsp;</th>
   <th %s>&nbsp;Name&nbsp;</th>
   <th %s>&nbsp;URL&nbsp;</th>
-  <th %s>&nbsp;</th>
  </tr>
  <tr><td colspan=7></td></tr>
 EOF
-		$th_left, $th_artist, $th_album, $th_track;
+		$th_left, $self, $th_artist, $th_album;
 
 	my $sth = $dbh->prepare("SELECT id,filename,title FROM song WHERE " .
 		"filename LIKE \"http:%\" ORDER BY title");
 	$sth->execute;
+
+	my ($editurl, $editname);
 	while($_ = $sth->fetchrow_hashref) {
 		my $ref = sprintf(qq|<a id=a href="%s?cmd=add&ids=%d" target=tframe>|,
 			$self, $_->{id});
@@ -711,34 +722,46 @@ EOF
   <td %s>&nbsp;%s&nbsp;</td>
   <td %s>&nbsp;%s</a>&nbsp;</td>
   <td %s>&nbsp;%s</a>&nbsp;</td>
-  <td %s>&nbsp;<a id=a href="%s?cmd=shoutcast&delid=%d" target=bframe>%s</a>&nbsp;</td>
+  <td %s>&nbsp;<a id=a href="%s?cmd=shoutcast&editid=%d" target=bframe>%s</a>&nbsp;</td>
  </tr>
 EOF
 		$td_left, "$ref$addtext</a>",
 		$td_artist, $_->{title},
 		$td_album, $_->{filename},
-		$td_track, $self, $_->{id}, $deltext;
+		$td_track, $self, $_->{id}, '*';
+
+		if($_->{id} == $args->{editid}) {
+			$editurl = $_->{filename};
+			$editname = $_->{title};
+		}
 	}
 
-	print <<EOF;
+	printf <<EOF,
 </table>
-EOF
-
-	print <<EOF;
 <br>
 <hr>
-Add server:
-<form action="$self" method=get>
+%s server:
+<form action="%s" method=get>
  <input type=hidden name=cmd value=shoutcast>
+ <input type=hidden name=editid value=%d>
  <table>
- <tr><td>URL:</td><td><input type=text size=50 name=url value=""></td></tr>
- <tr><td>Description:</td><td><input type=text size=50 name=name></td></tr>
+ <tr><td>URL:</td><td><input type=text size=60 name=url value="%s"></td></tr>
+ <tr><td>Description:</td><td><input type=text size=60 name=name value="%s">
+         <input type=submit name=action_clear_name value="Clear"></td></tr>
  <td><td></td></tr>
- <tr><td colspan=2><input type=submit value="Add"></td></tr>
+ <tr><td colspan=2><input type=submit value="%s">%s</td></tr>
  </table>
 </form>
 <br>
 EOF
+	$args->{editid}? "Edit" : "Add",
+	$self, $args->{editid},
+	enchtml($editurl || ""),
+	enchtml($editname || ""),
+	$args->{editid}? "Update" : "Add",
+	$args->{editid}?
+		sprintf(qq|&nbsp;<input type=submit name=delete_%d value="Delete">|,
+		$args->{editid}) : "";
 }
 
 sub print_lists($) {
