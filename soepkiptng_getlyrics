@@ -5,6 +5,10 @@ use Cwd 'abs_path';
 use DBI;
 use Getopt::Std;
 
+sub encode($);
+sub getlyrics_purelyrics_com($$$$$);
+sub getlyrics_lyricsdomain_com($$$$$);
+
 # find program directory
 $_ = $0;
 while(-l) {
@@ -21,6 +25,31 @@ getopts('c:');
 read_configfile(\%conf, $opt_c);
 
 
+if(@ARGV == 0) {
+	open F, $conf{statusfile}
+		or die "$conf{statusfile}: $!\n";
+	chop($nowplaying = <F>);
+	chop ((undef, undef, undef, undef, undef, undef, undef, $artist, $title, $album, $track) = <F>);
+	close F;
+} else {
+	($artist, $album, $title) = @ARGV;
+}
+
+my $ua = new LWP::UserAgent;
+$ua->agent('Mozilla/4.77 [en] (X11; I; Linux 2.4.19 i686)');
+
+my $from;
+my $lyrics =
+	getlyrics_purelyrics_com($ua, $artist, $album, $title, \$from) ||
+	getlyrics_lyricsdomain_com($ua, $artist, $album, $title, \$from)
+	or die "no matches\n";
+
+$lyrics =~ s/^\s+|\s+$//g;
+print "$lyrics\n\n[$from]\n";
+
+
+##############################################################################
+
 sub encode($) {
 	my ($a) = @_;
 
@@ -29,45 +58,92 @@ sub encode($) {
 	$a;
 }
 
-open F, $conf{statusfile}
-	or die "$conf{statusfile}: $!\n";
-chop($nowplaying = <F>);
-chop ((undef, undef, undef, undef, undef, undef, undef, $artist, $title, $album, $track) = <F>);
-close F;
+sub getlyrics_purelyrics_com($$$$$) {
+	my ($ua, $artist, $album, $title, $from) = @_;
 
-my $ua = new LWP::UserAgent;
-$ua->agent('Mozilla/4.77 [en] (X11; I; Linux 2.4.19 i686)');
+	my $baseurl = "http://www.purelyrics.com/index.php";
 
-$baseurl = "http://www.purelyrics.com/index.php";
+	my $url = "$baseurl?search_advsubmit2=Search";
+	$url .= "&search_artist=" . encode(lc $artist);
+	$url .= "&search_album=" . encode(lc $album);
+	$url .= "&search_title=" . encode(lc $title);
 
-$url = "$baseurl?search_advsubmit2=Search";
-$url .= "&search_artist=" . encode($artist);
-$url .= "&search_album=" . encode($album);
-$url .= "&search_title=" . encode($title);
+	my $req = HTTP::Request->new(GET => $url);
+	my $res = $ua->request($req);
 
-my $req = HTTP::Request->new(GET => $url);
-my $res = $ua->request($req);
+	$res->code == 200
+		or return undef; #die sprintf "%d %s\n", $res->code, $res->message;
 
-$res->code == 200 or die sprintf "%d %s\n", $res->code, $res->message;
+	$res->content =~ /^(\d+) matches.*<a href="([^"]+)">/m
+		or return undef; #die "no matches\n";
 
-$res->content =~ /^(\d+) matches.*<a href="([^"]+)">/m or die "no matches\n";
-($num, $url) = ($1, $2);
-$num == 1 or die "Not a single match\n";
+	my ($num, $url) = ($1, $2);
+	$num == 1
+		or return undef; #die "Not a single match\n";
 
-$req = HTTP::Request->new(GET => "http://www.purelyrics.com/$url");
-$res = $ua->request($req);
+	$$from = "http://www.purelyrics.com/$url";
+	$req = HTTP::Request->new(GET => $$from);
+	$res = $ua->request($req);
 
-$res->code == 200 or die sprintf "%d %s\n", $res->code, $res->message;
+	$res->code == 200
+		or return undef; #die sprintf "%d %s\n", $res->code, $res->message;
 
-foreach(split /\n+/, $res->content) {
-	s/^\s+|\s+$|\r+//g;
-	if(s/.*<font class="capitalFont">//) {
-		$lyr = 1;
+	my $out;
+	foreach(split /\n+/, $res->content) {
+		s/^\s+|\s+$|\r+//g;
+		if(s/.*<font class="capitalFont">//) {
+			$lyr = 1;
+		}
+		if($lyr) {
+			s|<br />|| or $lyr = 0;
+			s|<[^>]+>||g;
+			s|\s+$||;
+			$out .= "$_\n";
+		}
 	}
-	if($lyr) {
-		s|<br />|| or $lyr = 0;
-		s|<[^>]+>||g;
-		s|\s+$||;
-		print "$_\n";
+	return $out;
+}
+
+sub getlyrics_lyricsdomain_com($$$$$) {
+	my ($ua, $artist, $album, $title, $from) = @_;
+
+	my $url = "http://www.lyricsdomain.com/src.php?action=+++Search+++";
+	$url .= "&artist=" . encode(lc $artist);
+	$url .= "&query=" . encode(lc $title);
+
+	my $req = HTTP::Request->new(GET => $url);
+	my $res = $ua->request($req);
+
+	$res->code == 200
+		or return undef; #die sprintf "%d %s\n", $res->code, $res->message;
+
+	$res->content =~ /Your query generated (\d+) matches.*lyricsdomain\.asp\?cat=(\d+)">/m
+		or return undef; #die "no matches\n";
+
+	my ($num, $lyrnum) = ($1, $2);
+	$num == 1
+		or return undef; #die "Not a single match\n";
+
+	$$from = "http://www.lyricsdomain.com/lyrics/$lyrnum/";
+	$req = HTTP::Request->new(GET => $$from);
+	$res = $ua->request($req);
+
+	$res->code == 200
+		or return undef; #die sprintf "%d %s\n", $res->code, $res->message;
+
+	my $out;
+	foreach(split /\n+/, $res->content) {
+		s/^\s+|\s+$|\r+//g;
+		if(/Send this song to a friend/) {
+			$lyr = 1;
+			next;
+		}
+		if($lyr) {
+			last if m|</pre>|;
+			s|<[^>]+>||g;
+			s|\s+$||;
+			$out .= "$_\n";
+		}
 	}
+	return $out;
 }
