@@ -1,0 +1,73 @@
+#!/usr/bin/perl
+
+use LWP::UserAgent;
+use Cwd 'abs_path';
+use DBI;
+use Getopt::Std;
+
+# find program directory
+$_ = $0;
+while(-l) {
+	my $l = readlink or die "readlink $_: $!\n";
+	if($l =~ m|^/|) { $_ = $l; } else { s|[^/]*$|/$l|; }
+}
+m|(.*)/|;
+my $progdir = abs_path($1);
+
+require "$progdir/soepkiptng.lib";
+
+getopts('c:');
+
+read_configfile(\%conf, $opt_c);
+
+
+sub encode($) {
+	my ($a) = @_;
+
+	$a =~ s|([^- ./\w])|sprintf "%%%02x", ord($1)|ge;
+	$a =~ s| |+|g;
+	$a;
+}
+
+open F, $conf{statusfile}
+	or die "$conf{statusfile}: $!\n";
+chop($nowplaying = <F>);
+chop ((undef, undef, undef, undef, undef, undef, undef, $artist, $title, $album, $track) = <F>);
+close F;
+
+my $ua = new LWP::UserAgent;
+$ua->agent('Mozilla/4.77 [en] (X11; I; Linux 2.4.19 i686)');
+
+$baseurl = "http://www.purelyrics.com/index.php";
+
+$url = "$baseurl?search_advsubmit2=Search";
+$url .= "&search_artist=" . encode($artist);
+$url .= "&search_album=" . encode($album);
+$url .= "&search_title=" . encode($title);
+
+my $req = HTTP::Request->new(GET => $url);
+my $res = $ua->request($req);
+
+$res->code == 200 or die sprintf "%d %s\n", $res->code, $res->message;
+
+$res->content =~ /^(\d+) matches.*<a href="([^"]+)">/m or die "no matches\n";
+($num, $url) = ($1, $2);
+$num == 1 or die "Not a single match\n";
+
+$req = HTTP::Request->new(GET => "http://www.purelyrics.com/$url");
+$res = $ua->request($req);
+
+$res->code == 200 or die sprintf "%d %s\n", $res->code, $res->message;
+
+foreach(split /\n+/, $res->content) {
+	s/^\s+|\s+$|\r+//g;
+	if(s/.*<font class="capitalFont">//) {
+		$lyr = 1;
+	}
+	if($lyr) {
+		s|<br />|| or $lyr = 0;
+		s|<[^>]+>||g;
+		s|\s+$||;
+		print "$_\n";
+	}
+}
