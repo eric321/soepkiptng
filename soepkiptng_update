@@ -162,9 +162,14 @@ while(<FILES>) {
 	if($info{freq} && ($info{freq} < 44090 || $info{freq} > 44110)) {
 		my $s = sprintf "%f", $info{freq} / 1000;
 		$s =~ s/\.?0+$//;
-		$info{encoding} .= ", ${s}kHz";
+		push @{$info{encoding_extra}}, "${s}kHz";
 	}
-	$info{encoding} .= " mono" if $info{chan} == 1;
+	if($info{chan} == 1) {
+		push @{$info{encoding_extra}}, "mono";
+	}
+	if(@{$info{encoding_extra}}) {
+		$info{encoding} .= sprintf " (%s)", join(", ", @{$info{encoding_extra}});
+	}
 
 	# check "nolocal" setting (only files on NFS are allowed)
 	if($conf{nolocal} && !is_nfs($_)) {
@@ -361,7 +366,9 @@ sub getinfo_mp3($\%) {
 			$info->{freq};
 		$bitrate = int(8 * (-s $file) / $info->{len} / 1000);
 	}
-	$info->{encoding} = sprintf "MP3 %dkb/s%s", $bitrate, $xframes? " (VBR)":"";
+	$info->{encoding} = "MP3";
+	push @{$info->{encoding_extra}}, sprintf("%dkb/s", $bitrate);
+	if($xframes) { push @{$info->{encoding_extra}}, "VBR"; }
 
 	get_id3($file, %$info);
 
@@ -384,7 +391,8 @@ sub getinfo_ogg($\%) {
 	my $infoline = <F>;
 	($info->{freq}, $info->{chan}, $info->{len}, $br) = split(/,/, $infoline);
 	$info->{freq} or return undef;
-	$info->{encoding} = sprintf "Ogg-Vorbis (%dkb/s)", ($br + 500) / 1000;
+	$info->{encoding} = "Ogg-Vorbis";
+	push @{$info->{encoding_extra}}, sprintf("%dkb/s", ($br + 500) / 1000);
 
 	chop(($info->{artist}, $info->{title}, $info->{album},
 	 $info->{track}) = <F>);
@@ -430,7 +438,8 @@ sub getinfo_pac($\%) {
 	close F;
 	$bytes or return undef;
 
-	$info->{encoding} = sprintf "LPAC %d%%", (-s $file) / ($bytes / 100);
+	$info->{encoding} = "LPAC";
+	push @{$info->{encoding_extra}}, sprintf("%d%%", (-s $file) / ($bytes / 100));
 	return 1;
 }
 
