@@ -583,17 +583,28 @@ function closethis() {
 // -->
 </script>
 
+<form action="%s" method=get>
+ <input type=hidden name=id value="%d">
+ <input type=hidden name=cmd value=changefile>
+ <input type=hidden name=ids value="%s">
 <table>
 <caption>Edit Song</caption>
-<tr>
- <td>
-  <form action="%s" method=get>
-  <input type=hidden name=id value="%d">
-    <input type=hidden name=cmd value=changefile>
-    <input type=hidden name=ids value="%s">
-  <tr><td>%s</td></tr>
-  <tr><td>Present:</td><td>%s</td></tr>
-  <tr><td>Artist:</td><td>
+  <tr>
+   <td align=center>%s</td>
+   <td align=center>%s</td>
+   <td>
+    <input type=submit value="Update">
+<script language="Javascript">
+<!--
+ document.write('<input type=submit value="Close" onClick="javascript:window.close();">');
+// -->
+</script>
+    %s
+    <input type=submit name=action_download value="Download">
+   </td>
+  </tr>
+  <tr><td colspan=2>Present:</td><td>%s</td></tr>
+  <tr><td colspan=2>Artist:</td><td>
      <input type=text size=60 name=artist value="%s">
      <input type=submit name=action_clear_artist value="Clear">
      <input type=submit name=action_fix_artist value="Fix">
@@ -601,47 +612,55 @@ function closethis() {
      <input type=submit name=action_all_artist value="Set Entire List"
       onClick="return verifyall();">
   </td></tr>
-  <tr><td>Title:</td> <td>
+  <tr><td colspan=2>Title:</td> <td>
      <input type=text size=60 name=title  value="%s">
      <input type=submit name=action_clear_title value="Clear">
      <input type=submit name=action_fix_title value="Fix">
      <input type=submit name=action_swap value="Swap Artist/Title">
   </td></tr>
-  <tr><td>Album:</td> <td>
+  <tr><td colspan=2>Album:</td> <td>
      <input type=text size=60 name=album  value="%s">
      <input type=submit name=action_clear_album value="Clear">
      <input type=submit name=action_fix_album value="Fix">
      <input type=submit name=action_all_album value="Set Entire List"
       onClick="return verifyall();">
   </td></tr>
-  <tr><td>Track:</td> <td><input type=text size=3 name=track  value="%s" maxlength=3></td></tr>
-  <tr><td>Time:</td>  <td>%d:%02d</td></tr>
-  <tr><td>Encoding:</td>        <td>%s</td></tr>
-  <tr><td>Time Added:</td><td>%s</td></tr>
-  <tr><td>Last played time:</td><td>%s%s</td></tr>
-  <tr><td>Directory:</td>       <td>%s</td></tr>
-  <tr><td>Filename:</td>        <td>%s</td></tr>
-  <tr><td>Size:</td>            <td>%dk</td></tr>
-  <tr><td colspan=2><input type=submit value="Update"></td></tr>
-  </form>
+  <tr><td colspan=2>Track:</td> <td><input type=text size=3 name=track  value="%s" maxlength=3></td></tr>
+  <tr><td colspan=2>Time:</td>  <td>%d:%02d</td></tr>
+  <tr><td colspan=2>Encoding:</td>        <td>%s</td></tr>
+  <tr><td colspan=2>Time Added:</td><td>%s</td></tr>
+  <tr><td colspan=2>Last played time:</td><td>%s%s</td></tr>
+  <tr><td colspan=2>Directory:</td>       <td>%s</td></tr>
+  <tr><td colspan=2>Filename:</td>        <td>%s</td></tr>
+  <tr><td colspan=2>Size:</td>            <td>%dk</td></tr>
+</table>
+</form>
 EOF
-	my $prevnext = '';
 	my $i = 0;
 	my @ids = ids_decode($$argsref{'ids'});
 	foreach(@ids) {
 		last if $_ == $$argsref{'id'};
 		$i++;
 	}
+	my $prev = '&nbsp;&nbsp;&nbsp;&nbsp;';
 	if($i > 0) {
-		$prevnext .= "<input type=submit name=go_$ids[$i-1] value=Prev>";
+		$prev = "<input type=submit name=go_$ids[$i-1] value=Prev>";
 	}
+	my $next = '&nbsp;&nbsp;&nbsp;&nbsp;';
 	if($i < $#ids) {
-		$prevnext .= "<input type=submit name=go_$ids[$i+1] value=Next>";
+		$next .= "<input type=submit name=go_$ids[$i+1] value=Next>";
 	}
 
+	my $f = $_->{'filename'};
+	$f =~ s|.*/||;
+	$f =~ s|\\|_|g;
+	$f = encurl($f);
 	$_->{filename} =~ m|^(.*)/(.*?)$|;
-	printf $fmt, $self, $$argsref{'id'}, $$argsref{'ids'},
-		$prevnext,
+	printf $fmt, "$self/$f", $$argsref{'id'}, $$argsref{'ids'},
+		$prev, $next,
+		can_delete($_->{filename})? qq'<input type=submit ' .
+		  qq'name=action_delete value="Delete Song" ' .
+		  qq'onclick="return verifydelete();">':'',
 		$_->{present}? "Yes" : "No",
 		enchtml($_->{artist}),
 		enchtml($_->{title}),
@@ -654,40 +673,6 @@ EOF
 		$_->{lp}? " <font size=-1><input type=submit name=action_clearlp value=Reset></font>":"",
 		$1, $2,
 		((-s $_->{filename}) + 512) / 1024;
-
-	if(can_delete($_->{filename})) {
-		print <<EOF;
-  <tr><td>
-   <form action="$self" method=get onSubmit="return verifydelete();">
-    <input type=hidden name=cmd value=delfile>
-    <input type=hidden name=id value="$$argsref{'id'}">
-    <input type=submit value="Delete Song">
-   </form>
-  </td></tr>
-EOF
-	}
-	my $f = $_->{'filename'};
-	$f =~ s|.*/||;
-	$f =~ s|\\|_|g;
-	$f = encurl($f);
-	print <<EOF;
-  <tr><td>
-   <form action="$self/$f" method=post>
-    <input type=hidden name=cmd value=download>
-    <input type=hidden name=id value="$$argsref{'id'}">
-    <input type=submit value="Download">
-   </form>
-  </td></tr>
-  <tr><td>&nbsp;</td></tr>
-  <tr><td>
-<script language="Javascript">
-<!--
- document.write('<form><input type=submit value="Close" onClick="javascript:window.close();"></form>');
-// -->
-</script>
-  </td></tr>
-</table>
-EOF
 }
 
 sub print_lists($) {
@@ -778,6 +763,38 @@ sub add_search_args($$$@) {
 		foreach(@fields) { push @$list, $v; }
 	}
 	$$sort = $fields[0] unless $$sort;
+}
+
+sub delete_file($$) {
+	my ($dbh, $argsref) = @_;
+
+	printhtmlhdr;
+	printhdr($allstyle);
+	$$argsref{'id'} =~ /(\d+)/;
+	my $id = $1;
+	my ($file) = $dbh->selectrow_array("SELECT filename FROM song WHERE id=$id")
+		or die "id $id not found in database\n";
+	if(unlink $file) {
+		print "$file deleted from disk.\n";
+		$dbh->do("UPDATE song SET present=0 WHERE id=$id");
+	} else {
+		print "$file: <b>$!</b>\n";
+	}
+	printftr;
+}
+
+sub download_file($$$) {
+	my ($dbh, $argsref, $q) = @_;
+
+	$$argsref{'id'} =~ /(\d+)/;
+	my $id = $1;
+	my ($file) = $dbh->selectrow_array("SELECT filename FROM song WHERE id=$id")
+		or die "id $id not found in database\n";
+
+	open F, $file or die "$file: $!\n";
+	print $q->header(-type=>'application/octet-stream', -Content_length=>(-s F));
+	while(read F, $_, 4096) { print; }
+	close F;
 }
 
 ############################################################################
@@ -884,6 +901,14 @@ elsif($cmd eq 'shuffle') {
 elsif($cmd eq 'changefile') {
 	my $newid = 0;
 
+	if($args{'action_delete'}) {
+		delete_file($dbh, \%args);
+		exit;
+	}
+	if($args{'action_download'}) {
+		download_file($dbh, \%args, $q);
+		exit;
+	}
 	if($args{'action_clearlp'}) {
 		$dbh->do("UPDATE song SET last_played=from_unixtime(0) WHERE id=?",
 			undef, $args{'id'})
@@ -1120,32 +1145,6 @@ elsif($cmd eq 'edit') {
 	printhdr($editstyle);
 	print_edit_page($dbh, \%args);
 	printftr;
-}
-elsif($cmd eq 'delfile') {
-	printhtmlhdr;
-	printhdr($allstyle);
-	$args{'id'} =~ /(\d+)/;
-	my $id = $1;
-	my ($file) = $dbh->selectrow_array("SELECT filename FROM song WHERE id=$id")
-		or die "id $id not found in database\n";
-	if(unlink $file) {
-		print "$file deleted from disk.\n";
-		$dbh->do("UPDATE song SET present=0 WHERE id=$id");
-	} else {
-		print "$file: <b>$!</b>\n";
-	}
-	printftr;
-}
-elsif($cmd eq 'download') {
-	$args{'id'} =~ /(\d+)/;
-	my $id = $1;
-	my ($file) = $dbh->selectrow_array("SELECT filename FROM song WHERE id=$id")
-		or die "id $id not found in database\n";
-
-	open F, $file or die "$file: $!\n";
-	print $q->header(-type=>'application/octet-stream', -Content_length=>(-s F));
-	while(read F, $_, 4096) { print; }
-	close F;
 }
 elsif($cmd eq 'lists') {
         printhtmlhdr;
