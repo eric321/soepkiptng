@@ -14,6 +14,9 @@ int mono2stereo = 0;
 
 #define BUFSIZE 1024
 
+/* OK I know it's not efficient to do mono->stereo first
+  and then the resampling, but it was easier to code */
+
 int myread(struct sample *buf, int n, FILE *f)
 {
 	static short monosamples[BUFSIZE];
@@ -44,15 +47,17 @@ int main(int argc, char **argv)
 		}
 	}
 	if(argc != optind + 2) {
-		fprintf(stderr,"\
-Usage: resample [-ds] f_in f_out\n\
-\n\
-       f_in    : input sampling frequency\n\
-       f_out   : output sampling frequency\n\
-\n\
-       stdin   : 16-bit stereo little-endian input\n\
-       stdout  : 16-bit stereo little-endian output\n\
-\n");
+		fprintf(stderr,
+"Usage: resample [-ds] f_in f_out\n"
+"\n"
+"       -s      : input is mono (convert to stereo)\n"
+"\n"
+"       f_in    : input sampling frequency\n"
+"       f_out   : output sampling frequency\n"
+"\n"
+"       stdin   : 16-bit stereo little-endian input\n"
+"       stdout  : 16-bit stereo little-endian output\n"
+"\n");
 		exit(1);
 	}
 
