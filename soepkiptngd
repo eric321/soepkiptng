@@ -35,7 +35,7 @@ use Sys::Hostname;
 use integer;
 use strict;
 use vars qw(%conf $dbh $restart $opt_d $opt_r $opt_s $opt_c $cdrplaypid
-	$pid_status $pid_signal $pid @preload $paused);
+	$pid_status $pid_signal $pid @preload $paused $randsong);
 
 # find program directory
 $_ = $0;
@@ -181,7 +181,7 @@ sub get_song_random_recent() {
 	return $s;
 }
 
-sub get_song_random() {
+sub select_song_random() {
 	my $s = undef;
 
 	my $min = $conf{min_random_time};
@@ -210,6 +210,28 @@ sub get_song_random() {
 			and last;
 	}
 	$s or return undef;
+
+	warn "selecting random $s->{filename} (pref $s->{random_pref})\n";
+	return $s;
+}
+
+sub validate_song_random($) {
+	my ($song) = @_;
+	my $s = undef;
+
+	my $min = $conf{min_random_time};
+	my $where = "song.id=? AND present AND filename LIKE '/%' AND " .
+	            "unix_timestamp(now()) - unix_timestamp(last_played) > ?";
+
+	my $sth = $dbh->prepare(
+		"SELECT artist.name as artist, album.name as album,song.* " .
+		"FROM song,artist,album " .
+		"WHERE $where AND artist.id=song.artist_id AND album.id=song.album_id");
+
+	$sth->execute($song->{id}, $min)
+		or return undef;
+	$s = $sth->fetchrow_hashref
+		or return undef;
 
 	warn "playing random $s->{filename} (pref $s->{random_pref})\n";
 	$s->{type} = 'R';
@@ -360,7 +382,7 @@ sub start_play($) {
 		#exec_prog ["flac", "-d", "-fl", $filename, "-"];
 	} elsif($ext eq "shn") {
 		exec_prog [qw/shntool cat -nr -nh/, $filename];
-	} elsif($ext =~ /^(mpe?g|avi|asx|asf|vob|wmv|rm)$/) {
+	} elsif($ext =~ /^(mpe?g|m2v|avi|asx|asf|vob|wmv|rm)$/) {
 		exec_prog ["soepkiptng_video", $filename], 1;
 	} elsif($ext eq "ac3") {
 		exec_prog ["a52dec", "-o", "oss6", $filename], 1;
@@ -497,8 +519,13 @@ for(;;) {
 	}
 
 	if($dbh) {
-		$song = get_song_jingle() || get_song_queued() ||
-			get_song_random_recent() || get_song_random();
+		$song = get_song_jingle() || get_song_queued() || get_song_random_recent() or do {
+			while(!$randsong || !validate_song_random($randsong)) {
+				$randsong = select_song_random();
+			}
+			$song = $randsong;
+			$randsong = undef;
+		};
 
 		if($song->{id}) {
 			# update database
@@ -563,6 +590,12 @@ EOF
 	}
 	start_play($song->{filename});
 	warn "pid=$pid\n";
+
+	# update random song cache
+	if(!$randsong) {
+		warn "selecting random song cache\n";
+		$randsong = select_song_random();
+	}
 
 	# wait until player is done or we get a connect on $killsock
 	my ($rin, $rout);
