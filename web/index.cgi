@@ -69,8 +69,14 @@ my $cgiquery = new CGI;
 
 my $r = Apache->request;
 $r->no_cache(1);
-handle_request($dbh, $cgiquery, $cgiquery->script_name(),
-	$r->header_in('X-Forwarded-For') || $r->get_remote_host());
+
+my $req;
+$req->{dbh} = $dbh;
+$req->{cgiquery} = $cgiquery;
+$req->{self} = $cgiquery->script_name();
+$req->{host} = $r->header_in('X-Forwarded-For') || $r->get_remote_host();
+
+handle_request($req);
 
 untie %session;
 

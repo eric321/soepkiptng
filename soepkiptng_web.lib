@@ -69,12 +69,12 @@ sub ids_decode($) {
 
 
 sub print_frame($) {
-	my ($args) = @_;
+	my ($req) = @_;
 
-	my $bframe_args = exists $args->{sval}?
+	my $bframe_args = exists $req->{args}->{sval}?
 		sprintf("cmd=search&stype=%s&sval=%s",
-			encurl($args->{stype}) || "any",
-			encurl($args->{sval})) :
+			encurl($req->{args}->{stype}) || "any",
+			encurl($req->{args}->{sval})) :
 		"cmd=empty";
 
 	print <<EOF;
@@ -83,8 +83,8 @@ sub print_frame($) {
 <title>$conf{title}</title>
 </head>
 <frameset rows="$conf{frameheights}">
- <frame name=tframe src="$self?cmd=playlist" marginwidth="$conf{marginwidth}" marginheight="$conf{marginheight}">
- <frame name=bframe src="$self?$bframe_args" marginwidth="$conf{marginwidth}" marginheight="$conf{marginheight}">
+ <frame name=tframe src="$req->{self}?cmd=playlist" marginwidth="$conf{marginwidth}" marginheight="$conf{marginheight}">
+ <frame name=bframe src="$req->{self}?$bframe_args" marginwidth="$conf{marginwidth}" marginheight="$conf{marginheight}">
 </frameset>
 <body $conf{body}>
 </body>
@@ -93,10 +93,10 @@ EOF
 }
 
 sub print_az_table($$) {
-	my ($dbh, $session) = @_;
+	my ($req, $session) = @_;
 	my ($playlistopts, $editlistopts);
 
-	my $sth = $dbh->prepare("SELECT id,name FROM list ORDER BY name");
+	my $sth = $req->{dbh}->prepare("SELECT id,name FROM list ORDER BY name");
 	$sth->execute;
 	while($_ = $sth->fetchrow_hashref) {
 		$playlistopts .= sprintf("   <option value=%d%s>%s\n", $_->{id},
@@ -105,15 +105,15 @@ sub print_az_table($$) {
 			$_->{id} == $session->{editlist}? " selected":"", $_->{name});
 	}
 
-	printf <<EOF, $self;
+	printf <<EOF, $req->{self};
 <table cellpadding=2 cellspacing=0 width=100%><tr><td id=az nowrap>
 <a id=az href="%s?cmd=playlist">Refresh</a>&nbsp;&nbsp;
 EOF
 	foreach('A'..'Z') {
 		printf qq|<a id=az href="%s?cmd=%s&artist=%s" target=bframe>%s</a>&nbsp;|,
-			$self, $conf{artistlistcmd}, encurl("^$_"), $_;
+			$req->{self}, $conf{artistlistcmd}, encurl("^$_"), $_;
 	}
-	printf <<EOF, $self, $conf{artistlistcmd}, encurl("^([^a-zA-Z]|\$)");
+	printf <<EOF, $req->{self}, $conf{artistlistcmd}, encurl("^([^a-zA-Z]|\$)");
 <a id=az href="%s?cmd=%s&artist=%s" target=bframe>Other</a>&nbsp;
 EOF
 
@@ -127,7 +127,7 @@ EOF
  function do_onload(){document.search.sval.focus();}
  // -->
  </script>
- <form id=search name=search action="$self" method=get target=bframe>
+ <form id=search name=search action="$req->{self}" method=get target=bframe>
   <input type=hidden name=cmd value=search>
   <input type=text size=$sz name=sval style="$conf{searchformstyle}">
 </td>
@@ -149,7 +149,7 @@ EOF
 #<!--
 #<td id=az>Play:</td>
 #<td id=az>
-#  <form id=search action="$self" method=get target=tframe>
+#  <form id=search action="$req->{self}" method=get target=tframe>
 #  <select name=list onChange="">
 #   <option value="">All
 #$playlistopts
@@ -161,7 +161,7 @@ EOF
 #
 #<td id=az>Edit:</td>
 #<td id=az>
-#  <form id=search action="$self" method=get target=tframe>
+#  <form id=search action="$req->{self}" method=get target=tframe>
 #  <select name=list onChange="">
 #   <option value="">
 #$editlistopts
@@ -172,25 +172,25 @@ EOF
 #</td>
 #
 #<td id=az>&nbsp;&nbsp;
-#<a id=a target=bframe href="$self?cmd=lists">Playlists</a>
+#<a id=a target=bframe href="$req->{self}?cmd=lists">Playlists</a>
 #</td>
 #-->
 print <<EOF;
- <td id=az>&nbsp;&nbsp;<a id=az href="$self?cmd=shuffle">Shuffle</a></td>
- <td id=az>&nbsp;&nbsp;<a id=az href="$self?cmd=recent&days=7" target=bframe>Recent</a><a id=az href="$self?cmd=recent&days=7&np=1" target=bframe>*</a></td>
- <td id=az>&nbsp;&nbsp;<a id=az href="$self?cmd=alllist&rand=50" target=bframe>Random</a></td>
- <td id=az>&nbsp;&nbsp;<a id=az href="$self?cmd=alllist&encoding=^Video" target=bframe>Video</a></td>
-<!-- <td id=az>&nbsp;&nbsp;<a id=az target=_blank href="$self?cmd=maint">*</a></td>-->
- <td id=az>&nbsp;&nbsp;<a id=az target=bframe href="$self?cmd=cdda">CD-DA</a></td>
- <td id=az>&nbsp;&nbsp;<a id=az target=bframe href="$self?cmd=shoutcast">Shoutcast</a></td>
- <td id=az width=100%>&nbsp;&nbsp;<a id=az target=bframe href="$self?cmd=sql">SQL</a></td>
+ <td id=az>&nbsp;&nbsp;<a id=az href="$req->{self}?cmd=shuffle">Shuffle</a></td>
+ <td id=az>&nbsp;&nbsp;<a id=az href="$req->{self}?cmd=recent&days=7" target=bframe>Recent</a><a id=az href="$req->{self}?cmd=recent&days=7&np=1" target=bframe>*</a></td>
+ <td id=az>&nbsp;&nbsp;<a id=az href="$req->{self}?cmd=alllist&rand=50" target=bframe>Random</a></td>
+ <td id=az>&nbsp;&nbsp;<a id=az href="$req->{self}?cmd=alllist&encoding=^Video" target=bframe>Video</a></td>
+<!-- <td id=az>&nbsp;&nbsp;<a id=az target=_blank href="$req->{self}?cmd=maint">*</a></td>-->
+ <td id=az>&nbsp;&nbsp;<a id=az target=bframe href="$req->{self}?cmd=cdda">CD-DA</a></td>
+ <td id=az>&nbsp;&nbsp;<a id=az target=bframe href="$req->{self}?cmd=shoutcast">Shoutcast</a></td>
+ <td id=az width=100%>&nbsp;&nbsp;<a id=az target=bframe href="$req->{self}?cmd=sql">SQL</a></td>
 
 </tr></table>
 EOF
 }
 
-sub table_entry($;$$$$) {
-	my ($q, $col1, $title_href, $ids, $extra) = @_;
+sub table_entry($$;$$$$) {
+	my ($req, $q, $col1, $title_href, $ids, $extra) = @_;
 
 	return sprintf <<EOF,
  <tr>
@@ -208,11 +208,11 @@ EOF
 		$conf{td_left}, $col1,
 		$conf{td_artist},
 		$q->{arid}? sprintf(qq|<a id=a href="%s?cmd=alllist&artist_id=%s&cap=%s" target=bframe>%s</a>|,
-			$self, $q->{arid}, encurl("Artist: $q->{artist}"), enchtml($q->{artist}))
+			$req->{self}, $q->{arid}, encurl("Artist: $q->{artist}"), enchtml($q->{artist}))
 			: enchtml($q->{artist}),
 		$conf{td_album},
 		$q->{alid}? sprintf(qq|<a id=a href="%s?cmd=alllist&album_id=%s&cap=%s" target=bframe>%s</a>|,
-			$self, $q->{alid}, encurl("Album: $q->{album}"), enchtml($q->{album}))
+			$req->{self}, $q->{alid}, encurl("Album: $q->{album}"), enchtml($q->{album}))
 			: enchtml($q->{album}),
 		$conf{td_track}, $q->{track}? "$q->{track}." : "",
 		$conf{td_song}, $title_href, enchtml($q->{title}), $title_href? "</a>":"",
@@ -220,17 +220,17 @@ EOF
 		$q->{length}? sprintf("%d:%02d", $q->{length} / 60, $q->{length} % 60) : "?",
 		$conf{td_enc}, enchtml($q->{encoding}, 1),
 		$conf{td_edit},
-		$ids? sprintf(<<EOF, $self, $q->{id}, $ids, $conf{edit_target} || 'bframe') : "",
+		$ids? sprintf(<<EOF, $req->{self}, $q->{id}, $ids, $conf{edit_target} || 'bframe') : "",
 <a id=a href="%s?cmd=edit&id=%d&ids=%s" title="Edit" target=%s>*</a>
 EOF
-		$ids? sprintf(<<EOF, $self, $q->{id}, $ids, $conf{edit_target} || 'bframe') : "",
+		$ids? sprintf(<<EOF, $req->{self}, $q->{id}, $ids, $conf{edit_target} || 'bframe') : "",
 <a id=a href="%s?cmd=lyrics&id=%d&ids=%s" title="Edit" target=%s>L</a>
 EOF
 		$extra;
 }
 
-sub print_albumlist($$$) {
-	my ($albumlist, $sep, $prune) = @_;
+sub print_albumlist($$$$) {
+	my ($req, $albumlist, $sep, $prune) = @_;
 
 	my $more = 0;
 	if($prune) {
@@ -256,7 +256,7 @@ sub print_albumlist($$$) {
 		$_->{album} =~ /^(.?)(.*)/;
 		printf(qq|<a id=a href="%s?cmd=alllist| .
 			qq|&artist_id=%d&album_id=%d&cap=%s"><b>%s</b>%s</a> (%d)|,
-			$self, $_->{arid}, $_->{alid},
+			$req->{self}, $_->{arid}, $_->{alid},
 			encurl("Artist: $_->{artist}; Album: $_->{album}"),
 			enchtml($1 || "?"), enchtml($2), $_->{c});
 	}
@@ -264,13 +264,13 @@ sub print_albumlist($$$) {
 		printf <<EOF,
 &nbsp; <a id=a href="%s?cmd=albumlist&artist_id=%d&cap=%s">[%d more...].</a>
 EOF
-			$self, $albumlist->[0]->{arid},
+			$req->{self}, $albumlist->[0]->{arid},
 			encurl("Artist: $albumlist->[0]->{artist}"), $more;
 	}
 }
 
 sub print_playlist_table($) {
-	my ($dbh) = @_;
+	my ($req) = @_;
 	my $killline;
 	my $totaltime;
 
@@ -280,7 +280,7 @@ sub print_playlist_table($) {
 		" FROM song,queue,artist,album WHERE present" .
 		" AND song.artist_id=artist.id AND song.album_id=album.id" .
 		" AND song.id = queue.song_id ORDER BY queue.song_order";
-	my $sth = $dbh->prepare($query);
+	my $sth = $req->{dbh}->prepare($query);
 	my $rv = $sth->execute;
 	my @ids;
 	my @records;
@@ -290,12 +290,12 @@ sub print_playlist_table($) {
 		$totaltime += $_->{length};
 	}
 
-	if($_ = get_nowplaying($dbh)) {
+	if($_ = get_nowplaying($req->{dbh})) {
 		if($_->{id} > 0) { unshift @ids, $_->{id}; }
 
-		$killline = table_entry($_,
+		$killline = table_entry($req, $_,
 			sprintf(qq|<a id=a href="%s?cmd=kill&id=%s">%s</a>&nbsp;<a id=a href="%s?cmd=addnext&id=%s">next</a>|,
-				$self, $_->{id}, $conf{killtext}, $self, $_->{id}),
+				$req->{self}, $_->{id}, $conf{killtext}, $req->{self}, $_->{id}),
 			undef,
 			($_->{filename} =~ m|^/|)? ids_encode(@ids) : "",
 			"<td>&nbsp;" . (($conf{show_user} && $_->{user})? "($_->{user})":"") . "</td>"
@@ -335,14 +335,14 @@ EOF
 </table>
 EOF
 		$conf{th_left}, @ids? sprintf(qq|<a id=a href="%s?cmd=del&ids=%s">| .
-			qq|$conf{delalltext}</a>|, $self, ids_encode(@ids)) : "",
+			qq|$conf{delalltext}</a>|, $req->{self}, ids_encode(@ids)) : "",
 		$conf{th_artist}, $conf{th_album}, $conf{th_track}, $conf{th_song},
 		$conf{th_time}, $conf{th_enc}, $conf{th_edit},
 		$killline,
-		join("", map { table_entry($_, sprintf(
+		join("", map { table_entry($req, $_, sprintf(
 			qq|<a id=a href="%s?cmd=del&ids=%s">%s</a> | .
 			qq|<a id=a href="%s?cmd=up&id=%s">%s</a>|,
-			$self, $_->{id}, $conf{deltext}, $self, $_->{id}, $conf{uptext}),
+			$req->{self}, $_->{id}, $conf{deltext}, $req->{self}, $_->{id}, $conf{uptext}),
 			undef, $_->{f} eq '/'? $ids : "",
 			($conf{show_user} && $_->{user})? "<td>&nbsp;(".$_->{user}.")</td>":"")
 			} @records),
@@ -350,11 +350,11 @@ EOF
 }
 
 sub print_artistlist_table($$$@) {
-	my ($dbh, $session, $caption, $query, @val) = @_;
+	my ($req, $session, $caption, $query, @val) = @_;
 
-	my $sth = $dbh->prepare($query);
+	my $sth = $req->{dbh}->prepare($query);
 	my $rv = $sth->execute(@val)
-		or die "can't do sql command: " . $dbh->errstr;
+		or die "can't do sql command: " . $req->{dbh}->errstr;
 	my @artists;
 	my %albumlist;
 	while($_ = $sth->fetchrow_hashref()) {
@@ -382,9 +382,9 @@ EOF
  <td valign=top>&nbsp;<a id=a href="%s?cmd=alllist&artist_id=%d&cap=%s">%s</a>&nbsp;</td>
  <td valign=top>&nbsp;
 EOF
-			$self, $_->[0]->{arid}, encurl("Artist: $_->[0]->{artist}"),
+			$req->{self}, $_->[0]->{arid}, encurl("Artist: $_->[0]->{artist}"),
 			$_->[0]->{artist};
-		print_albumlist($_, ",&nbsp; ", 1);
+		print_albumlist($req, $_, ",&nbsp; ", 1);
 		printf <<EOF,
 &nbsp;</td>
 </tr>
@@ -398,7 +398,7 @@ EOF
 }
 
 sub print_seealso_row($$) {
-	my ($dbh, $artistid) = @_;
+	my ($req, $artistid) = @_;
 
 	my $query = "SELECT seealso.id1 AS id1, seealso.id2 AS id2, ".
 		" artist.name AS artist FROM seealso,artist,song WHERE ".
@@ -407,7 +407,7 @@ sub print_seealso_row($$) {
 		" (seealso.id1=? AND seealso.id2=artist.id AND ".
 		"  seealso.id2=song.artist_id AND song.present) ".
 		" GROUP BY id1, id2, artist ORDER BY artist";
-	my $sth = $dbh->prepare($query);
+	my $sth = $req->{dbh}->prepare($query);
 	$sth->execute($artistid, $artistid);
 	my %seealso;
 	my @ids;
@@ -426,14 +426,14 @@ sub print_seealso_row($$) {
 		foreach(@ids) {
 			print ",&nbsp; " unless $_ == $ids[0];
 			printf qq|<a id=a href="%s?cmd=alllist&artist_id=%s&album=%s&cap=%s">$seealso{$_}</a>|,
-				$self, $_, encurl('^$'), encurl("Artist: $seealso{$_}; Album: ^\$");
+				$req->{self}, $_, encurl('^$'), encurl("Artist: $seealso{$_}; Album: ^\$");
 		}
 		print ".<br>\n";
 	}
 }
 
 sub print_albums_row($$$$;$) {
-	my ($dbh, $baseurl, $artistid, $label, $expand) = @_;
+	my ($req, $baseurl, $artistid, $label, $expand) = @_;
 
         my $query = "SELECT DISTINCT binary album.name as album," .
 		" binary artist.name as artist, song.random_pref," .
@@ -442,7 +442,7 @@ sub print_albums_row($$$$;$) {
 		" AND song.artist_id=artist.id AND song.album_id=album.id".
 		" AND filename LIKE '/%'".
 		" GROUP BY album ORDER BY album";
-	$sth = $dbh->prepare($query);
+	$sth = $req->{dbh}->prepare($query);
 	$sth->execute($artistid);
 
 	my $albumlist = $sth->fetchall_arrayref({});
@@ -450,21 +450,21 @@ sub print_albums_row($$$$;$) {
 		return undef;
 	}
 	printf "$label$sep";
-	print_albumlist($albumlist, $expand? "<br>\n" : ",&nbsp; ", !$expand);
+	print_albumlist($req, $albumlist, $expand? "<br>\n" : ",&nbsp; ", !$expand);
 	return 1;
 }
 
-sub print_alllist_table($$$$@) {
-	my ($dbh, $argsref, $session, $caption, $query, $limit, @val) = @_;
+sub print_alllist_table($$$@) {
+	my ($req, $session, $caption, $query, $limit, @val) = @_;
 	my ($output, $addall);
 
 	print <<EOF;
 <center id=hdr>$caption</center>
 EOF
 
-	my $sth = $dbh->prepare($query . ($limit? " LIMIT $limit":""));
+	my $sth = $req->{dbh}->prepare($query . ($limit? " LIMIT $limit":""));
 	my $rv = $sth->execute(@val)
-		or die "can't do sql command: " . $dbh->errstr;
+		or die "can't do sql command: " . $req->{dbh}->errstr;
 	my @ids;
 	my %records;
 	my $totaltime;
@@ -476,9 +476,9 @@ EOF
 		$artistids{$_->{arid}}++;
 	}
 	if(!@ids) {
-		if($argsref->{artist_id}) {
-			print_seealso_row($dbh, $argsref->{artist_id});
-			print_albums_row($dbh, $baseurl, $argsref->{artist_id}, "Albums: ")
+		if($req->{args}->{artist_id}) {
+			print_seealso_row($req, $req->{args}->{artist_id});
+			print_albums_row($req, $baseurl, $req->{args}->{artist_id}, "Albums: ")
 				and return;
 		}
 		print "No search results.\n";
@@ -486,11 +486,11 @@ EOF
 	}
 	my $ids = ids_encode(@ids);
 
-	my $baseurl = "$self?";
-	foreach(keys %$argsref) {
+	my $baseurl = "$req->{self}?";
+	foreach(keys %{$req->{args}}) {
 		next if $_ eq "cmd";
 		next if /^add_/;
-		$baseurl .= "$_=" . encurl($argsref->{$_}) . "&";
+		$baseurl .= "$_=" . encurl($req->{args}->{$_}) . "&";
 	}
 
 	foreach $id (@ids) {
@@ -498,7 +498,7 @@ EOF
 		my $el = $session->{editlist};
 		my $listch;
 		if($el) {
-			if($dbh->do("SELECT entity_id FROM list_contents" .
+			if($req->{dbh}->do("SELECT entity_id FROM list_contents" .
 				" WHERE list_id=? AND (" .
 				"  (type=? AND entity_id=?) OR" .
 				"  (type=? AND entity_id=?) OR" .
@@ -514,30 +514,30 @@ EOF
 		}
 
 		my $thref = sprintf(qq|<a id=a href="%s?cmd=add&ids=%d" target=tframe>|,
-			$self, $_->{id});
-		$output .= table_entry($_, "$thref$conf{addtext}</a>", $thref, $ids);
+			$req->{self}, $_->{id});
+		$output .= table_entry($req, $_, "$thref$conf{addtext}</a>", $thref, $ids);
 	}
 
 	if(scalar keys %artistids == 1) {
-		print_seealso_row($dbh, (keys %artistids)[0]);
-		print_albums_row($dbh, $baseurl, (keys %artistids)[0], "Albums: ");
+		print_seealso_row($req, (keys %artistids)[0]);
+		print_albums_row($req, $baseurl, (keys %artistids)[0], "Albums: ");
 	}
 
 	print "<table border=0 cellspacing=0>\n";
 
 	if(@ids) {
 	$addall = sprintf <<EOF, ids_encode(@ids);
-<a id=a href="$self?cmd=add&ids=%s" target=tframe>$conf{addalltext}</a>
+<a id=a href="$req->{self}?cmd=add&ids=%s" target=tframe>$conf{addalltext}</a>
 EOF
 	}
 
 	my %revsort;
-	$revsort{$argsref->{sort}} = "r_";
+	$revsort{$req->{args}->{sort}} = "r_";
 
-	my $baseurl = "$self?";
-	foreach(keys %$argsref) {
+	my $baseurl = "$req->{self}?";
+	foreach(keys %{$req->{args}}) {
 		next if $_ eq 'sort';
-		$baseurl .= "$_=" . encurl($argsref->{$_}) . "&";
+		$baseurl .= "$_=" . encurl($req->{args}->{$_}) . "&";
 	}
 
 	my $res = $#ids + 1;
@@ -564,22 +564,22 @@ $output
 EOF
 }
 
-sub print_edit_page($$) {
-	my ($dbh, $argsref) = @_;
+sub print_edit_page($) {
+	my ($req) = @_;
 
-	my $sth = $dbh->prepare("SELECT artist.name as artist,album.name as album," .
+	my $sth = $req->{dbh}->prepare("SELECT artist.name as artist,album.name as album," .
 		" reverse(bin(song.sets)) as setbin,song.*," .
 		" unix_timestamp(last_played) as lp," .
 		" unix_timestamp(time_added) as ta" .
-		" FROM song,artist,album WHERE song.id=$argsref->{id}" .
+		" FROM song,artist,album WHERE song.id=$req->{args}->{id}" .
 		" AND song.artist_id=artist.id AND song.album_id=album.id");
 	$sth->execute();
-	$_ = $sth->fetchrow_hashref() or die "id $argsref->{id} not found.\n";
+	$_ = $sth->fetchrow_hashref() or die "id $req->{args}->{id} not found.\n";
 
 	my $i = 0;
-	my @ids = ids_decode($argsref->{ids});
+	my @ids = ids_decode($req->{args}->{ids});
 	foreach(@ids) {
-		last if $_ == $argsref->{id};
+		last if $_ == $req->{args}->{id};
 		$i++;
 	}
 	my $prev = '&nbsp;&nbsp;&nbsp;&nbsp;';
@@ -604,16 +604,16 @@ sub print_edit_page($$) {
 		$dir2 =~ s/ /_/g;
 		$dir2 =~ s/\\/\\\\/g;
 		$dir = sprintf qq|<a href="%s?cmd=alllist&sort=artist&filename=%s">$dir</a>|,
-			$self, encurl($dir2), enchtml($dir);
+			$req->{self}, encurl($dir2), enchtml($dir);
 		$file = sprintf qq|<a href="%s/%s?cmd=download&id=%d">%s</a>|,
-			$self, encurl($file), $argsref->{id}, enchtml($file);
+			$req->{self}, encurl($file), $req->{args}->{id}, enchtml($file);
 	} else {
 		$file = enchtml($f);
 		$dir = "";
 	}
 
 	my $sets = '';
-	$sth = $dbh->prepare("SELECT * FROM sets");
+	$sth = $req->{dbh}->prepare("SELECT * FROM sets");
 	$sth->execute();
 	my $i = 0;
 	while($set = $sth->fetchrow_hashref()) {
@@ -700,7 +700,7 @@ function closethis() {
 </table>
 </form>
 EOF
-		$#ids + 1, $self, $argsref->{id}, $argsref->{ids},
+		$#ids + 1, $req->{self}, $req->{args}->{id}, $req->{args}->{ids},
 		$_->{present}? "Yes" : "No",
 		enchtml($_->{artist}),
 		enchtml($_->{title}),
@@ -857,39 +857,39 @@ sub getlyrics($;$) {
 	($info->{artist}, $info->{title}, $info->{album}) = ($ar, $ti, $al);
 }
 
-sub print_lyrics_page($$) {
-	my ($dbh, $argsref) = @_;
+sub print_lyrics_page($) {
+	my ($req) = @_;
 
-	if($argsref->{action_clear}) {
-		$argsref->{lyrics} = $argsref->{description} = "";
+	if($req->{args}->{action_clear}) {
+		$req->{args}->{lyrics} = $req->{args}->{description} = "";
 	}
-	$argsref->{lyrics} =~ s/\r\n?/\n/g;
-	if($argsref->{update}) {
-		$dbh->do("REPLACE INTO lyrics SET id=?, description=?, language=?, lyrics=?",
-			undef, $argsref->{id}, $argsref->{description},
-			$argsref->{language}, $argsref->{lyrics})
+	$req->{args}->{lyrics} =~ s/\r\n?/\n/g;
+	if($req->{args}->{update}) {
+		$req->{dbh}->do("REPLACE INTO lyrics SET id=?, description=?, language=?, lyrics=?",
+			undef, $req->{args}->{id}, $req->{args}->{description},
+			$req->{args}->{language}, $req->{args}->{lyrics})
 			or die;
 	}
 
-	foreach(keys %$argsref) {
+	foreach(keys %{$req->{args}}) {
 		if(/^go_(\d+)$/) {
-			$argsref->{id} = $1;
+			$req->{args}->{id} = $1;
 			last;
 		}
 	}
-	my $sth = $dbh->prepare(
+	my $sth = $req->{dbh}->prepare(
 		"SELECT song.id, title, song.track, album.name as album, " .
 		"artist.name as artist, lyrics.lyrics as lyrics, " .
 		"lyrics.language as language, lyrics.description as description FROM song " .
 		"LEFT JOIN album ON album.id=song.album_id " .
 		"LEFT JOIN artist ON artist.id=song.artist_id " . 
 		"LEFT JOIN lyrics ON lyrics.id=song.id " .
-		"WHERE song.id=$argsref->{id}");
+		"WHERE song.id=$req->{args}->{id}");
 	$sth->execute();
-	my $f = $sth->fetchrow_hashref() or die "id $argsref->{id} not found.\n";
+	my $f = $sth->fetchrow_hashref() or die "id $req->{args}->{id} not found.\n";
 
 	my $downloaded;
-	if($f->{lyrics} eq "" && !$argsref->{action_clear}) {
+	if($f->{lyrics} eq "" && !$req->{args}->{action_clear}) {
 		getlyrics($f);
 		if($f->{lyrics} eq "") { getlyrics($f, 2); }
 		if($f->{lyrics} eq "") { getlyrics($f, 3); }
@@ -907,9 +907,9 @@ sub print_lyrics_page($$) {
 	}
 
 	my $i = 0;
-	my @ids = ids_decode($argsref->{ids});
+	my @ids = ids_decode($req->{args}->{ids});
 	foreach(@ids) {
-		last if $_ == $argsref->{id};
+		last if $_ == $req->{args}->{id};
 		$i++;
 	}
 	my $prev = '&nbsp;&nbsp;&nbsp;&nbsp;';
@@ -974,7 +974,7 @@ sub print_lyrics_page($$) {
 </table>
 </form>
 EOF
-		$self, $argsref->{id}, $argsref->{ids}, $downloaded,
+		$req->{self}, $req->{args}->{id}, $req->{args}->{ids}, $downloaded,
 		enchtml($f->{artist}), enchtml($f->{title}),
 		enchtml($f->{album}), $f->{track}? $f->{track} : "",
 		enchtml($f->{description}), $description,
@@ -988,35 +988,35 @@ EOF
 		$prev, $next;
 }
 
-sub print_shoutcast_page($$) {
-	my ($dbh, $args) = @_;
+sub print_shoutcast_page($) {
+	my ($req) = @_;
 
-	$args->{name} =~ s/^\s+|\s+$//g;
-	$args->{url} =~ s/^\s+|\s+$//g;
-	$args->{url} =~ s|^/*(?!http:)(.)|http://$1|;
-	foreach(keys %$args) {
+	$req->{args}->{name} =~ s/^\s+|\s+$//g;
+	$req->{args}->{url} =~ s/^\s+|\s+$//g;
+	$req->{args}->{url} =~ s|^/*(?!http:)(.)|http://$1|;
+	foreach(keys %{$req->{args}}) {
 		if(/^delete_(\d+)$/) {
 			require_write_access;
-			$dbh->do("DELETE FROM song WHERE id=?", undef, $1)
-				or die "can't do sql command: " . $dbh->errstr;
-			delete $args->{editid};
-			delete $args->{url};
+			$req->{dbh}->do("DELETE FROM song WHERE id=?", undef, $1)
+				or die "can't do sql command: " . $req->{dbh}->errstr;
+			delete $req->{args}->{editid};
+			delete $req->{args}->{url};
 		}
 	}
-	if($args->{editid} && $args->{url}) {
+	if($req->{args}->{editid} && $req->{args}->{url}) {
 		require_write_access;
-		if($args->{action_clear_name}) { $args->{name} = ""; }
-		$dbh->do("UPDATE song SET title=?,filename=? WHERE id=?",
-			undef, $args->{name}, $args->{url}, $args->{editid})
-			or die "can't do sql command: " . $dbh->errstr;
-	} elsif($args->{url}) {
+		if($req->{args}->{action_clear_name}) { $req->{args}->{name} = ""; }
+		$req->{dbh}->do("UPDATE song SET title=?,filename=? WHERE id=?",
+			undef, $req->{args}->{name}, $req->{args}->{url}, $req->{args}->{editid})
+			or die "can't do sql command: " . $req->{dbh}->errstr;
+	} elsif($req->{args}->{url}) {
 		require_write_access;
-		my $arid = get_id($dbh, "artist", '') or die;
-		my $alid = get_id($dbh, "album", '') or die;
-		$dbh->do("REPLACE INTO song SET title=?, filename=?, album_id=?, " .
+		my $arid = get_id($req->{dbh}, "artist", '') or die;
+		my $alid = get_id($req->{dbh}, "album", '') or die;
+		$req->{dbh}->do("REPLACE INTO song SET title=?, filename=?, album_id=?, " .
 			"artist_id=?, present=1, encoding='Shoutcast', track=0, " .
 			"length=0, time_added=NULL", undef,
-			$args->{name}, $args->{url}, $alid, $arid) or die;
+			$req->{args}->{name}, $req->{args}->{url}, $alid, $arid) or die;
 	}
 
 	printf <<EOF,
@@ -1029,16 +1029,16 @@ sub print_shoutcast_page($$) {
  </tr>
  <tr><td colspan=7></td></tr>
 EOF
-		$conf{th_left}, $self, $conf{th_artist}, $conf{th_album};
+		$conf{th_left}, $req->{self}, $conf{th_artist}, $conf{th_album};
 
-	my $sth = $dbh->prepare("SELECT id,filename,title FROM song WHERE " .
+	my $sth = $req->{dbh}->prepare("SELECT id,filename,title FROM song WHERE " .
 		"filename LIKE 'http:%' ORDER BY title");
 	$sth->execute;
 
 	my ($editurl, $editname);
 	while($_ = $sth->fetchrow_hashref) {
 		my $ref = sprintf(qq|<a id=a href="%s?cmd=add&ids=%d" target=tframe>|,
-			$self, $_->{id});
+			$req->{self}, $_->{id});
 		printf <<EOF,
  <tr>
   <td %s>&nbsp;%s&nbsp;</td>
@@ -1050,9 +1050,9 @@ EOF
 		$conf{td_left}, "$ref$conf{addtext}</a>",
 		$conf{td_artist}, $_->{title},
 		$conf{td_album}, $_->{filename},
-		$conf{td_track}, $self, $_->{id}, '*';
+		$conf{td_track}, $req->{self}, $_->{id}, '*';
 
-		if($_->{id} == $args->{editid}) {
+		if($_->{id} == $req->{args}->{editid}) {
 			$editurl = $_->{filename};
 			$editname = $_->{title};
 		}
@@ -1076,18 +1076,18 @@ EOF
 </form>
 <br>
 EOF
-	$args->{editid}? "Edit" : "Add",
-	$self, $args->{editid},
+	$req->{args}->{editid}? "Edit" : "Add",
+	$req->{self}, $req->{args}->{editid},
 	enchtml($editurl || ""),
 	enchtml($editname || ""),
-	$args->{editid}? "Update" : "Add",
-	$args->{editid}?
+	$req->{args}->{editid}? "Update" : "Add",
+	$req->{args}->{editid}?
 		sprintf(qq|&nbsp;<input type=submit name=delete_%d value="Delete">|,
-		$args->{editid}) : "";
+		$req->{args}->{editid}) : "";
 }
 
 sub print_lists($) {
-	my ($dbh) = @_;
+	my ($req) = @_;
 
 	print <<EOF;
 <center id=hdr>Playlists</center>
@@ -1100,14 +1100,14 @@ sub print_lists($) {
  <tr><td colspan=3></td></tr>
 
 EOF
-	my $sth = $dbh->prepare("SELECT id,name FROM list ORDER BY name");
+	my $sth = $req->{dbh}->prepare("SELECT id,name FROM list ORDER BY name");
 	$sth->execute;
 	my $d;
 	while($d = $sth->fetchrow_hashref) {
 		print <<EOF;
  <tr>
-  <td $conf{th_left}>&nbsp;<a href="$self?cmd=dellist&id=$d->{id}">del</a>&nbsp;</td>
-  <td>&nbsp;<a href="$self?cmd=showlist&id=$d->{id}">$d->{name}</a>&nbsp;</td>
+  <td $conf{th_left}>&nbsp;<a href="$req->{self}?cmd=dellist&id=$d->{id}">del</a>&nbsp;</td>
+  <td>&nbsp;<a href="$req->{self}?cmd=showlist&id=$d->{id}">$d->{name}</a>&nbsp;</td>
   <td $conf{th_left}>&nbsp;88&nbsp;</td>
  </tr>
 EOF
@@ -1115,7 +1115,7 @@ EOF
 	print <<EOF;
 </table>
 <p>
-<form id=search action="$self" method=get target=bframe>
+<form id=search action="$req->{self}" method=get target=bframe>
 <input type=text size=20 name=listname>
 <input type=hidden name=cmd value=addlist>
 <input type=submit value="Add Playlist">
@@ -1151,10 +1151,10 @@ sub printftr() {
 EOF
 }
 
-sub printredir($$$$) {
-	my ($q, $self, $cmd, $argsref) = @_;
+sub printredir($$$) {
+	my ($req, $cmd, $argsref) = @_;
 	$argsref->{cmd} = $cmd;
- 	print $q->redirect(construct_url($self, $argsref));
+ 	print $req->{cgiquery}->redirect(construct_url($req->{self}, $argsref));
 }
 
 sub add_search_args($$$$@) {
@@ -1175,19 +1175,19 @@ sub add_search_args($$$$@) {
 }
 
 sub delete_file($$) {
-	my ($dbh, $argsref) = @_;
+	my ($req, $id) = @_;
 
 	require_write_access;
 
 	printhtmlhdr;
 	printhdr($conf{allstyle});
-	$argsref->{id} =~ /(\d+)/;
-	my $id = $1;
-	my ($file) = $dbh->selectrow_array("SELECT filename FROM song WHERE id=$id")
+	$id =~ /(\d*)/;
+	$id = $1;
+	my ($file) = $req->{dbh}->selectrow_array("SELECT filename FROM song WHERE id=$id")
 		or die "id $id not found in database\n";
 	if(unlink $file) {
 		print "$file deleted from disk.\n";
-		$dbh->do("UPDATE song SET present=0 WHERE id=$id");
+		$req->{dbh}->do("UPDATE song SET present=0 WHERE id=$id");
 	} else {
 		print "$file: <b>$!</b>\n";
 	}
@@ -1208,15 +1208,15 @@ sub get_user($) {
 	return $user;
 }
 
-sub handle_request($$$$) {
-	my ($dbh, $cgiquery, $self, $host) = @_;
-	my $pathinfo = $cgiquery->path_info();
+sub handle_request($) {
+	my ($req) = @_;
 
 	my %args;
-	foreach($cgiquery->param) {
-		$args{$_} = $cgiquery->param($_);
+	foreach($req->{cgiquery}->param) {
+		$args{$_} = $req->{cgiquery}->param($_);
 		warn "\$args{$_} = $args{$_}\n";
 	}
+	$req->{args} = \%args;
 
 	$SIG{__DIE__} = sub {
 		printhtmlhdr;
@@ -1234,70 +1234,70 @@ sub handle_request($$$$) {
 	}
 
 	if($cmd eq 'add') {
-		add_song($dbh, get_user($host), ids_decode($args{ids}));
-	 	printredir($cgiquery, $self, 'playlist', undef);
+		add_song($req->{dbh}, get_user($req->{host}), ids_decode($args{ids}));
+	 	printredir($req, 'playlist', undef);
 		return;
 	}
 	elsif($cmd eq 'del') {
-		del_song($dbh, ids_decode($args{ids}));
-	 	printredir($cgiquery, $self, 'playlist', undef);
+		del_song($req->{dbh}, ids_decode($args{ids}));
+	 	printredir($req, 'playlist', undef);
 		return;
 	}
 	elsif($cmd eq 'up') {
-		foreach(reverse split /,/, $args{id}) { move_song_to_top($dbh, $_); }
-	 	printredir($cgiquery, $self, 'playlist', undef);
+		foreach(reverse split /,/, $args{id}) { move_song_to_top($req->{dbh}, $_); }
+	 	printredir($req, 'playlist', undef);
 		return;
 	}
 	elsif($cmd eq 'kill') {
-		kill_song(get_user($host));
-	 	printredir($cgiquery, $self, 'playlist', undef);
+		kill_song(get_user($req->{host}));
+	 	printredir($req, 'playlist', undef);
 		return;
 	}
 	elsif($cmd eq 'addnext') {
-		add_song_next($dbh, $args{id}, get_user($host));
-		printredir($cgiquery, $self, 'playlist', undef);
+		add_song_next($req->{dbh}, $args{id}, get_user($req->{host}));
+		printredir($req, 'playlist', undef);
 		return;
 	}
 	elsif($cmd eq 'setplaylist') {
 		$session{playlist} = $args{list};
-	 	printredir($cgiquery, $self, 'playlist', undef);
+	 	printredir($req, 'playlist', undef);
 		return;
 	}
 	elsif($cmd eq 'seteditlist') {
 		$session{editlist} = $args{list};
-	 	printredir($cgiquery, $self, 'playlist', undef);
+	 	printredir($req, 'playlist', undef);
 		return;
 	}
 	elsif($cmd eq 'addlist') {
 		require_write_access;
-		$dbh->do("REPLACE INTO list SET name=?", undef, $args{listname})
+		$req->{dbh}->do("REPLACE INTO list SET name=?", undef, $args{listname})
 			or die;
-	 	printredir($cgiquery, $self, 'lists', \%args);
+	 	printredir($req, 'lists', \%args);
 		return;
 	}
 	elsif($cmd eq 'addtolist') {
 		require_write_access;
-		$dbh->do("REPLACE INTO list_contents SET type=?, list_id=?, entity_id=?", undef,
+		$req->{dbh}->do("REPLACE INTO list_contents SET type=?, list_id=?, entity_id=?", undef,
 			$args{add_type}, $args{add_list}, $args{add_id})
 			or die;
 		delete $args{add_type};
 		delete $args{add_list};
 		delete $args{add_id};
-	 	printredir($cgiquery, $self, 'alllist', \%args);
+	 	printredir($req, 'alllist', \%args);
 		return;
 	}
 	elsif($cmd eq 'dellist') {
 		require_write_access;
-		$dbh->do("DELETE FROM list WHERE id=?", undef, $args{id})
+		$req->{dbh}->do("DELETE FROM list WHERE id=?", undef, $args{id})
 			or die;
-		$dbh->do("DELETE FROM list_contents WHERE list_id=?", undef, $args{id})
+		$req->{dbh}->do("DELETE FROM list_contents WHERE list_id=?", undef, $args{id})
 			or die;
-	 	printredir($cgiquery, $self, 'lists', \%args);
+	 	printredir($req, 'lists', \%args);
 		return;
 	}
 	elsif($cmd eq 'shuffle') {
-		shuffle_queue($dbh);
-	 	printredir($cgiquery, $self, 'playlist', \%args);
+		shuffle_queue($req->{dbh});
+	 	printredir($req, 'playlist', \%args);
 		return;
 		$sessiondata{$sessionid} = 1;
 	}
@@ -1307,32 +1307,32 @@ sub handle_request($$$$) {
 		require_write_access;
 
 		if($args{action_delete}) {
-			delete_file($dbh, \%args);
+			delete_file($req, $args{id});
 			return;
 		}
 		if($args{action_clearlp}) {
-			$dbh->do("UPDATE song SET last_played=from_unixtime(0) WHERE id=?",
+			$req->{dbh}->do("UPDATE song SET last_played=from_unixtime(0) WHERE id=?",
 				undef, $args{id})
-				or die "can't do sql command: " . $dbh->errstr;
+				or die "can't do sql command: " . $req->{dbh}->errstr;
 		}
 		if($args{action_clearlpall}) {
 			foreach(ids_decode($args{ids})) {
-				$dbh->do("UPDATE song SET last_played=from_unixtime(0) WHERE id=?",
+				$req->{dbh}->do("UPDATE song SET last_played=from_unixtime(0) WHERE id=?",
 					undef, $_)
-					or die "can't do sql command: " . $dbh->errstr;
+					or die "can't do sql command: " . $req->{dbh}->errstr;
 			}
 		}
 		if($args{action_setlpall}) {
 			foreach(ids_decode($args{ids})) {
-				$dbh->do("UPDATE song SET last_played=NULL WHERE id=?", undef, $_)
-					or die "can't do sql command: " . $dbh->errstr;
+				$req->{dbh}->do("UPDATE song SET last_played=NULL WHERE id=?", undef, $_)
+					or die "can't do sql command: " . $req->{dbh}->errstr;
 			}
 		}
 		if($args{action_setrpall}) {
 			foreach(ids_decode($args{ids})) {
-				$dbh->do("UPDATE song SET random_pref=? WHERE id=?",
+				$req->{dbh}->do("UPDATE song SET random_pref=? WHERE id=?",
 					undef, $args{random_pref}, $_)
-					or die "can't do sql command: " . $dbh->errstr;
+					or die "can't do sql command: " . $req->{dbh}->errstr;
 			}
 		}
 		elsif($args{action_clear_artist})   { $args{artist} = '' }
@@ -1355,8 +1355,8 @@ sub handle_request($$$$) {
 				}
 			}
 		}
-		my $arid = get_id($dbh, "artist", $args{artist}) or die;
-		my $alid = get_id($dbh, "album", $args{album}) or die;
+		my $arid = get_id($req->{dbh}, "artist", $args{artist}) or die;
+		my $alid = get_id($req->{dbh}, "album", $args{album}) or die;
 
 		foreach(keys %args) {
 			/^action_sets_all_(\d+)$/ or next;
@@ -1370,10 +1370,10 @@ sub handle_request($$$$) {
 			my @ids = ids_decode($args{ids});
 			while(@ids) {
 				my @ids2 = splice(@ids, 0, 50);
-				$dbh->do("UPDATE song SET $upd WHERE " .
+				$req->{dbh}->do("UPDATE song SET $upd WHERE " .
 					join(" OR ", map { "id=$_" }  @ids2),
 					undef, $all_field_arg, @ids2)
-					or die "can't do sql command: " . $dbh->errstr;
+					or die "can't do sql command: " . $req->{dbh}->errstr;
 			}
 		}
 
@@ -1384,9 +1384,9 @@ sub handle_request($$$$) {
 		}
 		
 
-		$dbh->do("UPDATE song SET artist_id=?, title=?, album_id=?, track=?, random_pref=?, sets=($sets) WHERE id=?",
+		$req->{dbh}->do("UPDATE song SET artist_id=?, title=?, album_id=?, track=?, random_pref=?, sets=($sets) WHERE id=?",
 			undef, $arid, $args{title}, $alid, $args{track}, $args{random_pref}, $args{id})
-			or die "can't do sql command: " . $dbh->errstr;
+			or die "can't do sql command: " . $req->{dbh}->errstr;
 
 		my ($all_field, $all_field_arg);
 		if($args{action_all_artist}) {
@@ -1401,15 +1401,15 @@ sub handle_request($$$$) {
 
 			while(@ids) {
 				my @ids2 = splice(@ids, 0, 50);
-				$dbh->do("UPDATE song SET ${all_field}_id=? WHERE " .
+				$req->{dbh}->do("UPDATE song SET ${all_field}_id=? WHERE " .
 					join(" OR ", map { "id=$_" }  @ids2),
 					undef, $all_field_arg, @ids2)
-					or die "can't do sql command: " . $dbh->errstr;
+					or die "can't do sql command: " . $req->{dbh}->errstr;
 			}
 		}
 
 		if($newid) { $args{id} = $newid; }
-	 	printredir($cgiquery, $self, 'edit', \%args);
+	 	printredir($req, 'edit', \%args);
 		return;
 	}
 
@@ -1432,16 +1432,16 @@ sub handle_request($$$$) {
 
 	if($cmd eq '') {
 		printhtmlhdr;
-		print_frame(\%args);
+		print_frame($req);
 	}
 	elsif($cmd eq 'playlist') {
 		printhtmlhdr;
 		print <<EOF;
-<META HTTP-EQUIV="Refresh" CONTENT="$rt;URL=$self?cmd=playlist&s=$args{s}">
+<META HTTP-EQUIV="Refresh" CONTENT="$rt;URL=$req->{self}?cmd=playlist&s=$args{s}">
 EOF
 		printhdr($conf{plstyle}, "onLoad=do_onload()");
-		print_az_table($dbh, \%session);
-		print_playlist_table($dbh);
+		print_az_table($req, \%session);
+		print_playlist_table($req);
 	#	printf "[[%s]]\n", $bla;
 		printftr;
 	}
@@ -1471,7 +1471,7 @@ EOF
 			$q .= "AND song.artist_id=artist.id AND song.album_id=album.id ".
 			      "GROUP BY artist_id, album_id ".
 			      "ORDER BY UCASE(artist.name),UCASE(album.name)";
-			print_artistlist_table($dbh, \%session, $cap, $q, @qargs);
+			print_artistlist_table($req, \%session, $cap, $q, @qargs);
 		} else {
 			print "Error: No search terms specified.\n";
 		}
@@ -1554,7 +1554,7 @@ EOF
 				"AND filename LIKE ? ".
 				"ORDER BY $s,album.name,track,artist.name,title,time_added";
 			push @qargs, $filename_restriction;
-			print_alllist_table($dbh, \%args, \%session, $cap, $q, $limit, @qargs);
+			print_alllist_table($req, \%session, $cap, $q, $limit, @qargs);
 		} else {
 			print "Error: No search terms specified.\n";
 		}
@@ -1567,8 +1567,8 @@ EOF
 		print <<EOF;
 <center id=hdr>$args{cap}</center>
 EOF
-		print_seealso_row($dbh, $args{artist_id});
-		print_albums_row($dbh, $self, $args{artist_id}, "Albums: ", 1);
+		print_seealso_row($req, $args{artist_id});
+		print_albums_row($req, $req->{self}, $args{artist_id}, "Albums: ", 1);
 		printftr;
 	}
 	elsif($cmd eq 'sql') {
@@ -1581,7 +1581,7 @@ EOF
 
 		printf <<EOF, enchtml($args{sql}), defined($args{limit})? $args{limit} : 500;
 SQL-query:<br>
-<form action="$self" method=get>
+<form action="$req->{self}" method=get>
   <input type=hidden name=cap value="SQL-query">
   <input type=hidden name=cmd value=sql>
 <code>
@@ -1594,13 +1594,13 @@ EOF
 
 		if($args{sql}) {
 			if($args{limit} == 0) {
-				my ($count) = $dbh->selectrow_array("SELECT COUNT(*)".
+				my ($count) = $req->{dbh}->selectrow_array("SELECT COUNT(*)".
 					" FROM song,artist,album WHERE present " .
 					" AND song.artist_id=artist.id AND song.album_id=album.id AND " .
 					$args{sql});
 				print "Count: $count\n";
 			} else {
-				print_alllist_table($dbh, \%args, \%session, "User SQL-query",
+				print_alllist_table($req, \%session, "User SQL-query",
 					"SELECT artist.name as artist,album.name as album,song.*," .
 					"song.artist_id as arid, song.album_id as alid" .
 					" FROM song,artist,album WHERE present " .
@@ -1617,7 +1617,7 @@ EOF
 		my $s = $args{sort} || "r_time_added";
 		$s =~ s/\W//g;
 		$s =~ s/^r_(.*)/\1 DESC/;
-		print_alllist_table($dbh, \%args, \%session,
+		print_alllist_table($req, \%session,
 			"Most recent $n songs" . ($args{np}? " (never played yet)":""),
 			"SELECT artist.name as artist,album.name as album,song.*," .
 			"song.artist_id as arid, song.album_id as alid" .
@@ -1634,7 +1634,7 @@ EOF
 		print <<EOF;
 </script>
 <center id=hdr>Update Database</center>
-<form action="$self" method=get>
+<form action="$req->{self}" method=get>
  <input type=hidden name=cmd value=update>
  <input type=submit value="Update Database"><br><br>
  Updating the database will take a while; don't press the 'stop' button on your browser if you want this to succeed.
@@ -1644,42 +1644,42 @@ EOF
 	}
 	elsif($cmd eq 'update') {
 		require_write_access;
-		print $cgiquery->header(-type=>'text/plain');
+		print $req->{cgiquery}->header(-type=>'text/plain');
 		print `$progdir/soepkiptng_update 2>&1`;
 	}
 	elsif($cmd eq 'edit') {
 		printhtmlhdr;
 		printhdr($conf{editstyle});
-		print_edit_page($dbh, \%args);
+		print_edit_page($req);
 		printftr;
 	}
 	elsif($cmd eq 'lyrics') {
 		printhtmlhdr;
 		printhdr($conf{editstyle});
-		print_lyrics_page($dbh, \%args);
+		print_lyrics_page($req);
 		printftr;
 	}
 	elsif($cmd eq 'shoutcast') {
 		printhtmlhdr;
 		printhdr($conf{allstyle});
-		print_shoutcast_page($dbh, \%args);
+		print_shoutcast_page($req);
 		printftr;
 	}
 	elsif($cmd eq 'download') {
 		$args{id} =~ /(\d+)/;
 		my $id = $1;
-		my ($file) = $dbh->selectrow_array("SELECT filename FROM song WHERE id=$id")
+		my ($file) = $req->{dbh}->selectrow_array("SELECT filename FROM song WHERE id=$id")
 			or die "id $id not found in database\n";
 
 		open F, $file or die "$file: $!\n";
-		print $cgiquery->header(-type=>'application/octet-stream', -Content_length=>(-s F));
+		print $req->{cgiquery}->header(-type=>'application/octet-stream', -Content_length=>(-s F));
 		while(read F, $_, 4096) { print; }
 		close F;
 	}
 	elsif($cmd eq 'lists') {
 	        printhtmlhdr;
 		printhdr($conf{allstyle});
-		print_lists($dbh);
+		print_lists($req);
 		printftr;
 	}
 	elsif($cmd eq 'cdda') {
@@ -1687,19 +1687,19 @@ EOF
 		if(!$conf{cdda_prog}) {
 			die "CD-DA not configured\n";
 		}
-		$dbh->do("DELETE FROM song WHERE filename LIKE 'cdda:%'");
+		$req->{dbh}->do("DELETE FROM song WHERE filename LIKE 'cdda:%'");
 		open F, "$conf{cdda_prog}|";
 		chop(my $cddbinfo = <F>);
 		chop($_ = <F>);
-		my $arid = get_id($dbh, "artist", $_) or die;
+		my $arid = get_id($req->{dbh}, "artist", $_) or die;
 		chop($_ = <F>);
-		my $alid = get_id($dbh, "album", $_) or die;
+		my $alid = get_id($req->{dbh}, "album", $_) or die;
 		my $nr = 1;
 		while(<F>) {
 			chop;
 			s/^(\d+) //;
 			my $len = $1;
-			$dbh->do("REPLACE INTO song SET title=?, filename=?, album_id=?, " .
+			$req->{dbh}->do("REPLACE INTO song SET title=?, filename=?, album_id=?, " .
 				"artist_id=?, present=1, encoding='CD-DA', track=?, " .
 				"length=?, time_added=NULL", undef,
 				$_, "cdda:$cddbinfo:$nr", $alid, $arid, $nr, $len) or die;
@@ -1707,7 +1707,7 @@ EOF
 		}
 		close F;
 		$args{cdda} = $cddbinfo;
-	 	printredir($cgiquery, $self, 'alllist', \%args);
+	 	printredir($req, 'alllist', \%args);
 	}
 	else {
 		printhtmlhdr;

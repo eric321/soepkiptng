@@ -85,20 +85,29 @@ sub run_instance() {
 	my $i;
 	for($i = 0; $i < $lifetime; $i++) {
 		$conn = $daemon->accept or die "accept: $!\n";
-		my $req = $conn->get_request or next;
-		warn "\n=====pid$$->$i===== req->uri=[" . $req->uri . "]===\n";
+		my $r = $conn->get_request or next;
+		warn "\n=====pid$$->$i===== r->uri=[" . $r->uri . "]===\n";
 		my $content;
-		if($req->method eq "GET") {
-			($content = $req->uri) =~ s/.*?\?//;
-		} elsif($req->method eq "POST") {
-			$content = $req->content;
+		if($r->method eq "GET") {
+			($content = $r->uri) =~ s/.*?\?//;
+		} elsif($r->method eq "POST") {
+			$content = $r->content;
 		} else {
 			die "invalid request\n";
 		}
+
 		$cgiquery = new CGI($content);
+
+		my $req;
+		$req->{dbh} = $dbh;
+		$req->{cgiquery} = $cgiquery;
+		$req->{self} = "/";
+		$req->{host} = inet_ntoa($conn->peeraddr);
+
 		open STDOUT, ">&=" . $conn->fileno;
-		handle_request($dbh, $cgiquery, "/", inet_ntoa($conn->peeraddr));
+		handle_request($req);
 		close STDOUT;
+
 		$conn = undef;
 	}
 	warn "$i connections served, exiting.\n";
