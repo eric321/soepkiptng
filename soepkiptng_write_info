@@ -202,8 +202,13 @@ sub do_mp3($$) {
 	$mp3 = MP3::Tag->new($f) or die "$f: $!\n";
 	$mp3->config("autoinfo", "ID3v2");
 	($p_ti, $p_tr, $p_ar, $p_al) = $mp3->autoinfo();
-	
-	if($p_ti ne $ti || $p_tr != $tr || $p_ar ne $ar || $p_al ne $al) {
+
+	my $p_len = 0;
+	if(exists $mp3->{ID3v2}) {
+		$p_len = $mp3->{ID3v2}->getFrame("TLEN");
+	}
+
+	if($p_ti ne $ti || $p_tr != $tr || $p_ar ne $ar || $p_al ne $al || $p_len != 1000 * $len) {
 		$newtag = $mp3->newTag('ID3v2');
 		$newtag->add_frame('TIT2', $ti) if $ti;
 		$newtag->add_frame('TPE1', $ar) if $ar;
