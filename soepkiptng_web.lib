@@ -857,6 +857,19 @@ sub getlyrics($;$) {
 	($info->{artist}, $info->{title}, $info->{album}) = ($ar, $ti, $al);
 }
 
+sub print_lyrics_google_redir($) {
+	my ($req) = @_;
+
+	my ($a, $t) = $req->{dbh}->selectrow_array(
+			"SELECT artist.name, song.title FROM song " .
+			"LEFT JOIN artist ON artist.id=song.artist_id " . 
+			"WHERE song.id=?", undef, $req->{args}->{id})
+		or die "id $req->{args}->{id} not found.\n";
+
+ 	print $req->{cgiquery}->redirect("http://www.google.com/search?q=" .
+		encurl("lyrics \"$a\" \"$t\""));
+}
+
 sub print_lyrics_page($) {
 	my ($req) = @_;
 
@@ -973,10 +986,19 @@ sub print_lyrics_page($) {
  document.write('<input type=submit value="Close" onClick="javascript:window.close();">');
 // -->
 </script>
+</form>
+  </td>
+ </tr>
+ <tr>
+  <td colspan=2>
+   <form action="%s" method=get target=_blank>
+    <input type=submit name=action_google value="Google for lyrics">
+    <input type=hidden name=id value="%d">
+    <input type=hidden name=cmd value=googlelyrics>
+   </form>
   </td>
  </tr>
 </table>
-</form>
 EOF
 		$req->{self}, $req->{args}->{id}, $req->{args}->{ids}, $downloaded,
 		enchtml($f->{artist}), enchtml($f->{title}),
@@ -989,7 +1011,7 @@ EOF
 				sort { lc($iso_639_2{$a}) cmp lc($iso_639_2{$b}) }
 				grep { ! /^(eng|dut|ger|fre|esl|ita)$/ } keys %iso_639_2)),
 		$rows, enchtml($f->{lyrics}),
-		$prev, $next;
+		$prev, $next, $req->{self}, $req->{args}->{id};
 }
 
 sub print_shoutcast_page($) {
@@ -1661,6 +1683,9 @@ EOF
 		printhdr($conf{editstyle});
 		print_lyrics_page($req);
 		printftr;
+	}
+	elsif($cmd eq 'googlelyrics') {
+		print_lyrics_google_redir($req);
 	}
 	elsif($cmd eq 'shoutcast') {
 		printhtmlhdr;
