@@ -121,8 +121,10 @@ $SIG{'CHLD'} = sub {
 warn "********** starting (pid=$$) **********\n";
 
 $SIG{'TERM'} = sub {
-	kill 'KILL', $pid, $cdrplaypid;
+	warn "got SIGTERM, killing $pid and $cdrplaypid, exiting\n";
 	unlink $statusfile;
+	kill 'KILL', $pid, $cdrplaypid;
+	exit;
 };
 
 $SIG{'USR1'} = sub {

@@ -158,6 +158,7 @@ EOF
 
 sub print_playlist_table($$) {
 	my ($dbh, $nowplaying) = @_;
+	my $nowfile;
 	my $output;
 	my $delall;
 
@@ -165,6 +166,7 @@ sub print_playlist_table($$) {
 		local *F;
 		if(open F, $statusfile) {
 			$nowplaying = <F>;
+			$nowfile = <F>;
 			close F;
 		}
 	}
@@ -174,10 +176,18 @@ sub print_playlist_table($$) {
 			" WHERE id = $nowplaying";
 		my $sth = $dbh->prepare($query);
 		my $rv = $sth->execute;
-		if($_ = $sth->fetchrow_hashref) {
-			$output .= get_playlist_table_entry
-				"$self?cmd=kill&t=$t", $killtext, "", "", $_;
-		}
+		$_ = $sth->fetchrow_hashref or do {
+			$nowfile =~ m|(.*/)?(.*)|;
+			$_->{artist} = 'ERROR: Not in database';
+			$_->{album} = $1;
+			$_->{title} = $2;
+			$_->{id} = $nowplaying;
+			$_->{track} = '';
+			$_->{length} = 0;
+			$_->{encoding} = '?';
+		};
+		$output .= get_playlist_table_entry
+			"$self?cmd=kill&t=$t", $killtext, "", "", $_;
 	}
 
 	$query =  "SELECT songs.title,songs.artist,songs.album,songs.id,songs.track,songs.length,songs.encoding" .
