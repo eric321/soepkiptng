@@ -55,7 +55,8 @@ sub add_song_nolock($$$@) {
 		$order++;
 		$q .= ",($order,$_,\"$user\")";
 	}
-	$db->do($q);
+	$db->do($q) or return undef;
+	return 1;
 }
 
 sub get_queue_ids($$) {
@@ -73,8 +74,9 @@ sub add_song($$@) {
 	del_song($db, @ids);
 	my ($order) = $db->selectrow_array("SELECT MAX(song_order) FROM queue");
 	$order = 0 if $order < 0;
-	add_song_nolock($db, $order + 1, $user, @ids);
+	my $retval = add_song_nolock($db, $order + 1, $user, @ids);
 	$db->do("UNLOCK TABLES");
+	return $retval;
 }
 
 sub reorder_queue($@) {
