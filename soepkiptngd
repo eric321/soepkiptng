@@ -133,6 +133,7 @@ sub get_song_queued() {
 }
 
 sub get_song_random_recent() {
+	no integer;
 	my ($song_id, $filename);
 
 	if(rand() < $conf{recent_prob}) {
@@ -374,8 +375,8 @@ for(;;) {
 
 	($song_id, $songtype, $filename, $user) = get_song_jingle();
 	$song_id or ($song_id, $songtype, $filename, $user) = get_song_queued();
-	$song_id or ($song_id, $songtype, $filename, $user) = 	get_song_random_recent();
-	$song_id or ($song_id, $songtype, $filename, $user) = 	get_song_random();
+	$song_id or ($song_id, $songtype, $filename, $user) = get_song_random_recent();
+	$song_id or ($song_id, $songtype, $filename, $user) = get_song_random();
 
 	if($song_id) {
 		# update database
