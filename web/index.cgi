@@ -510,7 +510,7 @@ function closethis() {
   <form action="%s" method=get>
   <input type=hidden name=id value="%d">
     <input type=hidden name=cmd value=changefile>
-    <input type=hidden name=ids value=%s>
+    <input type=hidden name=ids value="%s">
   <tr><td>%s</td></tr>
   <tr><td>Present:</td><td>%s</td></tr>
   <tr><td>Artist:</td><td><input type=text size=60 name=artist value="%s"><input type=submit name=action_clear_artist value="Clear"><input type=submit name=action_fix_artist value="Fix"><input type=submit name=action_swapa value="Swap First/Last"></td></tr>
