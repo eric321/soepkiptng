@@ -219,6 +219,7 @@ sub validate_song_random($) {
 	my ($song) = @_;
 	my $s = undef;
 
+	$song or return undef;
 	my $min = $conf{min_random_time};
 	my $where = "song.id=? AND present AND filename LIKE '/%' AND " .
 	            "unix_timestamp(now()) - unix_timestamp(last_played) > ?";
@@ -521,11 +522,15 @@ for(;;) {
 
 	if($dbh) {
 		$song = get_song_jingle() || get_song_queued() || get_song_random_recent() or do {
-			while(!$randsong || !($randsong = validate_song_random($randsong))) {
-				$randsong = select_song_random();
+			$randsong = validate_song_random($randsong);
+			if($randsong) {
+				$song = $randsong;
+				$randsong = undef;
+			} else {
+				do {
+					$song = select_song_random();
+				} while !$song;
 			}
-			$song = $randsong;
-			$randsong = undef;
 		};
 
 		# random lookup can take a few sec; maybe a jingle/queued song
