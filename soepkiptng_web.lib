@@ -236,26 +236,37 @@ sub albumlist_entry($) {
 		enchtml($1 || "?"), enchtml($2), $res->{c});
 }
 
-sub prune_albumlist($) {
-	my ($albumlist) = @_;
+sub albumlist($$$) {
+	my ($albumlist, $sep, $prune) = @_;
 
-	my $num_cut = 0;
-	my $al_len_tot = 0;
-	foreach(@$albumlist) {
-		$_->{al_len} = length($_->{album});
-		$al_len_tot += $_->{al_len};
-	}
-	if($conf{albumlist_length_threshold} > 0 &&
-	   $al_len_tot >= $conf{albumlist_length_threshold}) {
-		my $len_to_cut = $al_len_tot - $conf{albumlist_length_threshold};
-		foreach(sort { $a->{random_pref} <=> $b->{random_pref} || $b->{al_len} <=> $a->{al_len} } @$albumlist) {
-			$len_to_cut -= $_->{al_len};
-			$_->{al_len} = -1;
-			$num_cut++;
-			last if $len_to_cut < 0;
+	my $more = 0;
+	if($prune) {
+		my $al_len_tot = 0;
+		foreach(@$albumlist) {
+			$_->{al_len} = length($_->{album});
+			$al_len_tot += $_->{al_len};
+		}
+		if($conf{albumlist_length_threshold} > 0 &&
+		   $al_len_tot >= $conf{albumlist_length_threshold}) {
+			my $len_to_cut = $al_len_tot - $conf{albumlist_length_threshold};
+			foreach(sort { $a->{random_pref} <=> $b->{random_pref} || $b->{al_len} <=> $a->{al_len} } @$albumlist) {
+				$len_to_cut -= $_->{al_len};
+				$_->{al_len} = -1;
+				$more++;
+				last if $len_to_cut < 0;
+			}
 		}
 	}
-	return $num_cut;
+	my $out = join($sep, map { albumlist_entry($_) }
+		grep { $_->{al_len} != -1 } @$albumlist);
+	if($more) {
+		$out .= sprintf <<EOF,
+&nbsp; <a id=a href="%s?cmd=albumlist&artist_id=%d&cap=%s">[%d more...].</a>
+EOF
+			$self, $albumlist->[0]->{arid},
+			encurl("Artist: $albumlist->[0]->{artist}"), $more;
+	}
+	return $out;
 }
 
 sub print_playlist_table($) {
@@ -344,16 +355,15 @@ sub print_artistlist_table($$$@) {
 	my $sth = $dbh->prepare($query);
 	my $rv = $sth->execute(@val)
 		or die "can't do sql command: " . $dbh->errstr;
-	my %artistname;
+	my @artists;
 	my %albumlist;
 	while($_ = $sth->fetchrow_hashref()) {
-		$artistname{$_->{arid}} = $_->{artist};
-#		$al{$_->{arid}} .= albumlist_entry($_) . ",&nbsp;";
+		push @artists, $_->{arid} unless $albumlist{$_->{arid}};
 		push @{$albumlist{$_->{arid}}}, $_;
 	}
 
 	print "<center id=hdr>$caption</center>\n";
-	if(!%artistname) {
+	if(!%albumlist) {
 		print "No search results.\n";
 		return;
 	}
@@ -366,25 +376,15 @@ sub print_artistlist_table($$$@) {
  </tr>
 EOF
 	my $res = 0;
-	foreach(sort {lc($artistname{$a}) cmp lc($artistname{$b})} keys %artistname) {
-		my $more = prune_albumlist($albumlist{$_});
+	foreach(map { $albumlist{$_} } @artists) {
 		printf <<EOF,
 <tr>
- <td valign=top>&nbsp;<a id=a href="$self?cmd=alllist&artist_id=$_&cap=%s">%s</a>&nbsp;</td>
- <td valign=top>&nbsp;%s
-EOF
-			encurl("Artist: $artistname{$_}"), $artistname{$_},
-			join(",&nbsp;", map { albumlist_entry($_) }
-				grep { $_->{al_len} != -1 } @{$albumlist{$_}});
-		if($more) {
-			printf <<EOF, $self, $_, encurl('^$'), $more;
-&nbsp; <a id=a href="%s?cmd=alllist&artist_id=%d&album=%s&expanded_albumlist=1">[%d more...].</a>
-EOF
-		}
-		printf <<EOF,
-&nbsp;</td>
+ <td valign=top>&nbsp;<a id=a href="%s?cmd=alllist&artist_id=%d&cap=%s">%s</a>&nbsp;</td>
+ <td valign=top>&nbsp;%s&nbsp;</td>
 </tr>
 EOF
+			$self, $_->[0]->{arid}, encurl("Artist: $_->[0]->{artist}"),
+			$_->[0]->{artist}, albumlist($_, ",&nbsp; ", 1);
 		$res++;
 	}
 	print <<EOF;
@@ -428,8 +428,8 @@ sub print_seealso_row($$) {
 	}
 }
 
-sub print_albums_row($$$$$) {
-	my ($dbh, $baseurl, $argsref, $artistid, $label) = @_;
+sub print_albums_row($$$$;$) {
+	my ($dbh, $baseurl, $artistid, $label, $expand) = @_;
 
         my $query = "SELECT DISTINCT binary album.name as album," .
 		" binary artist.name as artist, song.random_pref," .
@@ -445,22 +445,8 @@ sub print_albums_row($$$$$) {
 	if(@$albumlist == 0) {
 		return undef;
 	}
-
-	my $sep = "&nbsp; ";
-	my $more = 0;
-	if($argsref->{expanded_albumlist}) {
-		$sep = "<br>\n";
-	} else {
-		$more = prune_albumlist($albumlist);
-	}
 	printf "$label$sep";
-	print join(",$sep", map { albumlist_entry($_) }
-		grep { $_->{al_len} != -1 } @$albumlist);
-	if($more) {
-		printf <<EOF, $baseurl, $argsref->{cmd}, $more;
-&nbsp; <a id=a href="%scmd=%s&expanded_albumlist=1">[%d more...].</a>
-EOF
-	}
+	print albumlist($albumlist, $expand? "<br>\n" : ",&nbsp; ", !$expand);
 	return 1;
 }
 
@@ -488,7 +474,7 @@ EOF
 	if(!@ids) {
 		if($argsref->{artist_id}) {
 			print_seealso_row($dbh, $argsref->{artist_id});
-			print_albums_row($dbh, $baseurl, $argsref, $argsref->{artist_id}, "Albums:")
+			print_albums_row($dbh, $baseurl, $argsref->{artist_id}, "Albums:")
 				and return;
 		}
 		print "No search results.\n";
@@ -530,7 +516,7 @@ EOF
 
 	if(scalar keys %artistids == 1) {
 		print_seealso_row($dbh, (keys %artistids)[0]);
-		print_albums_row($dbh, $baseurl, $argsref, (keys %artistids)[0], "Albums:");
+		print_albums_row($dbh, $baseurl, (keys %artistids)[0], "Albums:");
 	}
 
 	print "<table border=0 cellspacing=0>\n";
@@ -1193,7 +1179,7 @@ EOF
 		my $s;
 		my $q = ("SELECT DISTINCT artist.name as artist, album.name as album," .
 			 " count(*) as c, song.artist_id as arid, song.album_id as alid," .
-			 " UCASE(album.name) as sort, song.random_pref" .
+			 " song.random_pref" .
 			 " FROM song,artist,album WHERE present AND filename LIKE '/%'");
 		my @qargs;
 
@@ -1208,8 +1194,9 @@ EOF
 
 		if(scalar @qargs > 0) {
 			$s =~ s/^r_(.*)/\1 DESC/;
-			$q .= " AND song.artist_id=artist.id AND song.album_id=album.id".
-			      " GROUP BY artist_id, album_id ORDER BY sort";
+			$q .= "AND song.artist_id=artist.id AND song.album_id=album.id ".
+			      "GROUP BY artist_id, album_id ".
+			      "ORDER BY UCASE(artist.name),UCASE(album.name)";
 			print_artistlist_table($dbh, \%session, $cap, $q, @qargs);
 		} else {
 			print "Error: No search terms specified.\n";
@@ -1290,6 +1277,16 @@ EOF
 			print "Error: No search terms specified.\n";
 		}
 	#	printf "[[%s]]\n", $bla;
+		printftr;
+	}
+	elsif($cmd eq 'albumlist') {
+		printhtmlhdr;
+		printhdr($conf{allstyle});
+		print <<EOF;
+<center id=hdr>$args{cap}</center>
+EOF
+		print_seealso_row($dbh, $args{artist_id});
+		print_albums_row($dbh, $self, $args{artist_id}, "Albums:", 1);
 		printftr;
 	}
 	elsif($cmd eq 'sql') {
