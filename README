@@ -160,8 +160,6 @@ TODO:
 * synchronize update of statusfile with cdrplay
 * CD-DA support: don't re-enter info into db every time you click "CD-DA"
   maybe use persistent info and cddb disc_id?
-* clean up soepkiptng_write_id3v2, add Ogg-Vorbis support (use vorbiscomment),
-  rename it to some better name
 
 $Id$
 
