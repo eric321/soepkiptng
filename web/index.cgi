@@ -19,8 +19,6 @@
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 
 ############################################################################
-# CONFIG
-
 
 BEGIN {
 	# find program directory
@@ -30,7 +28,7 @@ BEGIN {
 		if($l =~ m|^/|) { $_ = $l; } else { s|[^/]*$|/$l|; }
 	}
 	m|(.*)/|;
-	(my $progdir = abs_path($1)) =~ s|/+[^/]+$||;
+	(my $progdir = Cwd::abs_path($1)) =~ s|/+[^/]+$||;
 
 	require "$progdir/soepkiptng.lib";
 }
@@ -928,6 +926,8 @@ sub get_user($) {
 
 ############################################################################
 # MAIN
+
+read_configfile(\%conf);
 
 my $query = new CGI;
 my $pathinfo = $query->path_info();
