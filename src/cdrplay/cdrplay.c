@@ -40,7 +40,7 @@ void perr(char *s)
 void sighandler(int s)
 {
 	if(pid1) kill(pid1, s);
-	if(s == SIGINT) {
+	if(pid1 && s == SIGINT) {
 		short buf[2];
 
 		signal(SIGINT, sighandler);
@@ -97,10 +97,13 @@ int pipeopen(char **cmd, int *pid)
 void usage(FILE *f)
 {
 	fprintf(f, "\
-Usage:   cdrplay [-dMR] [-b bufsize_kb] [command args...]\n\
+Usage:   cdrplay [-dvMR] [-b bufsize_kb] [-k n] [-D file] [command args...]\n\
 \n\
-         -d              : enable debugging output\n\
          -b bufsize_kb   : set buffer size\n\
+         -d              : enable debugging output\n\
+         -k n            : skip first n bytes (only works on seekable files)\n\
+         -v              : verbose status output\n\
+         -D file         : send output to file instead of /dev/dsp\n\
          -M              : disable use of mlockall(2)\n\
          -R              : disable use of real-time scheduling\n\
 \n");
@@ -109,13 +112,15 @@ Usage:   cdrplay [-dMR] [-b bufsize_kb] [command args...]\n\
 int main(int argc, char **argv)
 {
 	char *buf, *p, c;
-	int bufsize, l, minlen = 0, status, i;
+	int bufsize, l, minlen = 0, status, i, r, w, iseek = 0;
 	int maxfd;
 	fd_set rfds, wfds;
-	int debug = 0, do_mlockall = 1;
+	int debug = 0, do_mlockall = 1, verbose = 0;
+	time_t starttime = 0;
+	char *snddev = "/dev/dsp";
 
 	bufsize = 500 * 1024;
-	while((c = getopt(argc, argv, "+b:dhRM")) != EOF) {
+	while((c = getopt(argc, argv, "+b:dhk:vD:RM")) != EOF) {
 		switch(c) {
 			case 'b':
 				bufsize = atoi(optarg) * 1024;
@@ -129,6 +134,15 @@ int main(int argc, char **argv)
 				break;
 			case 'h':
 				usage(stdout);
+				exit(0);
+			case 'k':
+				iseek = atoi(optarg);
+				break;
+			case 'v':
+				verbose++;
+				break;
+			case 'D':
+				snddev = optarg;
 				break;
 			case 'R':
 				do_realtime = 0;
@@ -148,9 +162,10 @@ int main(int argc, char **argv)
 		fd1 = 0;
 	else
 		fd1 = pipeopen(argv + optind, &pid1);
+	if(iseek) lseek(fd1, iseek, SEEK_SET);
 
-	fd2 = open("/dev/dsp", O_WRONLY);
-	if(fd2 < 0) { perror("/dev/dsp"); exit(1); }
+	fd2 = open(snddev, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+	if(fd2 < 0) { perror(snddev); exit(1); }
 	ioctl(fd2, SNDCTL_DSP_SYNC, 0);
 	i = 44100;
 	ioctl(fd2, SNDCTL_DSP_SPEED, &i);
@@ -166,9 +181,27 @@ int main(int argc, char **argv)
 	signal(SIGPIPE, SIG_IGN);
 	
 	for(;;) {
-		if(debug) {
-			printf("Bufsize = %4d/%4d\n", len / 1024, bufsize / 1024);
-/*			fflush(stdout);*/
+		if(debug)
+			printf("Bufsize = %8d/%8d\n", len, bufsize);
+
+		if(verbose) {
+			unsigned t;
+			int perc;
+			static unsigned displayed_t = 0;
+			static int displayed_perc = -1;
+			
+			if(starttime)
+				t = time(NULL) - starttime;
+			else
+				t = 0;
+			perc = 100 * len / bufsize;
+			
+			if(t != displayed_t || perc != displayed_perc) {
+				printf("time [%02u:%02u] fill %d%%      \r", t / 60, t % 60, perc);
+				fflush(stdout);
+				displayed_t = t;
+				displayed_perc = perc;
+			}
 		}		
 	
 		if(!mayread && len == 0) break;
@@ -190,6 +223,7 @@ int main(int argc, char **argv)
 
 			maywrite = 1;
 			minlen = len;
+			time(&starttime);
 		}
 
 		FD_ZERO(&rfds);
@@ -202,11 +236,16 @@ int main(int argc, char **argv)
 		if(FD_ISSET(fd2, &wfds)) {
 			l = len < BLKSIZE? len : BLKSIZE;
 			if(l + pos > bufsize) l = bufsize - pos;
-			while((l = write(fd2, buf + pos, l)) == -1 && errno == EINTR) ;
-			if(l == -1 && errno != EAGAIN) { perror("write"); break; }
-			if(l >= 0) {
-				len -= l;
-				pos = (pos + l) % bufsize;
+			while((r = write(fd2, buf + pos, l)) == -1 && errno == EINTR) {
+				if(!maywrite) {
+					r = 0;
+					break;
+				}
+			}
+			if(r == -1 && errno != EAGAIN) { perror("write"); break; }
+			if(r >= 0) {
+				len -= r;
+				pos = (pos + r) % bufsize;
 				continue;
 			}
 		}
@@ -215,12 +254,13 @@ int main(int argc, char **argv)
 		if(FD_ISSET(fd1, &rfds)) {
 			p = buf + (pos + len) % bufsize;
 			l = (bufsize - len) < BLKSIZE? (bufsize - len) : BLKSIZE;
-			while((l = read(fd1, p, l)) == -1 && errno == EINTR) ;
-			if(l == -1 && errno != EAGAIN) { perror("read"); break; }
-			if(l == 0) mayread = 0;
-			if(l > 0) len += l;
+			while((w = read(fd1, p, l)) == -1 && errno == EINTR) ;
+			if(w == -1 && errno != EAGAIN) { perror("read"); break; }
+			if(w == 0) mayread = 0;
+			if(w > 0) len += w;
 		}
 	}
+	if(verbose) printf("\n");
 	close(fd1);
 	buf[0] = buf[1] = buf[2] = buf[3] = 0;
 	write(fd2, buf, 4);
