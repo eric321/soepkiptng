@@ -235,11 +235,13 @@ sub getinfo_mp3($) {
 
 	my $info = get_mp3info($_[0]);
 	my $secs = 0 + $info->{MM} * 60 + $info->{SS};
+	my $bitrate = $info->{BITRATE};
 	if($frames) {
 		$secs = $frames * ($info->{VERSION}? 1152 : 576) /
 			($info->{FREQUENCY} * 1000);
+		$bitrate = int(8 * (-s $_[0]) / $secs / 1000);
 	}
-	return (sprintf("MP3 %dkb/s", $info->{BITRATE}),
+	return (sprintf("MP3 %dkb/s%s", $bitrate, $frames? " (VBR)":""),
 		$secs, 0 + $info->{FREQUENCY},
 		$info->{STEREO}? 2 : 1
 	);
