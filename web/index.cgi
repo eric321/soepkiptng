@@ -50,6 +50,18 @@ BEGIN {
 ############################################################################
 # SUBROUTINES
 
+sub require_write_access() {
+	if($conf{write_access_func} &&
+		!eval $conf{write_access_func}) {
+
+		printhtmlhdr;
+		printhdr($conf{allstyle});
+		print "<b>Access Denied.</b>\n";
+		printftr;
+		exit;
+	}
+}
+
 sub can_delete($) {
 	my ($file) = @_;
 
@@ -694,6 +706,7 @@ sub print_shoutcast_page($$) {
 	$args->{url} =~ s|^/*(?!http:)(.)|http://$1|;
 	foreach(keys %$args) {
 		if(/^delete_(\d+)$/) {
+			require_write_access;
 			$dbh->do("DELETE FROM song WHERE id=?", undef, $1)
 				or die "can't do sql command: " . $dbh->errstr;
 			delete $args->{editid};
@@ -701,11 +714,13 @@ sub print_shoutcast_page($$) {
 		}
 	}
 	if($args->{editid} && $args->{url}) {
+		require_write_access;
 		if($args->{action_clear_name}) { $args->{name} = ""; }
 		$dbh->do("UPDATE song SET title=?,filename=? WHERE id=?",
 			undef, $args->{name}, $args->{url}, $args->{editid})
 			or die "can't do sql command: " . $dbh->errstr;
 	} elsif($args->{url}) {
+		require_write_access;
 		my $arid = get_id($dbh, "artist", '') or die;
 		my $alid = get_id($dbh, "album", '') or die;
 		$dbh->do("REPLACE INTO song SET title=?, filename=?, album_id=?, " .
@@ -875,6 +890,8 @@ sub add_search_args($$$$@) {
 sub delete_file($$) {
 	my ($dbh, $argsref) = @_;
 
+	require_write_access;
+
 	printhtmlhdr;
 	printhdr($conf{allstyle});
 	$argsref->{id} =~ /(\d+)/;
@@ -972,11 +989,13 @@ elsif($cmd eq 'seteditlist') {
  	printredirexit($q, 'playlist', undef);
 }
 elsif($cmd eq 'addlist') {
+	require_write_access;
 	$dbh->do("REPLACE INTO list SET name=?", undef, $args{listname})
 		or die;
  	printredirexit($q, 'lists', \%args);
 }
 elsif($cmd eq 'addtolist') {
+	require_write_access;
 	$dbh->do("REPLACE INTO list_contents SET type=?, list_id=?, entity_id=?", undef,
 		$args{add_type}, $args{add_list}, $args{add_id})
 		or die;
@@ -986,6 +1005,7 @@ elsif($cmd eq 'addtolist') {
  	printredirexit($q, 'alllist', \%args);
 }
 elsif($cmd eq 'dellist') {
+	require_write_access;
 	$dbh->do("DELETE FROM list WHERE id=?", undef, $args{id})
 		or die;
 	$dbh->do("DELETE FROM list_contents WHERE list_id=?", undef, $args{id})
@@ -998,6 +1018,8 @@ elsif($cmd eq 'shuffle') {
 }
 elsif($cmd eq 'changefile') {
 	my $newid = 0;
+
+	require_write_access;
 
 	if($args{action_delete}) {
 		delete_file($dbh, \%args);
@@ -1231,6 +1253,8 @@ EOF
 	printftr;
 }
 elsif($cmd eq 'sql') {
+	require_write_access;
+
 	printhtmlhdr;
 	printhdr($conf{allstyle});
 
@@ -1293,6 +1317,7 @@ EOF
 	printftr;
 }
 elsif($cmd eq 'update') {
+	require_write_access;
 	print $q->header(-type=>'text/plain');
 	my $arg = "";
 	$arg = "-f" if $args{action_full};
