@@ -498,8 +498,9 @@ EOF
 		if($albumlist_length_threshold == 0 ||
 		   $al_len_tot < $albumlist_length_threshold ||
 		   $$argsref{'expanded_albumlist'}) {
-			printf "Albums: %s.\n", join($$argsref{'expanded_albumlist'}?
-				",<br>\n" : ",&nbsp; ",
+			my $sep = "&nbsp; ";
+			if($$argsref{'expanded_albumlist'}) { $sep = "<br>\n"; }
+			printf "Albums:%s%s.\n", $sep, join(",$sep",
 				map { $al{$_} } @alids);
 		} else {
 			my $len_left = $albumlist_length_threshold;
@@ -1120,18 +1121,28 @@ elsif($cmd eq 'maint') {
 	printhtmlhdr;
 	printhdr($allstyle);
 	print <<EOF;
-<a href="$self?cmd=update">Quick update</a> (leave existing files alone).<br>
-<a href="$self?cmd=update&args=-f">Full update</a> (re-enter info for existing files).<br>
+<script language="Javascript">
+<!--
+function verifyfull() {
+   return confirm("Are you sure you want to perform a full update? You might lose changes you made in the database!");
+}
+// -->
+</script>
+<center id=hdr>Update Database</center>
+<form action="$self" method=get>
+ <input type=hidden name=cmd value=update>
+ <input type=submit value="Quick Update"> (leave existing files alone).<br><br>
+ <input type=submit value="Full Update" name=action_full onClick="return verifyfull();"> (re-enter info for existing files (<b>dangerous</b>)).<br><br>
+ Updating the database will take a while; don't press the 'stop' button on your browser if you want this to succeed.
+</form>
 EOF
 	printftr;
 }
 elsif($cmd eq 'update') {
-	printhtmlhdr;
-	printhdr($allstyle);
-	print "<pre>\n";
-	print `$progdir/soepkiptng_update $args{'args'} 2>&1`;
-	print "</pre>\n";
-	printftr;
+	print $q->header(-type=>'text/plain');
+	my $arg = "";
+	$arg = "-f" if $args{action_full};
+	print `$progdir/soepkiptng_update $arg 2>&1`;
 }
 elsif($cmd eq 'edit') {
 	printhtmlhdr;
