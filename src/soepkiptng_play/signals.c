@@ -28,8 +28,7 @@ static void sigusr2(int s)
 
 static void sigalarm(int s)
 {
-   byte_counter_resetcountdown = buffer_size;
-   if(buffer_size == 0) {
+   if((byte_counter_resetcountdown = buffer_length) == 0) {
        song_counter++;
        byte_counter = 0;
    }
@@ -43,4 +42,3 @@ void signals_init()
 	register_signal(SIGALRM, sigalarm);
 	register_signal(SIGHUP, sighup);
 }
-

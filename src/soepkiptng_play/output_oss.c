@@ -77,14 +77,14 @@ static void output_oss_post(int fd, short events, long cookie)
 		if(buffer_start >= buffer_size) {
 			buffer_start -= buffer_size;
 		}
+	   byte_counter += l;
 		if(byte_counter_resetcountdown) {
 		   byte_counter_resetcountdown -= l;
 		   if(byte_counter_resetcountdown <= 0) {
 		      byte_counter = -byte_counter_resetcountdown;
+		      byte_counter_resetcountdown = 0;
 		      song_counter++;
 		   }
-		} else {
-		   byte_counter += l;
 		}
 	}
 
