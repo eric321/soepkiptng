@@ -1297,7 +1297,7 @@ EOF
 		printhtmlhdr;
 		printhdr($conf{allstyle});
 
-		printf <<EOF, enchtml($args{sql}), $args{limit};
+		printf <<EOF, enchtml($args{sql}), defined($args{limit})? $args{limit} : 500;
 SQL-query:<br>
 <form action="$self" method=get>
   <input type=hidden name=cap value="SQL-query">
