@@ -29,6 +29,7 @@ $configfile = "/etc/soepkiptng.conf";
 $ENV{'PATH'} = "/usr/local/bin:/usr/bin:/bin";
 
 use DBI;
+use IO::Handle;
 use MPEG::MP3Info;
 use Socket;
 use POSIX ":sys_wait_h";
@@ -77,6 +78,7 @@ sub rotatelog() {
 	};
 	close STDERR;
 	open STDERR, ">$errfile";
+	STDERR->autoflush(1);
 }
 
 sub warnrotate {
@@ -98,6 +100,7 @@ unless($debug) {
 	}
 	open STDIN, "</dev/null";
 	open STDERR, ">>$errfile";
+	STDERR->autoflush(1);
 	$SIG{__DIE__} = \&dierotate;
 	$SIG{__WARN__} = \&warnrotate;
 }
@@ -241,6 +244,11 @@ EOF
 		$childtime = $c + $d;
 	}
 	if(($pid = fork) == 0) {
+		# damn! a race condition occurs: the program can terminate and
+		# SIGCHLD be delivered to the parent _before_ $pid was set!
+		# maybe a little wait helps...
+		select undef, undef, undef, 0.3;
+
 		$SIG{'PIPE'} = 'DEFAULT';
 		setpgrp;
 		if($ext eq "mp2" || $ext eq "mp3") {
@@ -265,8 +273,11 @@ EOF
 			warn "got connection\n";
 
 			# kill player
-			kill 'KILL', -$pid
-				or warn "kill -KILL -$pid: $!\n";
+			$p = $pid;
+			if($p) {
+				kill 'KILL', -$p
+					or warn "kill -KILL -$p: $!\n";
+			}
 
 			# tell cdrplay to flush its buffers
 			kill 'SIGUSR1', $cdrplaypid
