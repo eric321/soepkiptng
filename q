@@ -143,6 +143,9 @@ if(@ARGV) {
 		}
 		push @q, $q;
 	}
+	if($opt_g) {
+		push @q, "track > 0";
+	}
 	$q = "SELECT title,artist.name as artist,album.name as album,song.id as id,track,filename,length,encoding" .
 	     " FROM song,artist,album" .
 	     " WHERE song.artist_id=artist.id AND song.album_id=album.id" .
