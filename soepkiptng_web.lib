@@ -1606,18 +1606,11 @@ EOF
 		printhtmlhdr;
 		printhdr($conf{allstyle});
 		print <<EOF;
-<script language="Javascript">
-<!--
-function verifyfull() {
-   return confirm("Are you sure you want to perform a full update? You might lose changes you made in the database!");
-}
-// -->
 </script>
 <center id=hdr>Update Database</center>
 <form action="$self" method=get>
  <input type=hidden name=cmd value=update>
- <input type=submit value="Quick Update"> (leave existing files alone).<br><br>
- <input type=submit value="Full Update" name=action_full onClick="return verifyfull();"> (re-enter info for existing files (<b>dangerous</b>)).<br><br>
+ <input type=submit value="Update Database"><br><br>
  Updating the database will take a while; don't press the 'stop' button on your browser if you want this to succeed.
 </form>
 EOF
@@ -1626,9 +1619,7 @@ EOF
 	elsif($cmd eq 'update') {
 		require_write_access;
 		print $cgiquery->header(-type=>'text/plain');
-		my $arg = "";
-		$arg = "-f" if $args{action_full};
-		print `$progdir/soepkiptng_update $arg 2>&1`;
+		print `$progdir/soepkiptng_update 2>&1`;
 	}
 	elsif($cmd eq 'edit') {
 		printhtmlhdr;
