@@ -42,7 +42,7 @@ use MP3::Tag;
 use MP3::Info;
 #use Data::Dumper;
 
-use vars qw/$opt_C $opt_d $opt_e $opt_f $opt_r $opt_q $opt_v $opt_c $opt_R/;
+use vars qw/$opt_C $opt_d $opt_e $opt_f $opt_r $opt_q $opt_v $opt_c $opt_R $opt_p/;
 
 sub get_wav_params($\%;$);
 sub getinfo_mp3($\%);
@@ -53,16 +53,17 @@ sub getinfo_pac($\%);
 sub getinfo_flac($\%);
 sub getinfo_shorten($\%);
 sub getinfo_raw($\%);
-sub getinfo_video($\%);
+sub getinfo_mplayer($\%);
 sub getinfo_ac3($\%);
 sub read_eric_files();
 sub extract_artist_title($\%);
 sub is_nfs($);
 
-getopts('Cfredqvhc:LR:');
+getopts('Cfredqvhc:LR:p');
 $force = 1 if $opt_f;
 $| = 1;
 $do_delete = !$opt_d && !$opt_r;
+if($opt_p && scalar @ARGV == 0) { push @ARGV, "."; }
 
 $opt_h and die <<EOF;
 usage: soepkiptng_update [-defhqrvCL] [-c configfile] [-R pref] [dir...]
@@ -158,7 +159,7 @@ while(<FILES>) {
 	getinfo_pac($_, %info) ||
 	getinfo_flac($_, %info) ||
 	getinfo_shorten($_, %info) ||
-	getinfo_video($_, %info) ||
+	getinfo_mplayer($_, %info) ||
 	getinfo_ac3($_, %info) ||
 	getinfo_raw($_, %info);
 	$/ = "\0";
@@ -229,6 +230,10 @@ while(<FILES>) {
 		$info{track} = $tracknr{$1};
 	} elsif(!$info{info_origin}) {
 		extract_artist_title($_, %info);
+	} elsif(!$info{title}) {
+		my %i;
+		extract_artist_title($_, %i);
+		$info{title} = $i{title};
 	}
 
 	if(!$info{track} && m~(^|/)(\d\d+)[^/]+$~) {
@@ -295,13 +300,6 @@ if($do_delete) {
 	}
 }
 
-print "Optimizing Tables.\n" unless $opt_q;
-$dbh->do("optimize table song");
-$dbh->do("optimize table album");
-$dbh->do("optimize table artist");
-
-$dbh->disconnect();
-
 printf <<EOF,
 %4d songs added.
 %4d songs updated.
@@ -312,6 +310,14 @@ EOF
 	$num_added, $num_updated, $num_deleted, $num_moved, $num_skipped
 		unless $opt_q && $num_added == 0 && $num_updated == 0
 			&& $num_deleted == 0 && $num_moved == 0;
+
+print "Optimizing Tables.\n" unless $opt_q;
+$dbh->do("optimize table song");
+$dbh->do("optimize table album");
+$dbh->do("optimize table artist");
+
+$dbh->disconnect();
+
 
 
 sub get_id3($\%) {
@@ -543,25 +549,26 @@ sub getinfo_raw($\%) {
 	return 1;
 }
 
-sub getinfo_video($\%) {
+sub getinfo_mplayer($\%) {
 	my ($file, $info) = @_;
 	local $_;
 	my %prop;
 
-	$file =~ /\.(mpe?g|avi|asx|asf|vob|wmv|ra?m|ra)$/i
+	$file =~ /\.(mpe?g|avi|asx|asf|vob|wmv|ra?m|ra|mov|m2v|wma)$/i
 		or return undef;
 
 	if($file =~ /\.(ra?m|ra)$/i) {
 		$info->{encoding} = "RealMedia";
 	} else {
-		$info->{encoding} = "Video: $1";
+		$info->{encoding} = "$1";
 	}
 
 	local *F;
 	if(open(F, "-|") == 0) {
 		open STDIN, "/dev/null";
 		open STDERR, ">&STDOUT";
-		exec qw"mplayer -identify", $file;
+		delete $ENV{DISPLAY};
+		exec qw"mplayer -identify -vo null -ao null -frames 0", $file;
 		die "mplayer";
 	}
 	while(<F>) {
@@ -571,13 +578,24 @@ sub getinfo_video($\%) {
 		/^ID_(\w+)=(.*)/ and $prop{lc($1)} = $2;
 	}
 	close F;
+	if($prop{video_format}) { $info->{encoding} = "Video: $info->{encoding}"; } 
 	$info->{info_origin} = "Clip Info" if $info->{artist} || $info->{title};
 	if($prop{video_width} && $prop{video_height}) {
 		$info->{encoding} .= " ($prop{video_width}x$prop{video_height})";
 	}
-
-	$info->{freq} = 0;
-	$info->{chan} = 0;
+	if(!$prop{video_codec}) {
+		# audio only
+		if($prop{audio_format} >= 0x160 && $prop{audio_format} <= 0x163) {
+			$info->{encoding} = "WMA";
+		}
+		push @{$info->{encoding_extra}}, sprintf("%dkb/s", ($prop{audio_bitrate} + 500) / 1000)
+			if exists $prop{audio_bitrate};
+		$info->{freq} = $prop{audio_freq};
+		$info->{chan} = $prop{audio_nch};
+	} else {
+		$info->{freq} = 0;
+		$info->{chan} = 0;
+	}
 	$info->{len} = $prop{length};
 	return 1;
 }
