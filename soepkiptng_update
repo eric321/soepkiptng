@@ -25,6 +25,13 @@ use Cwd;
 use DBI;
 use Getopt::Std;
 
+#eval "
+use POSIX qw(locale_h);
+#";
+#unless($@) {
+	setlocale(LC_CTYPE, "en_US.ISO8859-1") or die;
+#q}
+
 # optional
 eval "use MPEG::MP3Info;";
 if($@) {
@@ -363,6 +370,8 @@ sub extract_artist_title {
 	$f =~ s/\..*?$//;
 	$f =~ s|(.*)/||;
 	my $p = $1;
+	$p = '' if -e "$p/.noalbum";
+
 	$f =~ s/\s*$//;
 	$f =~ s/^\s*(\d{0,2})\W*//;	# nummer weg, max 2 digits
 	$tr = $1;

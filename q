@@ -188,7 +188,6 @@ $query =  "SELECT songs.title,songs.artist,songs.album,songs.id,songs.track FROM
 $sth = $dbh->prepare($query);
 $rv = $sth->execute;
 while(@q = $sth->fetchrow_array) {
-	next if $q[3] == $nowplaying;
 	printf "%-3s %-${w_a}.${w_a}s %-${w_t}.${w_t}s %-${w_al}.${w_al}s\n",
 		"$i.", $q[1], $q[0], albumtrack($q[2], $q[4]);
 	$delid[$i] = $q[3];
