@@ -272,15 +272,17 @@ for(;;) {
 		die "$0: $!\n";
 	}
 
-	if($num_errors > 5) {
-		sleep 60;
-	} elsif($num_errors > 1) {
-		sleep 5;
+	if($num_errors > 1) {
+		# exponential backoff in retries, max 1024 sec. (17 min 4 s)
+		sleep 1 << ($num_errors < 10? $num_errors : 10);
 	}
 
 	if(!$dbh) {
-		$dbh = DBI->connect("DBI:mysql:$db_name:$db_host", $db_user, $db_pass)
-			or die "Can't connect to database $db_name\@$db_host as user $db_user\n";
+		$dbh = DBI->connect("DBI:mysql:$db_name:$db_host", $db_user, $db_pass) or do {
+			warn "Can't connect to database $db_name\@$db_host as user $db_user\n";
+			$num_errors++;
+			next;
+		};
 	}
 
 	($song_id, $songtype, $filename, $user) = get_song_jingle();
