@@ -260,7 +260,7 @@ sub print_playlist_table($) {
 
 	$query =  "SELECT title,artist.name as artist,album.name as album," .
 		"song.id as id, track, length, encoding, queue.user as user," .
-		"song.artist_id as arid, song.album_id as alid" .
+		"song.artist_id as arid, song.album_id as alid, left(filename,1) as f" .
 		" FROM song,queue,artist,album WHERE present" .
 		" AND song.artist_id=artist.id AND song.album_id=album.id" .
 		" AND song.id = queue.song_id ORDER BY queue.song_order";
@@ -288,14 +288,14 @@ sub print_playlist_table($) {
 			$_->{artist} = '** Jingle **';
 			$_->{album} = '';
 			($_->{title} = $nowfile) =~ s|.*/||;
-			$_->{filename} = $nowfile;
+			$_->{f} = substr($nowfile, 0, 1);
 			$_->{id} = -1;
 			$_->{track} = '';
 			$_->{length} = 0;
 			$_->{encoding} = '?';
 		} else {
 			my $query = "SELECT title,artist.name as artist,album.name as album," .
-				"song.id as id,track,length,encoding,filename," .
+				"song.id as id,track,length,encoding,left(filename,1) as f," .
 				"song.artist_id as arid,song.album_id as alid" .
 				" FROM song,artist,album" .
 				" WHERE song.artist_id=artist.id AND song.album_id=album.id" .
@@ -310,7 +310,7 @@ sub print_playlist_table($) {
 				$_->{artist} = 'ERROR: Not in database';
 				$_->{album} = $1;
 				$_->{title} = $2;
-				$_->{filename} = '';
+				$_->{f} = '';
 				$_->{id} = $nowplaying;
 				$_->{track} = '';
 				$_->{length} = 0;
@@ -320,7 +320,7 @@ sub print_playlist_table($) {
 		$killline = table_entry($_,
 			sprintf(qq|<a id=a href="%s?cmd=kill&id=%s">%s</a>|,
 			$self, $_->{id}, $killtext), undef,
-			$_->{filename} =~ m|^/|? ids_encode(@ids) : "",
+			$_->{f} eq '/'? ids_encode(@ids) : "",
 			($show_user && $nowuser)? "<td>&nbsp;($nowuser)</td>":"");
 
 		if($title_song) {
@@ -362,7 +362,7 @@ EOF
 			qq|<a id=a href="%s?cmd=del&ids=%s">%s</a> | .
 			qq|<a id=a href="%s?cmd=up&id=%s">%s</a>|,
 			$self, $_->{id}, $deltext, $self, $_->{id}, $uptext),
-			undef, $_->{filename} =~ m|^/|? $ids : "",
+			undef, $_->{f} eq '/'? $ids : "",
 			($show_user && $_->{user})? "<td>&nbsp;(".$_->{user}.")</td>":"")
 			} @records);
 }
