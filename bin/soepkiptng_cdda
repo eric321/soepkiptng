@@ -2,7 +2,7 @@
 
 use Getopt::Std;
 
-getopts('s:d:C:h');
+getopts('s:d:p:C:h');
 
 $opt_h and die <<EOF;
 
