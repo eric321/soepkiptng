@@ -456,7 +456,8 @@ sub extract_artist_title {
 	{
 		$tr = $1;
 	}
-	$f =~ s/^\W+//;
+	$f =~ s/^[^a-z]+//i;
+#warn $f;
 
 	$pp =~ s|/+$||;
 	$pp =~ s|.*/||;
