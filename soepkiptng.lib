@@ -309,4 +309,28 @@ sub cleanup_name {
 	$s;
 }
 
+sub add_song_next($$;$) {
+	my ($dbh, $currentsong, $user) = @_;
+
+	my $ids = $dbh->selectcol_arrayref("SELECT song_id FROM queue,song ".
+		"WHERE queue.song_id=song.id AND song.present");
+	my %idsq;
+	foreach(@$ids) { $idsq{$_} = 1; }
+
+	my $sth = $dbh->prepare("SELECT song2.* FROM song AS song1,".
+		" song AS song2 WHERE song1.id=$currentsong AND".
+		" song1.artist_id = song2.artist_id AND".
+		" song1.album_id = song2.album_id AND".
+		" song2.track > song1.track AND".
+		" song2.present ORDER BY song2.track");
+	$sth->execute;
+	while($_ = $sth->fetchrow_hashref) {
+		if(!$idsq{$_->{id}}) {
+			add_song($dbh, $user, $_->{id})
+				or warn "can't add song.\n";
+			return $_;
+		}
+	}
+}
+
 1;
