@@ -1292,23 +1292,26 @@ EOF
 	elsif($cmd eq 'sql') {
 		require_write_access;
 
+		if($args{limit} > 500) { $args{limit} = 500; }
+
 		printhtmlhdr;
 		printhdr($conf{allstyle});
 
-		printf <<EOF, enchtml($args{sql}), $args{countonly}? "checked":"";
+		printf <<EOF, enchtml($args{sql}), $args{limit};
 SQL-query:<br>
 <form action="$self" method=get>
   <input type=hidden name=cap value="SQL-query">
   <input type=hidden name=cmd value=sql>
 <code>
 SELECT ... FROM ... WHERE ... AND <input type=text size=80 name=sql value="%s">
-<input type=checkbox name=countonly %s> count only
+Limit: <input type=text size=5 name=limit value=%d> (0=count only)
+<input type=submit value=Submit>
 </code>
 </form>
 EOF
 
 		if($args{sql}) {
-			if($args{countonly}) {
+			if($args{limit} == 0) {
 				my ($count) = $dbh->selectrow_array("SELECT COUNT(*)".
 					" FROM song,artist,album WHERE present " .
 					" AND song.artist_id=artist.id AND song.album_id=album.id AND " .
@@ -1320,7 +1323,7 @@ EOF
 					"song.artist_id as arid, song.album_id as alid" .
 					" FROM song,artist,album WHERE present " .
 					" AND song.artist_id=artist.id AND song.album_id=album.id AND " .
-					$args{sql});
+					$args{sql} . " LIMIT $args{limit}");
 			}
 		}
 		printftr;
