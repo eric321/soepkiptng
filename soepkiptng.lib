@@ -107,11 +107,11 @@ sub shuffle_queue($) {
 sub kill_song(;$) {
 	my ($user) = @_;
 
-	if($kill_song_external) {
-		system $kill_song_external, $user || '';
+	if($conf{kill_song_external}) {
+		system $conf{kill_song_external}, $user || '';
 
-		open F, $statusfile
-			or die "$statusfile: $!\n";
+		open F, $conf{statusfile}
+			or die "$conf{statusfile}: $!\n";
 		my @lines;
 		chop(@lines = <F>);
 		close F;
@@ -123,8 +123,8 @@ sub kill_song(;$) {
 sub kill_song_internal() {
 	local *F;
 
-	open F, $statusfile
-		or die "$statusfile: $!\n";
+	open F, $conf{statusfile}
+		or die "$conf{statusfile}: $!\n";
 	<F>; <F>; <F>; <F>;
 	chop($host = <F>);
 	$port = <F>;
@@ -146,8 +146,8 @@ sub get_player_pid() {
 	local *F;
 	my $pid;
 
-	open F, $statusfile
-		or die "$statusfile: $!\n";
+	open F, $conf{statusfile}
+		or die "$conf{statusfile}: $!\n";
 	<F>; <F>; <F>;
 	$pid = 0 + <F>;
 	close F;
@@ -228,13 +228,12 @@ sub get_nowplaying(;$) {
 	local *F;
 	my $s = undef;
 
-	if(open F, $statusfile) {
-		chop (($s->{id}, $s->{filename}, $s->{pid}, $s->{cdrplaypid},
-			$s->{killhost}, $s->{killport}, $s->{type},
-			$s->{user}, $s->{artist}, $s->{title}, $s->{album},
-			$s->{track}, $s->{length}, $s->{encoding}) = <F>);
-		close F;
-	}
+	open F, $conf{statusfile} or return undef;
+	chop (($s->{id}, $s->{filename}, $s->{pid}, $s->{cdrplaypid},
+	       $s->{killhost}, $s->{killport}, $s->{type},
+	       $s->{user}, $s->{artist}, $s->{title}, $s->{album},
+	       $s->{track}, $s->{length}, $s->{encoding}) = <F>);
+	close F;
 
 	if($dbh) {
 		my $sth = $dbh->prepare(

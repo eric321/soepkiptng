@@ -44,17 +44,17 @@ while(<F>) {
 	/./ or next;
 	if(/^(\w+)\s*=\s*(.*?)\s*$/) {
 		$f = $1;
-		${$f} = $2;
+		$conf{$f} = $2;
 	} elsif(/^\s+(.*?)\s*$/) {
 		# continuation line
-		${$f} .= "\n$1";
+		$conf{$f} .= "\n$1";
 	} else {
 		die "$configfile line $.: invalid format\n";
 	}
 }
 close F;
 
-require "$progdir/soepkiptng.lib";
+require "$conf{progdir}/soepkiptng.lib";
 
 sub albumtrack($$) {
 	my ($album, $track) = @_;
@@ -104,11 +104,11 @@ sub killit() {
 
 $| = 1;
 
-$dbh = DBI->connect("DBI:$db_type:$db_name:$db_host", $db_user, $db_pass)
-	or die "can't connect to database";
+$dbh = DBI->connect("DBI:$conf{db_type}:$conf{db_name}:$conf{db_host}",
+	$conf{db_user}, $conf{db_pass}) or die "can't connect to database";
 
 if($opt_n) {
-	open F, $statusfile or exit;
+	open F, $conf{statusfile} or exit;
 	$nowplaying = <F>;
 	close F;
 

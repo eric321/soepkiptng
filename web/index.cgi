@@ -33,17 +33,17 @@ BEGIN {
 		/./ or next;
 		if(/^(\w+)\s*=\s*(.*?)\s*$/) {
 			$f = $1;
-			${$f} = $2;
+			$conf{$f} = $2;
 		} elsif(/^\s+(.*?)\s*$/) {
 			# continuation line
-			${$f} .= "\n$1";
+			$conf{$f} .= "\n$1";
 		} else {
 			die "$configfile line $.: invalid format\n";
 		}
 	}
 	close F;
 
-	require "$progdir/soepkiptng.lib";
+	require "$conf{progdir}/soepkiptng.lib";
 }
 
 
@@ -102,13 +102,13 @@ sub print_frame() {
 	print <<EOF;
 <html>
 <head>
-<title>$title</title>
+<title>$conf{title}</title>
 </head>
-<frameset rows="$frameheights">
- <frame name=tframe src="$self?cmd=playlist" marginheight="$marginheight">
- <frame name=bframe src="$self?cmd=empty" marginheight="$marginheight">
+<frameset rows="$conf{frameheights}">
+ <frame name=tframe src="$self?cmd=playlist" marginheight="$conf{marginheight}">
+ <frame name=bframe src="$self?cmd=empty" marginheight="$conf{marginheight}">
 </frameset>
-<body $body>
+<body $conf{body}>
 </body>
 </html>
 EOF
@@ -133,23 +133,23 @@ sub print_az_table($$) {
 EOF
 	foreach('A'..'Z') {
 		printf qq|<a id=az href="%s?cmd=%s&artist=%s" target=bframe>%s</a>&nbsp;|,
-			$self, $artistlistcmd, encurl("^$_"), $_;
+			$self, $conf{artistlistcmd}, encurl("^$_"), $_;
 	}
-	printf <<EOF, $self, $artistlistcmd, encurl("^([^a-zA-Z]|\$)");
+	printf <<EOF, $self, $conf{artistlistcmd}, encurl("^([^a-zA-Z]|\$)");
 <a id=az href="%s?cmd=%s&artist=%s" target=bframe>Other</a>&nbsp;
 EOF
 
-	my $sz = $searchformsize || 10;
+	my $sz = $conf{searchformsize} || 10;
 	print <<EOF;
 </td>
 <td id=az nowrap>&nbsp;&nbsp;Search:</td>
 <td id=az nowrap>
  <form id=search action="$self" method=get target=bframe>
   <input type=hidden name=cmd value=search>
-  <input type=text size=$sz name=sval style="$searchformstyle">
+  <input type=text size=$sz name=sval style="$conf{searchformstyle}">
 </td>
 <td id=az nowrap>
-  <select name=stype style="$searchformstyle" onChange="form.submit()">
+  <select name=stype style="$conf{searchformstyle}" onChange="form.submit()">
    <option value="">
    <option value=any>Any
    <option value=artist>Artist
@@ -214,27 +214,27 @@ sub table_entry($;$$$$) {
   <td %s>&nbsp;%d:%02d&nbsp;</td>
   <td %s>&nbsp;%s&nbsp;</td>
   <td %s> %s</td>
-  %s %s
+  %s
  </tr>
 EOF
-		$td_left, $col1,
-		$td_artist,
+		$conf{td_left}, $col1,
+		$conf{td_artist},
 		$q->{arid}? sprintf(qq|<a id=a href="%s?cmd=alllist&artist_id=%s&cap=%s" target=bframe>%s</a>|,
 			$self, $q->{arid}, encurl("Artist: $q->{artist}"), enchtml($q->{artist}))
 			: enchtml($q->{artist}),
-		$td_album,
+		$conf{td_album},
 		$q->{alid}? sprintf(qq|<a id=a href="%s?cmd=alllist&album_id=%s&cap=%s" target=bframe>%s</a>|,
 			$self, $q->{alid}, encurl("Album: $q->{album}"), enchtml($q->{album}))
 			: enchtml($q->{album}),
-		$td_track, $q->{track}? "$q->{track}." : "",
-		$td_song, $title_href, enchtml($q->{title}), $title_href? "</a>":"",
-		$td_time, $q->{length} / 60, $q->{length} % 60,
-		$td_enc, enchtml($q->{encoding}, 1),
-		$td_edit,
-		$ids? sprintf(<<EOF, $self, $q->{id}, $ids, $edit_target || 'bframe') : "",
+		$conf{td_track}, $q->{track}? "$q->{track}." : "",
+		$conf{td_song}, $title_href, enchtml($q->{title}), $title_href? "</a>":"",
+		$conf{td_time}, $q->{length} / 60, $q->{length} % 60,
+		$conf{td_enc}, enchtml($q->{encoding}, 1),
+		$conf{td_edit},
+		$ids? sprintf(<<EOF, $self, $q->{id}, $ids, $conf{edit_target} || 'bframe') : "",
 <a id=a href="%s?cmd=edit&id=%d&ids=%s" title="Edit" target=%s>*</a>
 EOF
-		$listch, $extra;
+		$extra;
 }
 
 sub albumlist_entry($) {
@@ -258,8 +258,8 @@ sub print_playlist_table($) {
 		" FROM song,queue,artist,album WHERE present" .
 		" AND song.artist_id=artist.id AND song.album_id=album.id" .
 		" AND song.id = queue.song_id ORDER BY queue.song_order";
-	$sth = $dbh->prepare($query);
-	$rv = $sth->execute;
+	my $sth = $dbh->prepare($query);
+	my $rv = $sth->execute;
 	my @ids;
 	my @records;
 	while($_ = $sth->fetchrow_hashref) {
@@ -272,11 +272,11 @@ sub print_playlist_table($) {
 
 		$killline = table_entry($_,
 			sprintf(qq|<a id=a href="%s?cmd=kill&id=%s">%s</a>|,
-			$self, $_->{id}, $killtext), undef,
+			$self, $_->{id}, $conf{killtext}), undef,
 			($_->{filename} =~ m|^/|)? ids_encode(@ids) : "",
-			($show_user && $_->{user})? "<td>&nbsp;($_->{user})</td>":"");
+			($conf{show_user} && $_->{user})? "<td>&nbsp;($_->{user})</td>":"");
 
-		if($title_song) {
+		if($conf{title_song}) {
 			my $alb = $_->{album};
 			if($alb && $_->{track}) { $alb .= "/$_->{track}"; }
 			if($alb) { $alb = " [$alb]"; }
@@ -306,17 +306,17 @@ EOF
  <tr><td colspan=7></td></tr>
 %s%s</table>
 EOF
-		$th_left, @ids? sprintf(qq|<a id=a href="%s?cmd=del&ids=%s">| .
-			qq|$delalltext</a>|, $self, ids_encode(@ids)) : "",
-		$th_artist, $th_album, $th_track, $th_song,
-		$th_time, $th_enc, $th_edit,
+		$conf{th_left}, @ids? sprintf(qq|<a id=a href="%s?cmd=del&ids=%s">| .
+			qq|$conf{delalltext}</a>|, $self, ids_encode(@ids)) : "",
+		$conf{th_artist}, $conf{th_album}, $conf{th_track}, $conf{th_song},
+		$conf{th_time}, $conf{th_enc}, $conf{th_edit},
 		$killline,
 		join("", map { table_entry($_, sprintf(
 			qq|<a id=a href="%s?cmd=del&ids=%s">%s</a> | .
 			qq|<a id=a href="%s?cmd=up&id=%s">%s</a>|,
-			$self, $_->{id}, $deltext, $self, $_->{id}, $uptext),
+			$self, $_->{id}, $conf{deltext}, $self, $_->{id}, $conf{uptext}),
 			undef, $_->{f} eq '/'? $ids : "",
-			($show_user && $_->{user})? "<td>&nbsp;(".$_->{user}.")</td>":"")
+			($conf{show_user} && $_->{user})? "<td>&nbsp;(".$_->{user}.")</td>":"")
 			} @records);
 }
 
@@ -415,15 +415,15 @@ sub print_albums_row($$$$) {
 		$al{$_->{alid}} = albumlist_entry($_);
 		$al_len_tot += $al_len{$_->{alid}} = length($_->{album});
 	}
-	if($albumlist_length_threshold == 0 ||
-	   $al_len_tot < $albumlist_length_threshold ||
+	if($conf{albumlist_length_threshold} == 0 ||
+	   $al_len_tot < $conf{albumlist_length_threshold} ||
 	   $argsref->{expanded_albumlist}) {
 		my $sep = "&nbsp; ";
 		if($argsref->{expanded_albumlist}) { $sep = "<br>\n"; }
 		printf "Albums:%s%s.\n", $sep, join(",$sep",
 			map { $al{$_} } @alids);
 	} else {
-		my $len_left = $albumlist_length_threshold;
+		my $len_left = $conf{albumlist_length_threshold};
 		my %alids_shortlist;
 		foreach(sort { $al_len{$a} <=> $al_len{$b} } @alids) {
 			last if $al_len{$_} > $len_left;
@@ -494,7 +494,7 @@ EOF
 
 		my $thref = sprintf(qq|<a id=a href="%s?cmd=add&ids=%d" target=tframe>|,
 			$self, $_->{id});
-		$output .= table_entry($_, "$thref$addtext</a>", $thref, $ids);
+		$output .= table_entry($_, "$thref$conf{addtext}</a>", $thref, $ids);
 	}
 
 	if(scalar keys %artistids == 1) {
@@ -505,7 +505,7 @@ EOF
 
 	if(@ids) {
 	$addall = sprintf <<EOF, ids_encode(@ids);
-<a id=a href="$self?cmd=add&ids=%s" target=tframe>$addalltext</a>
+<a id=a href="$self?cmd=add&ids=%s" target=tframe>$conf{addalltext}</a>
 EOF
 	}
 
@@ -523,14 +523,14 @@ EOF
 	$limitstr = " <b>(limit of $limit reached)</b>" if $limit && $res == $limit;
 	print <<EOF;
  <tr>
-  <th $th_left>&nbsp;$addall&nbsp;</th>
-  <th $th_artist>&nbsp;<a href="${baseurl}sort=$revsort{artist}artist">Artist</a>&nbsp;</th>
-  <th $th_album>&nbsp;<a href="${baseurl}sort=$revsort{album}album">Album</a>&nbsp;</th>
-  <th $th_track>&nbsp;<a href="${baseurl}sort=$revsort{track}track">#</a>&nbsp;</th>
-  <th $th_song>&nbsp;<a href="${baseurl}sort=$revsort{title}title">Song</a>&nbsp;</th>
-  <th $th_time>&nbsp;<a href="${baseurl}sort=$revsort{length}length">Time</a>&nbsp;</th>
-  <th $th_enc>&nbsp;<a href="${baseurl}sort=$revsort{encoding}encoding">Encoding</a>&nbsp;</th>
-  <th $th_edit>&nbsp;&nbsp;</th>
+  <th $conf{th_left}>&nbsp;$addall&nbsp;</th>
+  <th $conf{th_artist}>&nbsp;<a href="${baseurl}sort=$revsort{artist}artist">Artist</a>&nbsp;</th>
+  <th $conf{th_album}>&nbsp;<a href="${baseurl}sort=$revsort{album}album">Album</a>&nbsp;</th>
+  <th $conf{th_track}>&nbsp;<a href="${baseurl}sort=$revsort{track}track">#</a>&nbsp;</th>
+  <th $conf{th_song}>&nbsp;<a href="${baseurl}sort=$revsort{title}title">Song</a>&nbsp;</th>
+  <th $conf{th_time}>&nbsp;<a href="${baseurl}sort=$revsort{length}length">Time</a>&nbsp;</th>
+  <th $conf{th_enc}>&nbsp;<a href="${baseurl}sort=$revsort{encoding}encoding">Encoding</a>&nbsp;</th>
+  <th $conf{th_edit}>&nbsp;&nbsp;</th>
  </tr>
  <tr><td colspan=7></td></tr>
 $output
@@ -560,14 +560,14 @@ sub print_edit_page($$) {
 	my $prev = '&nbsp;&nbsp;&nbsp;&nbsp;';
 	if($i > 0) {
 		$prev = "<input type=submit name=go_$ids[$i-1] value=Prev>";
-	} elsif($disabled_buttons) {
+	} elsif($conf{disabled_buttons}) {
 		$prev = "<input type=submit name=go_$ids[0] value=Prev disabled>";
 	}
 
-	my $next = $disabled_buttons? '':'&nbsp;&nbsp;&nbsp;&nbsp;';
+	my $next = $conf{disabled_buttons}? '':'&nbsp;&nbsp;&nbsp;&nbsp;';
 	if($i < $#ids) {
 		$next = "<input type=submit name=go_$ids[$i+1] value=Next>";
-	} elsif($disabled_buttons) {
+	} elsif($conf{disabled_buttons}) {
 		$next = "<input type=submit name=go_$ids[$#ids] value=Next disabled>";
 	}
 
@@ -724,7 +724,7 @@ sub print_shoutcast_page($$) {
  </tr>
  <tr><td colspan=7></td></tr>
 EOF
-		$th_left, $self, $th_artist, $th_album;
+		$conf{th_left}, $self, $conf{th_artist}, $conf{th_album};
 
 	my $sth = $dbh->prepare("SELECT id,filename,title FROM song WHERE " .
 		"filename LIKE 'http:%' ORDER BY title");
@@ -742,10 +742,10 @@ EOF
   <td %s>&nbsp;<a id=a href="%s?cmd=shoutcast&editid=%d" target=bframe>%s</a>&nbsp;</td>
  </tr>
 EOF
-		$td_left, "$ref$addtext</a>",
-		$td_artist, $_->{title},
-		$td_album, $_->{filename},
-		$td_track, $self, $_->{id}, '*';
+		$conf{td_left}, "$ref$conf{addtext}</a>",
+		$conf{td_artist}, $_->{title},
+		$conf{td_album}, $_->{filename},
+		$conf{td_track}, $self, $_->{id}, '*';
 
 		if($_->{id} == $args->{editid}) {
 			$editurl = $_->{filename};
@@ -788,9 +788,9 @@ sub print_lists($) {
 <center id=hdr>Playlists</center>
 <table border=0 cellspacing=0>
  <tr>
-  <th $th_left>&nbsp</th>
-  <th $th_left>&nbsp;Name&nbsp;</th>
-  <th $th_left>&nbsp;# Songs&nbsp;</th>
+  <th $conf{th_left}>&nbsp</th>
+  <th $conf{th_left}>&nbsp;Name&nbsp;</th>
+  <th $conf{th_left}>&nbsp;# Songs&nbsp;</th>
  </tr>
  <tr><td colspan=3></td></tr>
 
@@ -801,9 +801,9 @@ EOF
 	while($d = $sth->fetchrow_hashref) {
 		print <<EOF;
  <tr>
-  <td $th_left>&nbsp;<a href="$self?cmd=dellist&id=$d->{id}">del</a>&nbsp;</td>
+  <td $conf{th_left}>&nbsp;<a href="$self?cmd=dellist&id=$d->{id}">del</a>&nbsp;</td>
   <td>&nbsp;<a href="$self?cmd=showlist&id=$d->{id}">$d->{name}</a>&nbsp;</td>
-  <td $th_left>&nbsp;88&nbsp;</td>
+  <td $conf{th_left}>&nbsp;88&nbsp;</td>
  </tr>
 EOF
 	}
@@ -837,7 +837,7 @@ $_[0]
 -->
 </style>
 </head>
-<body $body>
+<body $conf{body}>
 EOF
 }
 
@@ -876,7 +876,7 @@ sub delete_file($$) {
 	my ($dbh, $argsref) = @_;
 
 	printhtmlhdr;
-	printhdr($allstyle);
+	printhdr($conf{allstyle});
 	$argsref->{id} =~ /(\d+)/;
 	my $id = $1;
 	my ($file) = $dbh->selectrow_array("SELECT filename FROM song WHERE id=$id")
@@ -920,7 +920,7 @@ $SIG{__DIE__} = sub {
 	exit 0;
 };
 
-my $dbh = DBI->connect("DBI:mysql:$db_name:$db_host",$db_user,$db_pass, {mysql_client_found_rows =>1 })
+my $dbh = DBI->connect("DBI:mysql:$conf{db_name}:$conf{db_host}",$conf{db_user},$conf{db_pass}, {mysql_client_found_rows =>1 })
 	or die "can't connect to database...$!\n";
 
 # cookies/sessions
@@ -939,11 +939,11 @@ $r->no_cache(1);
 
 my $cmd = $args{cmd};
 
-my $rt = $refreshtime;
+my $rt = $conf{refreshtime};
 
 if($cmd eq 'empty') {
 	printhtmlhdr;
-	print "$bframe_start\n";
+	print "$conf{bframe_start}\n";
 	exit;
 }
 
@@ -1099,7 +1099,7 @@ elsif($cmd eq 'changefile') {
 if($cmd eq 'search') {
 	if(!$args{stype}) {
 		printhtmlhdr;
-		printhdr($allstyle);
+		printhdr($conf{allstyle});
 		print "Error: No search type specified.\n";
 		printftr;
 		exit;
@@ -1123,14 +1123,14 @@ elsif($cmd eq 'playlist') {
 	print <<EOF;
 <META HTTP-EQUIV="Refresh" CONTENT="$rt;URL=$s?cmd=playlist&s=$args{s}">
 EOF
-	printhdr($plstyle);
+	printhdr($conf{plstyle});
 	print_az_table($dbh, \%session);
 	print_playlist_table($dbh);
 	printftr;
 }
 elsif($cmd eq 'artistlist') {
 	printhtmlhdr;
-	printhdr($artiststyle);
+	printhdr($conf{artiststyle});
 
 	my $cap;
 	my $s;
@@ -1161,7 +1161,7 @@ elsif($cmd eq 'artistlist') {
 }
 elsif($cmd eq 'alllist') {
 	printhtmlhdr;
-	printhdr($allstyle);
+	printhdr($conf{allstyle});
 	my $q = ("SELECT artist.name as artist,album.name as album,song.*," .
 		 "song.artist_id as arid, song.album_id as alid" .
 		 " FROM song,artist,album" .
@@ -1210,7 +1210,7 @@ elsif($cmd eq 'alllist') {
 		$q .= " AND song.artist_id=artist.id AND song.album_id=album.id ".
 		      " AND filename LIKE '/%' ".
 		      " ORDER BY $s,album.name,track,artist.name,title";
-		print_alllist_table($dbh, \%args, \%session, $cap, $q, $alllist_limit, @qargs);
+		print_alllist_table($dbh, \%args, \%session, $cap, $q, $conf{alllist_limit}, @qargs);
 	} else {
 		print "Error: No search terms specified.\n";
 	}
@@ -1218,7 +1218,7 @@ elsif($cmd eq 'alllist') {
 }
 elsif($cmd eq 'seealso') {
 	printhtmlhdr;
-	printhdr($allstyle);
+	printhdr($conf{allstyle});
 	print <<EOF;
 <center id=hdr>$args{cap}</center>
 EOF
@@ -1227,7 +1227,7 @@ EOF
 }
 elsif($cmd eq 'sql') {
 	printhtmlhdr;
-	printhdr($allstyle);
+	printhdr($conf{allstyle});
 
 	printf <<EOF, enchtml($args{sql});
 SQL-query:<br>
@@ -1252,7 +1252,7 @@ EOF
 }
 elsif($cmd eq 'recent') {
 	printhtmlhdr;
-	printhdr($allstyle);
+	printhdr($conf{allstyle});
 	my $maxage = $args{days} * 86400;
 	my $s = $args{sort} || "r_time_added";
 	$s =~ s/\W//g;
@@ -1268,7 +1268,7 @@ elsif($cmd eq 'recent') {
 }
 elsif($cmd eq 'maint') {
 	printhtmlhdr;
-	printhdr($allstyle);
+	printhdr($conf{allstyle});
 	print <<EOF;
 <script language="Javascript">
 <!--
@@ -1291,17 +1291,17 @@ elsif($cmd eq 'update') {
 	print $q->header(-type=>'text/plain');
 	my $arg = "";
 	$arg = "-f" if $args{action_full};
-	print `$progdir/soepkiptng_update $arg 2>&1`;
+	print `$conf{progdir}/soepkiptng_update $arg 2>&1`;
 }
 elsif($cmd eq 'edit') {
 	printhtmlhdr;
-	printhdr($editstyle);
+	printhdr($conf{editstyle});
 	print_edit_page($dbh, \%args);
 	printftr;
 }
 elsif($cmd eq 'shoutcast') {
 	printhtmlhdr;
-	printhdr($allstyle);
+	printhdr($conf{allstyle});
 	print_shoutcast_page($dbh, \%args);
 	printftr;
 }
@@ -1318,7 +1318,7 @@ elsif($cmd eq 'download') {
 }
 elsif($cmd eq 'lists') {
         printhtmlhdr;
-	printhdr($allstyle);
+	printhdr($conf{allstyle});
 	print_lists($dbh);
 	printftr;
 }

@@ -32,21 +32,21 @@ while(<F>) {
 	/./ or next;
 	if(/^(\w+)\s*=\s*(.*?)\s*$/) {
 		$f = $1;
-		${$f} = $2;
+		$conf{$f} = $2;
 	} elsif(/^\s+(.*?)\s*$/) {
 		# continuation line
-		${$f} .= "\n$1";
+		$conf{$f} .= "\n$1";
 	} else {
 		die "$configfile line $.: invalid format\n";
 	}
 }
 close F;
 
-$ENV{'PATH'} = "$progdir/bin:$ENV{'PATH'}";
-require "$progdir/soepkiptng.lib";
+$ENV{'PATH'} = "$conf{progdir}/bin:$ENV{'PATH'}";
+require "$conf{progdir}/soepkiptng.lib";
 
-$dbh = DBI->connect("DBI:$db_type:$db_name:$db_host", $db_user, $db_pass)
-	or die "can't connect to database";
+$dbh = DBI->connect("DBI:$conf{db_type}:$conf{db_name}:$conf{db_host}",
+	$conf{db_user}, $conf{db_pass}) or die "can't connect to database";
 
 ($song_id) = kill_song();
 ($t, $a, $al, $tr) = $dbh->selectrow_array(

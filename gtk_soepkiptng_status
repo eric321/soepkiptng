@@ -35,10 +35,10 @@ while(<F>) {
 	/./ or next;
 	if(/^(\w+)\s*=\s*(.*?)\s*$/) {
 		$f = $1;
-		${$f} = $2;
+		$conf{$f} = $2;
 	} elsif(/^\s+(.*?)\s*$/) {
 		# continuation line
-		${$f} .= "\n$1";
+		$conf{$f} .= "\n$1";
 	} else {
 		die "$configfile line $.: invalid format\n";
 	}
@@ -46,7 +46,7 @@ while(<F>) {
 close F;
 
 
-require "$progdir/soepkiptng.lib";
+require "$conf{progdir}/soepkiptng.lib";
 
 $SIG{'HUP'} = sub {
 	exec $0;
@@ -201,7 +201,7 @@ sub update_song() {
 					 " WHERE song.id=?" .
 					 " AND song.artist_id=artist.id AND song.album_id=album.id";
 
-				if($dbh = DBI->connect("DBI:$db_type:$db_name:$db_host", $db_user, $db_pass)) {
+				if($dbh = DBI->connect("DBI:$conf{db_type}:$conf{db_name}:$conf{db_host}", $conf{db_user}, $conf{db_pass})) {
 					my $sth = $dbh->prepare($query);
 					my $rv = $sth->execute($nowplaying);
 					if(my $n = $sth->fetchrow_hashref) {
