@@ -274,9 +274,11 @@ sub getinfo_pac($) {
 		exec "lpac2raw", "-i", $_[0];
 		die;
 	}
-	my ($sfreq, $chan, $sec) = split(/,/, <F>);
+	my ($sfreq, $chan, $sec, $bytes) = split(/,/, <F>);
+	my $percent = int((-s $_[0]) / ($bytes / 100));
+	
 	close F;
-	return ("LPAC", 0 + $sec, $sfreq / 1000, 0 + $chan);
+	return ("LPAC $percent%", 0 + $sec, $sfreq / 1000, 0 + $chan);
 }
 
 
