@@ -214,7 +214,7 @@ sub table_entry($$;$$$$) {
   <td %s>&nbsp;%s%s%s&nbsp;</td>
   <td %s>&nbsp;%s&nbsp;</td>
   <td %s>&nbsp;%s&nbsp;</td>
-  <td %s> %s</td>
+  <td %s> %s %s</td>
   %s
  </tr>
 EOF
@@ -237,16 +237,20 @@ EOF
 <a id=a href="%s?cmd=edit&id=%d&ids=%s" title="Edit" target=%s>*</a>
 <a id=a href="%s?cmd=lyrics&id=%d&ids=%s" title="Lyrics" target=%s>L</a>
 <a id=a href="%s?cmd=download&id=%d" title="Download">D</a>
-<a id=a href="%s?list=%d&ids=%d&pq=%s&cmd=%s" title="%s playlist">%s "%s"</a>
 EOF
 			$req->{self}, $q->{id}, $ids, $conf{edit_target} || 'bframe',
 			$req->{self}, $q->{id}, $ids, $conf{edit_target} || 'bframe',
-			$furl, $q->{id},
-			$req->{self}, 7, $q->{id}, encurl($req->{cgiquery}->query_string()), ($q->{in_list}?
-				("delfromlist", "Remove from", "Remove from") :
-				("addtolist", "Add to", "Add to"),
-				"mylist")
-		) : ();
+			$furl, $q->{id}
+		) : "",
+		$req->{args}->{list}? sprintf(<<EOF,
+<a id=a href="%s?list=%d&ids=%d&pq=%s&cmd=%s" title="%s playlist">%s "%s"</a>
+EOF
+			$req->{self}, $req->{args}->{list}, $q->{id},
+				encurl($req->{cgiquery}->query_string()), ($q->{in_list}?
+					("delfromlist", "Remove from", "Remove from") :
+					("addtolist", "Add to", "Add to"),
+				$req->{args}->{list_name})
+		) : "",
 		$extra;
 }
 
@@ -1195,8 +1199,6 @@ EOF
 sub print_lists($) {
 	my ($req) = @_;
 
-	my ($count) = $req->{dbh}->selectrow_array(
-		"SELECT COUNT(*) FROM song WHERE present");
 	print <<EOF;
 <script language="Javascript">
 <!--
@@ -1211,17 +1213,16 @@ function verifydelete() {
   <th $conf{th_left}>&nbsp</th>
   <th $conf{th_left}>&nbsp;Name&nbsp;</th>
   <th $conf{th_left}>&nbsp;# Songs&nbsp;</th>
+  <th $conf{th_left} id=t>&nbsp;Time&nbsp;</th>
+  <th $conf{th_left} id=t>&nbsp;Size (Mb)</th>
  </tr>
  <tr><td colspan=3></td></tr>
-
- <tr>
-  <td $conf{td_left}>&nbsp;</td>
-  <td>&nbsp;all songs</a>&nbsp;</td>
-  <td $conf{td_left}>&nbsp;$count&nbsp;</td>
- </tr>
 EOF
 	my $sth = $req->{dbh}->prepare(<<EOF);
-SELECT list.id as list_id,list.name,count(*)*song.present as count
+SELECT list.id AS list_id,list.name,
+       COUNT(song.present) AS count,
+       SUM(song.length) AS length,
+       SUM(FLOOR((song.filesize + 1023) / 1024)) AS size
 FROM list
 LEFT JOIN list_contents ON list.id=list_id
 LEFT JOIN song ON list_contents.song_id=song.id
@@ -1232,21 +1233,41 @@ EOF
 		printf <<EOF,
  <tr>
   <td %s>&nbsp;<a href="%s?cmd=dellist&id=%d" %s>del</a>&nbsp;</td>
-  <td>&nbsp;<a href="%s?cmd=alllist&list=%d&cap=%s&no_artist_rows=1">%s</a>&nbsp;</td>
+  <td>&nbsp;<a id=a href="%s?cmd=alllist&list=%d&list_name=%s&cap=%s&no_artist_rows=1">%s</a>&nbsp;</td>
   <td %s>&nbsp;%d&nbsp;</td>
+  <td id=t>&nbsp;%d:%02d:%02d&nbsp;</td>
+  <td %s id=t>&nbsp;%.1f&nbsp;</td>
  </tr>
 EOF
 		$conf{td_left}, $req->{self}, $d->{list_id}, ($d->{count}? 'onclick="return verifydelete();"':""),
-		$req->{self}, $d->{list_id}, encurl("Playlist \"$d->{name}\""), $d->{name},
-		$conf{td_left}, $d->{count};
+		$req->{self}, $d->{list_id}, encurl($d->{name}), encurl("Playlist \"$d->{name}\""), $d->{name},
+		$conf{td_left}, $d->{count},
+		$d->{length} / 3600, ($d->{length} / 60) % 60, $d->{length} % 60,
+		$conf{td_left}, $d->{size} / 1024;
 	}
+
+	my ($count, $len, $size) = $req->{dbh}->selectrow_array(
+		"SELECT COUNT(*),SUM(length),SUM(FLOOR((song.filesize + 1023) / 1024)) FROM song WHERE present");
+	printf <<EOF,
+ <tr>
+  <td %s>&nbsp;</td>
+  <td>&nbsp;(all songs)</a>&nbsp;</td>
+  <td %s>&nbsp;%d&nbsp;</td>
+  <td id=t>&nbsp;%d:%02d:%02d&nbsp;</td>
+  <td %s id=t>&nbsp;%.1f&nbsp;</td>
+ </tr>
+EOF
+		$conf{td_left},
+		$conf{td_left}, $count,
+		$len / 3600, ($len / 60) % 60, $len % 60,
+		$conf{td_left}, $size / 1024;
 	print <<EOF;
 </table>
 <p>
 <form id=search action="$req->{self}" method=get target=bframe>
 <input type=text size=20 name=listname>
 <input type=hidden name=cmd value=addlist>
-<input type=submit value="Add Playlist">
+<input type=submit value="Create new playlist">
 </form>
 EOF
 }
