@@ -172,7 +172,7 @@ foreach $f (@ARGV) {
 
 	if($opt_r) {
 		my $ext = "";
-		$f =~ /.*\.(.*?)$/ and $ext = $1;
+		$f =~ /.*\.(.*?)$/ and $ext = lc($1);
 		my $newname = "";
 		$newname .= sprintf "%02d-", $tr if $tr;
 		$newname .= simplify($ar) . "-" if $ar;
