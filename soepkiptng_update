@@ -457,6 +457,7 @@ sub extract_artist_title {
 
 	if(!$omitmp3info && ! -e "$p/.noid3" && "$p/$f" =~ /\.mp3$/i) {
 		my $mp3 = MP3::Tag->new("$p/$f");
+		$mp3->config("autoinfo", "ID3v1", "ID3v2");
 		($t, $tr, $a, $alb) = $mp3->autoinfo();
 
 		$a =~ s/_/ /g;
