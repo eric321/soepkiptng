@@ -9,6 +9,7 @@ int buffer_size;
 int buffer_start;
 int buffer_length;
 
+int song_counter;
 int byte_counter;
 int byte_counter_resetcountdown;
 

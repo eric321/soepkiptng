@@ -7,6 +7,7 @@ extern int buffer_size;
 extern int buffer_start;
 extern int buffer_length;
 
+extern int song_counter;
 extern int byte_counter;
 extern int byte_counter_resetcountdown;
 

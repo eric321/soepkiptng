@@ -81,6 +81,7 @@ static void output_oss_post(int fd, short events, long cookie)
 		   byte_counter_resetcountdown -= l;
 		   if(byte_counter_resetcountdown <= 0) {
 		      byte_counter = -byte_counter_resetcountdown;
+		      song_counter++;
 		   }
 		} else {
 		   byte_counter += l;

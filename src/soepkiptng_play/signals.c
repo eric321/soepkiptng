@@ -29,6 +29,10 @@ static void sigusr2(int s)
 static void sigalarm(int s)
 {
    byte_counter_resetcountdown = buffer_size;
+   if(buffer_size == 0) {
+       song_counter++;
+       byte_counter = 0;
+   }
 }
 
 
