@@ -2,6 +2,7 @@
 #include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 #include <unistd.h>
 #include "vorbis/codec.h"
@@ -44,10 +45,36 @@ int main(int argc, char **argv)
 
 	vi = ov_info(&vf, -1);
 	if(info_only) {
-		int br = ov_bitrate(&vf, -1);
+		vorbis_comment *cmt;
+		int br;
+		
+		br = ov_bitrate(&vf, -1);
 		len = 0;
 		if(ov_seekable(&vf)) len = ov_time_total(&vf, -1);
 		printf("%ld,%d,%d,%d\n", vi->rate, vi->channels, len, br);
+		
+		if((cmt = ov_comment(&vf, -1))) {
+			int i, track = 0;
+			char *artist = "";
+			char *title = "";
+			char *album = "";
+			
+			for(i = 0; i < cmt->comments; i++) {
+				if(strncmp(cmt->user_comments[i], "artist=", 7) == 0) {
+					artist = cmt->user_comments[i] + 7;
+				}
+				else if(strncmp(cmt->user_comments[i], "title=", 6) == 0) {
+					title = cmt->user_comments[i] + 6;
+				}
+				else if(strncmp(cmt->user_comments[i], "album=", 6) == 0) {
+					album = cmt->user_comments[i] + 6;
+				}
+				else if(strncmp(cmt->user_comments[i], "tracknumber=", 12) == 0) {
+					track = atoi(cmt->user_comments[i] + 12);
+				}
+			}
+			printf("%s\n%s\n%s\n%d\n", artist, title, album, track);
+		}
 		exit(0);
 	}
 	
