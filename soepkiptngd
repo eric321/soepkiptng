@@ -635,6 +635,12 @@ EOF
 			logprintf("K %6d", $song->{id});
 		}
 	}
+
+	# reset time counter
+	warn "kill -ALRM $cdrplaypid\n";
+	kill 'SIGALRM', $cdrplaypid
+		or warn "kill -USR1 $cdrplaypid: $!\n";
+
 	if(($pid_status || $pid_signal) && !$killsock_conn) {
 		# write to log file
 		logprintf("E %6d status=%d signal=%d", $song->{id}, $pid_status, $pid_signal);
