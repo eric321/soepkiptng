@@ -925,16 +925,16 @@ my $dbh = DBI->connect("DBI:mysql:$conf{db_name}:$conf{db_host}",$conf{db_user},
 
 # cookies/sessions
 my $r = Apache->request;
-my $cookie;
-if($r->header_in('Cookie') =~ /SESSION_ID=(\w*)/) {
-	$cookie = $1;
-}
-my %session;
-tie %session, 'Apache::Session::MySQL', $cookie, {
-	Handle     => $dbh,
-	LockHandle => $dbh
-};
-$r->header_out("Set-Cookie" => "SESSION_ID=$session{_session_id};");
+#my $cookie;
+#if($r->header_in('Cookie') =~ /SESSION_ID=(\w*)/) {
+#	$cookie = $1;
+#}
+#my %session;
+#tie %session, 'Apache::Session::MySQL', $cookie, {
+#	Handle     => $dbh,
+#	LockHandle => $dbh
+#};
+#$r->header_out("Set-Cookie" => "SESSION_ID=$session{_session_id};");
 $r->no_cache(1);
 
 my $cmd = $args{cmd};
