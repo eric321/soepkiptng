@@ -1210,7 +1210,9 @@ SELECT list.id AS list_id,list.name,
 FROM list
 LEFT JOIN list_contents ON list.id=list_id
 LEFT JOIN song ON list_contents.song_id=song.id
-WHERE list.id AND (song.present OR song.present IS NULL) GROUP BY list.id
+WHERE list.id AND (song.present OR song.present IS NULL)
+GROUP BY list.id
+ORDER BY list.name
 EOF
 	$sth->execute;
 	while(my $d = $sth->fetchrow_hashref) {
