@@ -1,0 +1,12 @@
+
+use soepkiptng;
+drop table queue;
+
+CREATE TABLE queue (
+  song_order int NOT NULL,
+  song_id int NOT NULL,
+  timestamp timestamp,
+  user varchar(255),
+  PRIMARY KEY (song_id)
+);
+

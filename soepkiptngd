@@ -135,13 +135,14 @@ sub get_song_jingle() {
 
 sub get_song_queued($) {
 	my ($dbh) = @_;
-	my ($song_id, $song_order, $filename, $pres);
+	my ($song_id, $song_order, $filename, $pres, $user);
 
 	# get queued song
 	$dbh->do("LOCK TABLES queue WRITE, song READ");
 	for(;;) {
-		($song_id, $song_order, $filename, $pres) = $dbh->selectrow_array(
-			"SELECT queue.song_id,queue.song_order,song.filename,song.present" .
+		($song_id, $song_order, $filename, $pres, $user) = $dbh->selectrow_array(
+			"SELECT queue.song_id,queue.song_order,song.filename," .
+			"       song.present,queue.user" .
 			" FROM queue,song" .
 			" WHERE queue.song_id=song.id" .
 			" ORDER BY queue.song_order" .
@@ -162,7 +163,7 @@ sub get_song_queued($) {
 	}
 	$dbh->do("UNLOCK TABLES");
 	$song_id or return undef;
-	return ($song_id, 'Q', $filename);
+	return ($song_id, 'Q', $filename, $user);
 }
 
 sub get_song_random_recent($) {
@@ -257,7 +258,7 @@ srand;
 
 $num_errors = 0;
 for(;;) {
-	my ($song_id, $songtype, $filename);
+	my ($song_id, $songtype, $filename, $user);
 
 	if($restart) {
 		# close-on-exec apparently doesn't work
@@ -282,10 +283,10 @@ for(;;) {
 			or die "Can't connect to database $db_name\@$db_host as user $db_user\n";
 	}
 
-	($song_id, $songtype, $filename) = get_song_jingle();
-	$song_id or ($song_id, $songtype, $filename) = get_song_queued($dbh);
-	$song_id or ($song_id, $songtype, $filename) = 	get_song_random_recent($dbh);
-	$song_id or ($song_id, $songtype, $filename) = 	get_song_random($dbh);
+	($song_id, $songtype, $filename, $user) = get_song_jingle();
+	$song_id or ($song_id, $songtype, $filename, $user) = get_song_queued($dbh);
+	$song_id or ($song_id, $songtype, $filename, $user) = 	get_song_random_recent($dbh);
+	$song_id or ($song_id, $songtype, $filename, $user) = 	get_song_random($dbh);
 
 	if($song_id) {
 		# update database
@@ -311,6 +312,7 @@ $cdrplaypid
 $killhost
 $killport
 $songtype
+$user
 EOF
 		close ST;
 		rename "$statusfile.tmp", $statusfile

@@ -45,48 +45,53 @@ sub del_song($@) {
 	$db->do("DELETE FROM queue WHERE song_id=" . join(" OR song_id=", @ids));
 }
 
-sub add_song_nolock($$@) {
-	my ($db, $order, @ids) = @_;
+sub add_song_nolock($$$@) {
+	my ($db, $order, $user, @ids) = @_;
 
 	my $firstid = shift @ids or return;
-	my $q = "INSERT INTO queue (song_order,song_id) VALUES ($order,$firstid)";
+	my $q = "INSERT INTO queue (song_order, song_id, user) " .
+		"VALUES ($order, $firstid, \"$user\")";
 	foreach(@ids) {
 		$order++;
-		$q .= ",($order,$_)";
+		$q .= ",($order,$_,\"$user\")";
 	}
 	$db->do($q);
 }
 
 sub get_queue_ids($$) {
-	my ($db, $orderby) = @_;
+	my ($db, $rest) = @_;
 
-	my $res = $db->selectcol_arrayref("SELECT song_id FROM queue ORDER BY $orderby");
+	my $res = $db->selectcol_arrayref("SELECT song_id FROM queue $rest");
 	return @$res;
 }
 
 
-sub add_song($@) {
-	my ($db, @ids) = @_;
+sub add_song($$@) {
+	my ($db, $user, @ids) = @_;
 
 	$db->do("LOCK TABLES queue WRITE");
 	del_song($db, @ids);
 	my ($order) = $db->selectrow_array("SELECT MAX(song_order) FROM queue");
 	$order = 0 if $order < 0;
-	add_song_nolock($db, $order + 1, @ids);
+	add_song_nolock($db, $order + 1, $user, @ids);
 	$db->do("UNLOCK TABLES");
+}
+
+sub reorder_queue($@) {
+	my ($db, $order, @ids) = @_;
+
+	foreach(@ids) {
+		$db->do("UPDATE queue SET song_order=$order WHERE song_id=$_");
+		$order++;
+	}
 }
 
 sub move_song_to_top($@) {
 	my ($db, @ids) = @_;
 
 	$db->do("LOCK TABLES queue WRITE");
-
-	del_song($db, @ids);
-
-	my @res = get_queue_ids($db, "song_order");
-	$db->do("DELETE FROM queue");
-	add_song_nolock($db, 1, (@ids, @res));
-
+	reorder_queue($db, $#ids + 2, get_queue_ids($db, "ORDER BY song_order"));
+	reorder_queue($db, 1, @ids);
 	$db->do("UNLOCK TABLES");
 }
 
@@ -94,11 +99,7 @@ sub shuffle_queue($) {
 	my ($db) = @_;
 
 	$db->do("LOCK TABLES queue WRITE");
-
-	my @res = get_queue_ids($db, "rand()");
-	$db->do("DELETE FROM queue");
-	add_song_nolock($db, 1, @res);
-
+	reorder_queue($db, 1, get_queue_ids($db, "ORDER BY rand()"));
 	$db->do("UNLOCK TABLES");
 }
 

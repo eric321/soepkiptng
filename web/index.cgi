@@ -228,7 +228,7 @@ EOF
 }
 
 sub table_entry($;$$$$) {
-	my ($q, $col1, $title_href, $ids) = @_;
+	my ($q, $col1, $title_href, $ids, $extra) = @_;
 	my $fmt = <<EOF;
  <tr>
   <td %s>&nbsp;%s&nbsp;</td>
@@ -251,7 +251,7 @@ EOF
 		$td_time, $q->{length} / 60, $q->{length} % 60,
 		$td_enc, enchtml($q->{encoding}, 1),
 		$td_edit, $self, $q->{id}, $ids,
-		$edit_target || 'bframe', $listch;
+		$edit_target || 'bframe', $listch, $extra;
 }
 
 sub albumlist_entry($) {
@@ -265,13 +265,14 @@ sub albumlist_entry($) {
 		enchtml($1 || "?"), enchtml($2), $res->{c});
 }
 
-sub print_playlist_table($$) {
-	my ($dbh, $nowplaying) = @_;
-	my $nowfile;
+sub print_playlist_table($) {
+	my ($dbh) = @_;
+	my ($nowplaying, $nowfile, $nowuser);
 	my $killline;
 
-	$query =  "SELECT title,artist.name as artist,album.name as album,song.id as id,track,length,encoding," .
-		"song.artist_id as arid,song.album_id as alid" .
+	$query =  "SELECT title,artist.name as artist,album.name as album," .
+		"song.id as id, track, length, encoding, queue.user as user," .
+		"song.artist_id as arid, song.album_id as alid" .
 		" FROM song,queue,artist,album" .
 		" WHERE present AND song.artist_id=artist.id AND song.album_id=album.id" .
 		" AND song.id = queue.song_id ORDER BY queue.song_order";
@@ -299,14 +300,15 @@ sub print_playlist_table($$) {
 %s%s</table>
 EOF
 
-	if(!$nowplaying) {
-		local *F;
-		if(open F, $statusfile) {
-			$nowplaying = <F>;
-			$nowfile = <F>;
-			close F;
-		}
+	local *F;
+	if(open F, $statusfile) {
+		chop($nowplaying = <F>);
+		chop($nowfile = <F>);
+		<F>; <F>; <F>; <F>; <F>;
+		chop($nowuser = <F>);
+		close F;
 	}
+
 	if($nowplaying) {
 		my $query =  "SELECT title,artist.name as artist,album.name as album," .
 			"song.id as id,track,length,encoding," .
@@ -329,7 +331,8 @@ EOF
 		unshift @ids, $_->{id};
 		$killline = table_entry($_,
 			sprintf(qq|<a id=a href="%s?cmd=kill&id=%s">%s</a>|,
-			$self, $_->{id}, $killtext), undef, ids_encode(@ids));
+			$self, $_->{id}, $killtext), undef,
+			ids_encode(@ids), $nowuser? "<td>&nbsp;($nowuser)</td>":"");
 	}
 
 	my $ids = ids_encode(@ids);
@@ -348,7 +351,7 @@ EOF
 			qq|<a id=a href="%s?cmd=del&ids=%s">%s</a> | .
 			qq|<a id=a href="%s?cmd=up&id=%s">%s</a>|,
 			$self, $_->{id}, $deltext, $self, $_->{id}, $uptext),
-			undef, $ids) } @records);
+			undef, $ids, $_->{user}? "<td>&nbsp;(".$_->{user}.")</td>":"") } @records);
 }
 
 sub print_artistlist_table($$$@) {
@@ -760,8 +763,7 @@ $r->no_cache(1);
 
 my $cmd = $args{'cmd'};
 
-my $r = $refreshtime;
-my $nowplaying;
+my $rt = $refreshtime;
 
 if($cmd eq 'empty') {
 	printhtmlhdr;
@@ -770,7 +772,18 @@ if($cmd eq 'empty') {
 }
 
 if($cmd eq 'add') {
-	add_song($dbh, ids_decode($args{'ids'}));
+	my $user = '';
+
+	my $host = $r->header_in('X-Forwarded-For') || $r->get_remote_host();
+	if($host =~ /^\d+\.\d+\.\d+\.\d+$/) {
+		$host = gethostbyaddr(inet_aton($host), AF_INET) || $host;
+	}
+	if($host) {
+		$host =~ /^([-a-z0-9]*)/;
+		$user = ${"user_from_$1"} || ${"user_from_$host"} || $host;
+	}
+		
+	add_song($dbh, $user, ids_decode($args{'ids'}));
  	printredirexit($q, 'playlist', undef);
 }
 elsif($cmd eq 'del') {
@@ -782,7 +795,7 @@ elsif($cmd eq 'up') {
  	printredirexit($q, 'playlist', undef);
 }
 elsif($cmd eq 'kill') {
-	($nowplaying) = kill_song();
+	kill_song();
  	printredirexit($q, 'playlist', undef);
 }
 elsif($cmd eq 'setplaylist') {
@@ -902,12 +915,12 @@ elsif($cmd eq 'playlist') {
 	printhtmlhdr;
 	my $s = $q->url(-full=>1);
 	print <<EOF;
-<META HTTP-EQUIV="Refresh" CONTENT="$r;URL=$s?cmd=playlist&s=$args{'s'}">
+<META HTTP-EQUIV="Refresh" CONTENT="$rt;URL=$s?cmd=playlist&s=$args{'s'}">
 EOF
 	printhdr($plstyle);
 	print $topwindow_title;
 	print_az_table($dbh, \%session);
-	print_playlist_table($dbh, $nowplaying);
+	print_playlist_table($dbh);
 	printftr;
 }
 elsif($cmd eq 'artistlist') {

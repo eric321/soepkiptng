@@ -162,13 +162,16 @@ if(@ARGV) {
 	print STDERR "\nAdd (a=all): ";
 	$_ = <STDIN>;
 	exit unless /\S/;
+
+	my $user = (getpwuid $<)[6] || getpwuid $< || "uid $<";
+	$user =~ s/,.*//;
 	if(/^a/i) {
 		for($n = 1; $n < $i; $n++) {
-			add_song($dbh, $id[$n]);
+			add_song($dbh, $user, $id[$n]);
 		}
 	} else {
 		foreach(splitrange($_, $i)) {
-			add_song($dbh, $id[$_]) if $id[$_];
+			add_song($dbh, $user, $id[$_]) if $id[$_];
 		}
 	}
 }
