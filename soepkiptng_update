@@ -42,7 +42,7 @@ use MP3::Tag;
 use MP3::Info;
 #use Data::Dumper;
 
-use vars qw/$opt_C $opt_d $opt_e $opt_f $opt_r $opt_q $opt_v $opt_c/;
+use vars qw/$opt_C $opt_d $opt_e $opt_f $opt_r $opt_q $opt_v $opt_c $opt_R/;
 
 sub get_wav_params($\%;$);
 sub getinfo_mp3($\%);
@@ -58,24 +58,26 @@ sub read_eric_files();
 sub extract_artist_title($\%);
 sub is_nfs($);
 
-getopts('Cfredqvhc:L');
+getopts('Cfredqvhc:LR:');
 $force = 1 if $opt_f;
 $| = 1;
 $do_delete = !$opt_d && !$opt_r;
 
 $opt_h and die <<EOF;
-usage: soepkiptng_update [-cfredqhv] [dir]
+usage: soepkiptng_update [-defhqrvCL] [-c configfile] [-R pref] [dir]
 
 options:
-  -C  : don't fix artist/title/album upper/lowercase
-  -L  : set last_played to current time
-  -f  : force updating of info even if song is already in database
-  -r  : don't recurse subdirectories
-  -e  : don't read "ericfiles"
-  -d  : turn on debugging
-  -q  : be quiet
-  -h  : get this help
-  -v  : be verbose
+  -c configfile : override soepkiptng config file
+  -d            : turn on debugging
+  -e            : don't read "ericfiles"
+  -f            : force updating of info even if song is already in database
+  -h            : get this help
+  -q            : be quiet
+  -r            : don't recurse subdirectories
+  -v            : be verbose
+  -C            : don't fix artist/title/album upper/lowercase
+  -L            : set last_played to current time
+  -R pref       : set random_pref field
 EOF
 
 read_configfile(\%conf, $opt_c);
@@ -253,12 +255,12 @@ EOF
 		$albumid_cache{$info{album}} = get_id($dbh, "album", $info{album});
 	}
 	$q = "REPLACE INTO song SET id=?, artist_id=?, title=?, album_id=?, " .
-		"track=?, present=1, filename=?, length=?, encoding=?, " .
+		"track=?, present=1, filename=?, length=?, encoding=?, random_pref=?, " .
 		"last_played=from_unixtime(?), time_added=from_unixtime(?)";
 	$dbh->do($q, undef, $filename{$_}, $artistid_cache{$info{artist}},
 		$info{title}, $albumid_cache{$info{album}}, $info{track} || 0,
-		$_, $info{len},
-		$info{encoding}, $last_played{$_} || ($opt_L? time : 0),
+		$_, $info{len}, $info{encoding}, $opt_R || 10000,
+		$last_played{$_} || ($opt_L? time : 0),
 		$time_added{$_} || time)
                 or die "can't do sql command: " . $dbh->errstr . "\n";
 	delete $filename{$_};
