@@ -130,7 +130,7 @@ EOF
 <td id=az>
  <form id=search action="$self" method=get target=bframe>
   <input type=hidden name=cap value="Album search: %s">
-  <input type=hidden name=cmd value=alllist>
+  <input type=hidden name=cmd value=artistlist>
    <input type=text size=5 name=album style="$searchformstyle">
  </form>
 </td>
@@ -284,11 +284,11 @@ $output
 EOF
 }
 
-sub print_artistlist_table($$$) {
-	my ($dbh, $session, $val) = @_;
+sub print_artistlist_table($$$$) {
+	my ($dbh, $session, $field, $val) = @_;
 
-	print <<EOF;
-<center id=hdr>Artist: $val</center>
+	printf <<EOF, ucfirst($field) . ": $val";
+<center id=hdr>%s</center>
 <table border=0 cellspacing=0>
  <tr>
   <th>&nbsp;Artist&nbsp;</th>
@@ -299,7 +299,7 @@ EOF
 	my $query = "SELECT DISTINCT artist.name as artist, album.name as album," .
 			" count(*), song.artist_id, song.album_id," .
 			" UCASE(album.name) as sort" .
-			" FROM song,artist,album WHERE present AND artist.name REGEXP ?".
+			" FROM song,artist,album WHERE present AND $field.name REGEXP ?".
 			" AND song.artist_id=artist.id AND song.album_id=album.id".
 			" GROUP BY artist.name,album.name ORDER BY sort";
 	my $sth = $dbh->prepare($query);
@@ -722,7 +722,8 @@ EOF
 elsif($cmd eq 'artistlist') {
 	printhtmlhdr;
 	printhdr($artiststyle);
-	print_artistlist_table($dbh, \%session, $args{'artist'});
+	my $field = $args{'artist'}? 'artist':'album';
+	print_artistlist_table($dbh, \%session, $field, $args{$field});
 	printftr;
 }
 elsif($cmd eq 'alllist') {
