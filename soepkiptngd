@@ -35,7 +35,7 @@ use POSIX ":sys_wait_h";
 use Sys::Hostname;
 use Getopt::Std;
 
-getopts('dr');
+getopts('dr:');
 $debug = 1 if $opt_d;
 
 open F, $configfile
@@ -90,10 +90,12 @@ sub dierotate {
 	exit 1;
 }
 
-unless($debug || $opt_r) {
-	fork && exit;
-	chdir "/";
-	setpgrp();
+unless($debug) {
+	if(!$opt_r) {
+		fork && exit;
+		chdir "/";
+		setpgrp();
+	}
 	open STDIN, "</dev/null";
 	open STDERR, ">>$errfile";
 	$SIG{__DIE__} = \&dierotate;
@@ -121,17 +123,21 @@ $SIG{'CHLD'} = sub {
 warn "********** starting (pid=$$) **********\n";
 
 $SIG{'TERM'} = sub {
-	warn "got SIGTERM, killing $pid and $cdrplaypid, exiting\n";
+	warn "got SIGTERM, killing -$pid and $cdrplaypid, exiting\n";
 	unlink $statusfile;
-	kill 'KILL', $pid, $cdrplaypid;
+	kill 'KILL', -$pid, $cdrplaypid;
 	exit;
 };
 
 $SIG{'USR1'} = sub {
+	warn "setting restart flag\n";
 	$restart = 1;
 };
 
-unless($opt_r) {
+if($opt_r) {
+	$cdrplaypid = $opt_r;
+	warn "cdrplaypid=$cdrplaypid (from -r)\n";
+} else {
 	$cdrplaypid = open STDOUT, "|$playercmd";
 	warn "cdrplaypid=$cdrplaypid\n";
 }
@@ -148,7 +154,7 @@ for(;;) {
 		close KILLSOCK;
 
 		warn "execing myself\n";
-		exec $0, '-r';
+		exec $0, '-r', $cdrplaypid;
 		die "$0: $!\n";
 	}
 
@@ -232,6 +238,7 @@ EOF
 	}
 	if(($pid = fork) == 0) {
 		$SIG{'PIPE'} = 'DEFAULT';
+		setpgrp;
 		if($ext eq "mp2" || $ext eq "mp3") {
 			exec "mp3toraw", $filename;
 		} elsif($ext eq "ogg") {
@@ -254,8 +261,8 @@ EOF
 			warn "got connection\n";
 
 			# kill player
-			kill 'KILL', $pid
-				or warn "kill -KILL $pid: $!\n";
+			kill 'KILL', -$pid
+				or warn "kill -KILL -$pid: $!\n";
 
 			# tell cdrplay to flush its buffers
 			kill 'SIGUSR1', $cdrplaypid
