@@ -1,0 +1,22 @@
+#!/bin/sh
+
+ext="`echo ${1##*.} | tr A-Z a-z`"
+
+if [ "_$ext" = "_vob" ]; then
+	# dvd settings
+	extra_args="-delay -0.2"
+elif [ "_$ext" = "_mpg" -o "_$ext" = "_mpeg" ]; then
+	:
+else
+	# avi settings
+	extra_args="-ni -vop pp=vb:a/hb:a/al -idx"
+fi
+
+mplayer >/dev/null 2>&1 \
+	-display :0.0 \
+	-vo xmga \
+	-fs \
+	-channels 2 \
+	-osdlevel 1 \
+	$extra_args \
+	"$1"
