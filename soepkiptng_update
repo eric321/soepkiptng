@@ -195,7 +195,7 @@ while(<FILES>) {
 		$title or do {
 			$artist = $info{artist};
 			$title = $info{title} and
-				print STDERR "-fileinfo->";
+				print STDERR "-$info{info_origin}->";
 			$album = $info{album};
 			$track = $info{track};
 		};
@@ -253,6 +253,32 @@ printf <<EOF, $num_added, $num_updated, $num_deleted, $num_moved, $num_skipped;
 EOF
 
 
+sub get_id3($\%) {
+	my ($file, $info) = @_;
+
+	if($file =~ m|(.*/)| and -e "$1/.noid3") { return undef; }
+
+	my $id3 = MP3::Tag->new($file);
+	$id3->config("autoinfo", "ID3v2", "ID3v1");
+	my ($t, $tr, $a, $alb) = $id3->autoinfo();
+
+	$a =~ s/_/ /g;
+	$a =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g unless $a =~ /[A-Z]/;
+	$t =~ s/_/ /g;
+	$t =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g unless $t =~ /[A-Z]/;
+	$alb =~ s/_/ /g;
+	$alb =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g unless $alb =~ /[A-Z]/;
+
+	$a && $t or return undef;
+
+	$info->{info_origin} = $id3->{ID3v2}? "ID3v2" : "ID3";
+	$info->{artist} = $a;
+	$info->{title} = $t;
+	$info->{album} = $alb;
+	$info->{track} = $tr;
+	return 1;
+}
+
 # getinfo_* returns (description, length[sec], sfreq[khz], channels
 # or undef if it isn't the correct type
 
@@ -298,6 +324,9 @@ sub getinfo_mp3($\%) {
 		$bitrate = int(8 * (-s $file) / $info->{len} / 1000);
 	}
 	$info->{desc} = sprintf "MP3 %dkb/s%s", $bitrate, $xframes? " (VBR)":"";
+
+	get_id3($file, %$info);
+
 	return 1;
 }
 
@@ -316,14 +345,14 @@ sub getinfo_ogg($\%) {
 	my $br;
 	my $infoline = <F>;
 	($info->{freq}, $info->{chan}, $info->{len}, $br) = split(/,/, $infoline);
+	$info->{freq} or return undef;
+	$info->{desc} = sprintf "Ogg-Vorbis (~%dkb/s)", ($br + 500) / 1000;
 
 	chop(($info->{artist}, $info->{title}, $info->{album},
 	 $info->{track}) = <F>);
 	close F;
 
-	$info->{freq} or return undef;
-
-	$info->{desc} = sprintf "Ogg-Vorbis (~%dkb/s)", ($br + 500) / 1000;
+	$info->{info_origin} = "Ogg-Vorbis" if $info->{artist} && $info->{title};
 	return 1;
 }
 
@@ -517,24 +546,6 @@ sub extract_artist_title {
 	# cut path
 	$f =~ s|(.*)/||;
 	my $p = $1;
-
-	if(! -e "$p/.noid3" && "$p/$f" =~ /\.mp3$/i) {
-		my $mp3 = MP3::Tag->new("$p/$f");
-		$mp3->config("autoinfo", "ID3v1", "ID3v2");
-		($t, $tr, $a, $alb) = $mp3->autoinfo();
-
-		$a =~ s/_/ /g;
-		$a =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g unless $a =~ /[A-Z]/;
-		$t =~ s/_/ /g;
-		$t =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g unless $t =~ /[A-Z]/;
-		$alb =~ s/_/ /g;
-		$alb =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g unless $alb =~ /[A-Z]/;
-
-		if($a && $t) {
-			print STDERR "id3/id3v2";
-			return ($a, $t, $tr, $alb);
-		}
-	}
 
 	# cut extension
 	$f =~ s/(.*)\..*/\1/;
