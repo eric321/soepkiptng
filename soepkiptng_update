@@ -440,28 +440,37 @@ sub getinfo_flac($\%) {
 	$file =~ /\.flac$/i
 		or return undef;
 
-	open F, $file or return undef;
+	my $filesize = -s $file or return undef;
 
-	my $buf;
-	read F, $buf, 26;
+	if(open(F, "-|") == 0) {
+		open STDERR, ">/dev/null";
+		exec qw/metaflac
+			--show-sample-rate
+			--show-channels
+			--show-total-samples
+			--show-bps
+			--show-vc-field=artist
+			--show-vc-field=title
+			--show-vc-field=tracknumber
+			--show-vc-field=album
+			/, $file;
+		die;
+	}
+	my ($totsamp, $bps);
+	($info->{freq}, $info->{chan}, $totsamp, $bps, $info->{artist},
+		$info->{title}, $info->{track}, $info->{album}) = <F>;
 	close F;
 
-	length($buf) == 26 or return undef;
-	my ($magic, $l1, $num) = unpack "a4x14NN", $buf;
-	$magic eq "fLaC" or return undef;
+	my $totbytes = $totsamp * $info->{chan} * $bps / 8;
+	$info->{encoding} = "flac" . ($totbytes? sprintf(" (%d%%)", 100 * $filesize / $totbytes) : "");
 
-	$info->{freq} = $l1 >> 12;
-	$info->{chan} = 1 + (($l1 >> 9) & 7);
-	my $bt = 1 + (($l1 >> 4) & 0x1f);
-	$num += ($l1 & 0xf) << 32;
-	$info->{len} = $num / $info->{freq};
+	$info->{artist} =~ s/^[^=]+=|\s+$//g;
+	$info->{title} =~ s/^[^=]+=|\s+$//g;
+	$info->{album} =~ s/^[^=]+=|\s+$//g;
+	$info->{track} =~ s/^[^=]+=|\s+$//g;
 
-	my $percent = '';
-	if($num && $info->{ch} && $bt) {
-		$percent = sprintf " %d%%",
-			(-s $file) / ($num * $info->{chan} * $bt / 8 / 100);
-	}
-	$info->{encoding} = "flac$percent";
+	$info->{len} = $totsamp / $info->{freq};
+	$info->{info_origin} = "flac" if $info->{artist} && $info->{title};
 	return 1;
 }
 

@@ -56,23 +56,36 @@ Requirements:
     LPAC is a non-free lossless compression algorithm. You can get a linux
     binary from http://www-ft.ee.tu-berlin.de/~liebchen/lpac.html at no cost.
     The source is not available :-(.
-  - flac:
+  - flac (>= 1.04 required):
     Flac is a free lossless compression algorithm, available from
     flac.sourceforge.net. It does not compress as well as lpac, but the
     difference is marginal.
   - Ogg-Vorbis
     Get the libraries from http://www.xiph.org.
 
-
-On a Debian system you can install all the necessary software with apt-get:
-
-apt-get install libapache-mod-perl libapache-dbi-perl libdbd-mysql-perl \
-   mysql-server libmpeg-mp3info-perl libterm-readkey-perl \
-   libcompress-zlib-perl madplay sox libvorbis-dev flac
-
 Perl modules can be installed directly from CPAN by starting "perl -MCPAN
 -e shell" (you must answer some configuration questions if you do this for
 the first time) and typing "install Some::Module".
+
+
+On a Debian system you can install all the necessary software with apt-get.
+You may have to use the unstable branch ("sid") in order to get the right
+versions.
+
+Package list:
+- flac                    (optional; for flac support; >= 1.04 required)
+- libcompress-zlib-perl
+- libdbd-mysql-perl
+- libmpeg-mp3info-perl
+- libterm-readkey-perl    (optional)
+- libvorbis-dev           (for Ogg-Vorbis support)
+- madplay                 (for mp3 support)
+- mysql-server
+- sox                     (optional; for wav support)
+- apache                  (optional; for apache/mod_perl-based web interface)
+- libapache-dbi-perl      (optional; for apache/mod_perl-based web interface)
+- libapache-mod-perl      (optional; for apache/mod_perl-based web interface)
+- libwww-perl             (optional; for standalone web interface)
 
 
 Installation:
@@ -117,14 +130,15 @@ Installation:
 
 TODO:
 -----
-* 'see also' feature for related artists
+* better interface / web interface for 'see also' feature
 * clean up Shoutcast support (separate table, multiple urls per name with
   automatic fallback)
 * lirc support (IR remote)
 * play directly from urls
+* smb support (playing/updating directly from Windoze shares)
 * playlists/genres
 * ripping integration
-* multiple soepkiptng daemons
+* multiple soepkiptng daemons & request queues
 * remote playing using esd (Enlightenment Sound Daemon) or similar program
 * message input that will be played using a text-to-speech program
 * user-level access control (limit access to database editing / song requests)
@@ -132,7 +146,6 @@ TODO:
 * make music format more modular; maybe support xmms plugins
 * silence before random songs
 * fade-out/fade-in in pause/resume
-* release of /dev/dsp during pause
 * cleanup Xing VBR info detection (it's a quick hack now)
 * scan VBR mp3s without Xing VBR header for length
 * Ogg-Vorbis embedded songinfo support (reading/writing)

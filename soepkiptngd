@@ -321,7 +321,9 @@ sub start_play($) {
 		} elsif($ext eq "raw") {
 			exec "cat", $filename;
 		} elsif($ext eq "flac") {
-			exec "flac", "-d", "-fl", $filename, "-";
+			exec qw/flac -sdc --endian=little --sign=signed/,
+				qw/--force-raw-format/, $filename;
+			#exec "flac", "-d", "-fl", $filename, "-";
 		} elsif($ext =~ /^(mpe?g|avi|asx|asf|vob|wmv|rm)$/) {
 			exec "soepkiptng_video", $filename;
 		} elsif($ext eq "ac3") {
