@@ -61,7 +61,7 @@ sub getinfo_pac($\%);
 sub getinfo_flac($\%);
 sub getinfo_raw($\%);
 sub read_eric_files();
-sub extract_artist_title;
+sub extract_artist_title($\%);
 
 getopts('fred');
 $force = 1 if $opt_f;
@@ -96,7 +96,7 @@ while(($id, $f, $l, $t, $pres) = $sth->fetchrow_array) {
 	$longname_id{$1} = $id;
 }
 
-# scan mp3 directories
+# scan music directories
 if(open(FILES, "-|") == 0) {
 	my @findargs = ('-type', 'f');
 	$opt_r and push @findargs, '-maxdepth', 1;
@@ -128,21 +128,21 @@ while(<FILES>) {
 	$/ = "\0";
 
 	$info{len} = 0 + $info{len};
-	$info{desc} or do {
+	$info{encoding} or do {
 		warn "Filetype of $_ unknown\n";
 		next;
 	};
 	if($info{freq} && ($info{freq} < 44090 || $info{freq} > 44110)) {
 		my $s = sprintf "%f", $info{freq} / 1000;
 		$s =~ s/\.?0+$//;
-		$info{desc} .= ", ${s}kHz";
+		$info{encoding} .= ", ${s}kHz";
 	}
-	$info{desc} .= " mono" if $info{chan} == 1;
+	$info{encoding} .= " mono" if $info{chan} == 1;
 
 	# skip if already in database (unless "force" was given)
 	if($filename{$_}) {
 		if($force) {
-			print "Updating $_\n";
+			print "Updating $_:\n";
 			$num_updated++;
 		} else {
 			$num_skipped++;
@@ -160,7 +160,7 @@ while(<FILES>) {
 				or die "can't do sql command: " . $dbh->errstr . "\n";
 			$dbh->do("UPDATE song SET present=1, filename=?, " .
 				"length=?, encoding=? WHERE id=?", undef,
-				$_, $info{len}, $info{desc}, $longname_id{$1})
+				$_, $info{len}, $info{encoding}, $longname_id{$1})
 				or die "can't do sql command: " . $dbh->errstr . "\n";
 			delete $filename{$oldname};
 			$num_moved++;
@@ -169,60 +169,53 @@ while(<FILES>) {
 			next;
 		}
 		$num_added++;
-		print "Adding $_\n";
+		print "Adding $_:\n";
 	}
 
 	# get artist/title/track/album info
 	m|([^/]+/+[^/]+)\.\w+$|;
 #warn "1=$1\n";
-	$artist = $artist{$1};
-	$title = $track{$1};
-	$album = $album{$1};
-	$track = $tracknr{$1};
-	if($title) {
-#		print STDERR "+";
-	} else {
-		print STDERR "$_\n\t";
-		foreach $tr (keys %track) {
-			$tr =~ /^\Q$_-/ and do {
-				$artist = $artist{$tr};
-				$title = $track{$tr};
-				$album = $album{$tr};
-				print STDERR "->";
-				last;
-			}
-		}
-		$title or do {
-			$artist = $info{artist};
-			$title = $info{title} and
-				print STDERR "-$info{info_origin}->";
-			$album = $info{album};
-			$track = $info{track};
-		};
-		$title or do {
-			($artist, $title, $track, $album) = extract_artist_title($_);
-			print STDERR "-->";
-		};
-		print STDERR "$artist :: $title ($album [$track])\n";
+	if($track{$1}) {
+		$info{info_origin} = "ericfile";
+		$info{artist} = $artist{$1};
+		$info{title} = $track{$1};
+		$info{album} = $album{$1};
+		$info{track} = $tracknr{$1};
+	} elsif(!$info{info_origin}) {
+		extract_artist_title($_, %info);
 	}
-	$album or $album = $artist{$_};
-	$album or $album = "";
 
-#	warn "a=$artist, t=$title, al=$album, tr=$track, file=$_, len=$info{len}, desc=$info{desc}\n";
+	printf <<EOF,
+   Info from: %s
+   Artist:    %s
+   Title:     %s
+   Album:     %s
+   Track:     %d
+   Length:    %d:%02d
+   Encoding:  %s
+EOF
+	$info{info_origin},
+	$info{artist},
+	$info{title},
+	$info{album},
+	$info{track},
+	$info{length} / 60, $info{length} % 60,
+	$info{encoding};
 
 	# insert song into database
-	if(!$artistid_cache{$artist}) {
-		$artistid_cache{$artist} = get_id($dbh, "artist", $artist) or die;
+	if(!$artistid_cache{$info{artist}}) {
+		$artistid_cache{$info{artist}} = get_id($dbh, "artist", $info{artist}) or die;
 	}
-	if(!$albumid_cache{$album}) {
-		$albumid_cache{$album} = get_id($dbh, "album", $album);
+	if(!$albumid_cache{$info{album}}) {
+		$albumid_cache{$info{album}} = get_id($dbh, "album", $info{album});
 	}
 	$q = "REPLACE INTO song SET id=?, artist_id=?, title=?, album_id=?, " .
 		"track=?, present=1, filename=?, length=?, encoding=?, " .
 		"last_played=from_unixtime(?), time_added=from_unixtime(?)";
-	$dbh->do($q, undef, $filename{$_}, $artistid_cache{$artist},
-		$title, $albumid_cache{$album}, $track || 0, $_, $info{len},
-		$info{desc}, $last_played{$_} || 0, $time_added{$_} || time)
+	$dbh->do($q, undef, $filename{$_}, $artistid_cache{$info{artist}},
+		$info{title}, $albumid_cache{$info{album}}, $info{track} || 0,
+		$_, $info{len},
+		$info{encoding}, $last_played{$_} || 0, $time_added{$_} || time)
                 or die "can't do sql command: " . $dbh->errstr . "\n";
 	delete $filename{$_};
 }
@@ -323,7 +316,7 @@ sub getinfo_mp3($\%) {
 			$info->{freq};
 		$bitrate = int(8 * (-s $file) / $info->{len} / 1000);
 	}
-	$info->{desc} = sprintf "MP3 %dkb/s%s", $bitrate, $xframes? " (VBR)":"";
+	$info->{encoding} = sprintf "MP3 %dkb/s%s", $bitrate, $xframes? " (VBR)":"";
 
 	get_id3($file, %$info);
 
@@ -346,7 +339,7 @@ sub getinfo_ogg($\%) {
 	my $infoline = <F>;
 	($info->{freq}, $info->{chan}, $info->{len}, $br) = split(/,/, $infoline);
 	$info->{freq} or return undef;
-	$info->{desc} = sprintf "Ogg-Vorbis (~%dkb/s)", ($br + 500) / 1000;
+	$info->{encoding} = sprintf "Ogg-Vorbis (%dkb/s)", ($br + 500) / 1000;
 
 	chop(($info->{artist}, $info->{title}, $info->{album},
 	 $info->{track}) = <F>);
@@ -363,7 +356,7 @@ sub getinfo_wav($\%) {
 		or return undef;
 
 	get_wav_params($file, %$info) or return undef;
-	$info->{desc} = "WAV";
+	$info->{encoding} = "WAV";
 	return 1;
 }
 
@@ -382,7 +375,7 @@ sub getinfo_pac($\%) {
 	close F;
 	$bytes or return undef;
 
-	$info->{desc} = sprintf "LPAC %d%%", (-s $file) / ($bytes / 100);
+	$info->{encoding} = sprintf "LPAC %d%%", (-s $file) / ($bytes / 100);
 	return 1;
 }
 
@@ -413,7 +406,7 @@ sub getinfo_flac($\%) {
 		$percent = sprintf " %d%%",
 			(-s $file) / ($num * $info->{chan} * $bt / 8 / 100);
 	}
-	$info->{desc} = "flac$percent";
+	$info->{encoding} = "flac$percent";
 	return 1;
 }
 
@@ -423,7 +416,7 @@ sub getinfo_raw($\%) {
 	$file =~ /\.raw$/i
 		or return undef;
 
-	$info->{desc} = "raw";
+	$info->{encoding} = "raw";
 	$info->{len} = (-s $file) / 176400;
 	$info->{freq} = 44100;
 	$info->{chan} = 2;
@@ -538,24 +531,26 @@ sub read_eric_files() {
 	}
 };
 
-sub extract_artist_title {
-	my ($f) = @_;
+sub extract_artist_title($\%) {
+	my ($file, $info) = @_;
 	my ($a, $t, $tr, $alb);
 	local *F;
 
+	$info->{info_origin} = "filename";
+
 	# cut path
-	$f =~ s|(.*)/||;
+	$file =~ s|(.*)/||;
 	my $p = $1;
 
 	# cut extension
-	$f =~ s/(.*)\..*/\1/;
+	$file =~ s/(.*)\..*/\1/;
 
-	if(-e "$p/.andre" || ($f !~ /-/ && $f =~ /\..*\./)) {
+	if(-e "$p/.andre" || ($file !~ /-/ && $file =~ /\..*\./)) {
 		# andre-notatie
-		$f =~ s/_ddd\.hq//;
-		$f =~ s/_/-/g;
-		$f =~ s/\./_/g;
-		warn "ANDRE-NOTATIE: $f\n";
+		$file =~ s/_ddd\.hq//;
+		$file =~ s/_/-/g;
+		$file =~ s/\./_/g;
+		$info->{info_origin} = "filename[andre]";
 	}
 
 	my $pp = $p;
@@ -565,25 +560,31 @@ sub extract_artist_title {
 		close F;
 		chomp $alb;
 	}
-	$f =~ s/\s*$//;
-	if($f =~ s/^\s*(\d\d)(\D)/\2/i ||		# nummer weg, 2 digits
-		$f =~ s/^\s*(\d{0,3})[^a-z0-9]+//i) 	# nummer weg, 1-3 digits met separator
+	$file =~ s/\s*$//;
+	if($file =~ s/^\s*(\d\d)(\D)/\2/i ||		# nummer weg, 2 digits
+		$file =~ s/^\s*(\d{0,3})[^a-z0-9]+//i) 	# nummer weg, 1-3 digits met separator
 	{
 		$tr = $1;
 	}
-	$f =~ s/^[^a-z]+//i;
-#warn $f;
+	$file =~ s/^[^a-z]+//i;
+#warn $file;
 
 	$pp =~ s|/+$||;
 	$pp =~ s|.*/||;
 
-	if($f =~ /[_\s]*-[_\s]*/) {
+	if($file =~ /[_\s]*-[_\s]*/) {
 		($a, $t) = ($`, $');
 		if($pp) { ($alb = $pp) =~ s/.*-[_\s]*//; }
 	} else {
 		if(!$alb && $pp =~ s/-[_\s]*(.*)//) { $alb = $1; } 
-		($a, $t) = ($pp, $f);
+		($a, $t) = ($pp, $file);
 	}
 	if(-e "$p/.reverse") { ($a, $t) = ($t, $a); }
-	return (cleanup_name($a), cleanup_name($t), $tr, cleanup_name($alb));
+
+	$info->{artist} = cleanup_name($a);
+	$info->{title} = cleanup_name($t);
+	$info->{album} = cleanup_name($alb);
+	$info->{track} = $tr;
+
+	return 1;
 }
