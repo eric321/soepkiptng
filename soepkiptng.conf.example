@@ -87,6 +87,7 @@ title=SoepkipTNG
 frameheights=40%,*
 framewidths=25%,25%,*
 marginheight=2
+marginwidth=5
 #body=bgcolor="#ffffcc" vlink="#000000" link="#000000"
 body=bgcolor="#e0f4ff" vlink="#000000" link="#000000"
 refreshtime=120

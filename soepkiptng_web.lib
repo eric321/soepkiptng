@@ -83,8 +83,8 @@ sub print_frame($) {
 <title>$conf{title}</title>
 </head>
 <frameset rows="$conf{frameheights}">
- <frame name=tframe src="$self?cmd=playlist" marginheight="$conf{marginheight}">
- <frame name=bframe src="$self?$bframe_args" marginheight="$conf{marginheight}">
+ <frame name=tframe src="$self?cmd=playlist" marginwidth="$conf{marginwidth}" marginheight="$conf{marginheight}">
+ <frame name=bframe src="$self?$bframe_args" marginwidth="$conf{marginwidth}" marginheight="$conf{marginheight}">
 </frameset>
 <body $conf{body}>
 </body>
