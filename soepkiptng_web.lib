@@ -137,6 +137,7 @@ EOF
    <option value=artist>Artist
    <option value=title>Title
    <option value=album>Album
+   <option value=lyrics>Lyrics
    <option value=filename>Filename
    <option value=encoding>Encoding
   </select>
@@ -1462,10 +1463,10 @@ EOF
 	elsif($cmd eq 'alllist') {
 		printhtmlhdr;
 		printhdr($conf{allstyle});
-		my $q = ("SELECT artist.name as artist,album.name as album,song.*," .
-			 "song.artist_id as arid, song.album_id as alid" .
-			 " FROM song,artist,album" .
-			 " WHERE present");
+		my $qs = "SELECT artist.name as artist,album.name as album,song.*," .
+			 "song.artist_id as arid, song.album_id as alid";
+		my $qf = "FROM song,artist,album";
+		my $qw = "WHERE present";
 		my @qargs;
 		my $cap;
 		my $limit = $conf{alllist_limit};
@@ -1473,42 +1474,49 @@ EOF
 		my $filename_restriction = "/%";
 		$s =~ s/\W//g;
 		if($args{any} =~ /\S/) {
-			add_search_args(\$q, \@qargs, \$s, $args{any},
+			add_search_args(\$qw, \@qargs, \$s, $args{any},
 				'artist.name', 'title', 'album.name');
 			$cap = "Search any: $args{any}";
 		}
 		if($args{artist} =~ /\S/) {
-			add_search_args(\$q, \@qargs, \$s, $args{artist}, 'artist.name');
+			add_search_args(\$qw, \@qargs, \$s, $args{artist}, 'artist.name');
 			$cap = "Search Artist: $args{artist}";
 		}
 		if($args{album} =~ /\S/) {
-			add_search_args(\$q, \@qargs, \$s, $args{album}, 'album.name');
+			add_search_args(\$qw, \@qargs, \$s, $args{album}, 'album.name');
 			$cap = "Search Album: $args{album}";
 		}
 		if($args{title} =~ /\S/) {
-			add_search_args(\$q, \@qargs, \$s, $args{title}, 'title');
+			add_search_args(\$qw, \@qargs, \$s, $args{title}, 'title');
 			$cap = "Search Title: $args{title}";
 		}
 		if($args{filename} =~ /\S/) {
-			add_search_args(\$q, \@qargs, \$s, lc($args{filename}), 'lcase(filename)');
+			add_search_args(\$qw, \@qargs, \$s, lc($args{filename}), 'lcase(filename)');
 			$cap = "Search Filename: $args{filename}";
+		}
+		if($args{lyrics} =~ /\S/) {
+			$s = "artist.name" unless $s;
+			$qf .= ",lyrics";
+			$qw .= " AND song.id=lyrics.id";
+			add_search_args(\$qw, \@qargs, \$s, lc($args{lyrics}), 'lcase(lyrics)');
+			$cap = "Search Title: $args{title}";
 		}
 
 		if($args{artist_id}) {
-			$q .= " AND song.artist_id=?";
+			$qw .= " AND song.artist_id=?";
 			push @qargs, $args{artist_id};
 			$s = "artist.name" unless $s;
 			$cap = sprintf($args{cap}, $args{artist_id});
 		}
 		if($args{album_id}) {
-			$q .= " AND song.album_id=?";
+			$qw .= " AND song.album_id=?";
 			push @qargs, $args{album_id};
 			$s = "album.name" unless $s;
 			$cap = sprintf($args{cap}, $args{album_id});
 		}
 		if($args{encoding}) {
 			$s = "artist.name" unless $s;
-			add_search_args(\$q, \@qargs, \$s, $args{encoding}, 'encoding');
+			add_search_args(\$qw, \@qargs, \$s, $args{encoding}, 'encoding');
 			$cap = "Search Encoding: $args{encoding}";
 		}
 		if($args{rand}) {
@@ -1524,9 +1532,10 @@ EOF
 		if($s) {
 			$s =~ s/^r_(.*)/\1 DESC/;
 			if($s eq "encoding") { $s = "substring_index(encoding, '(', 1)"; }
-			$q .= " AND song.artist_id=artist.id AND song.album_id=album.id ".
-			      " AND filename LIKE ? ".
-			      " ORDER BY $s,album.name,track,artist.name,title,time_added";
+			my $q = "$qs $qf $qw ".
+				"AND song.artist_id=artist.id AND song.album_id=album.id ".
+				"AND filename LIKE ? ".
+				"ORDER BY $s,album.name,track,artist.name,title,time_added";
 			push @qargs, $filename_restriction;
 			print_alllist_table($dbh, \%args, \%session, $cap, $q, $limit, @qargs);
 		} else {
