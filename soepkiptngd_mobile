@@ -95,7 +95,7 @@ sub playlist_addall_artist() {
 		"$conf{min_random_time} ORDER BY RAND()");
 	warn "adding songs: " . join(",", @{$songsref}) . ".\n";
 	return if @{$songsref} == 0;
-	add_song($dbh, '', @{$songsref});
+	add_song($dbh, "queue", '', @{$songsref});
 }
 
 sub playlist_addall_album($) {
@@ -113,12 +113,12 @@ sub playlist_addall_album($) {
 		"$conf{min_random_time} ORDER BY track");
 	warn "adding songs: " . join(",", @{$songsref}) . ".\n";
 	return if @{$songsref} == 0;
-	add_song($dbh, '', @{$songsref});
+	add_song($dbh, "queue", '', @{$songsref});
 }
 
 sub shuffle() {
 	open_db() or return;
-	shuffle_queue($dbh);
+	shuffle_table($dbh, "queue");
 	warn "shuffle\n";
 }
 
@@ -171,7 +171,7 @@ sub killsong() {
 			push @goners, $_->[0];
 		}
 		warn sprintf "deleting songs up to track %d: %s\n", $keypadvalue, join(",", @goners);
-		del_song($dbh, @goners);
+		del_song($dbh, "queue", @goners);
 		$dbh->do("UNLOCK TABLES");
 		digit_reset();
 	}
@@ -329,7 +329,7 @@ sub request() {
 
 	say("request song " . numtext($keypadvalue))
 		if $debug;
-	add_song($dbh, '', $keypadvalue);
+	add_song($dbh, "queue", '', $keypadvalue);
 	warn "adding song: $keypadvalue.\n";
 	digit_reset();
 }
@@ -348,7 +348,7 @@ sub request_album() {
 	say("request album " . numtext($alid) .
 	    " found " . numtext(scalar @{$songsref}))
 		if $debug;
-	add_song($dbh, '', @{$songsref});
+	add_song($dbh, "queue", '', @{$songsref});
 	warn "adding song: @{$songsref}.\n";
 }
 
@@ -366,7 +366,7 @@ sub request_artist() {
 	    " found " . numtext(scalar @{$songsref}))
 		if $debug;
 	return if @{$songsref} == 0;
-	add_song($dbh, '', @{$songsref});
+	add_song($dbh, "queue", '', @{$songsref});
 	warn "adding song: @{$songsref}.\n";
 }
 

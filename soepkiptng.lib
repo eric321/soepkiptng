@@ -202,17 +202,17 @@ sub enchtml($;$) {
 	$a;
 }
 
-sub del_song($@) {
-	my ($db, @ids) = @_;
+sub del_song($$@) {
+	my ($db, $tbl, @ids) = @_;
 	@ids or return;
-	$db->do("DELETE FROM queue WHERE song_id=" . join(" OR song_id=", @ids));
+	$db->do("DELETE FROM $tbl WHERE song_id=" . join(" OR song_id=", @ids));
 }
 
-sub add_song_nolock($$$@) {
-	my ($db, $order, $user, @ids) = @_;
+sub add_song_nolock($$$$@) {
+	my ($db, $tbl, $order, $user, @ids) = @_;
 
 	my $firstid = shift @ids or return;
-	my $q = "INSERT INTO queue (song_order, song_id, user) " .
+	my $q = "INSERT INTO $tbl (song_order, song_id, user) " .
 		"VALUES ($order, $firstid, \"$user\")";
 	foreach(@ids) {
 		$order++;
@@ -222,64 +222,64 @@ sub add_song_nolock($$$@) {
 	return 1;
 }
 
-sub get_queue_ids($$) {
-	my ($db, $rest) = @_;
+sub get_table_ids($$$) {
+	my ($db, $tbl, $rest) = @_;
 
-	my $res = $db->selectcol_arrayref("SELECT song_id FROM queue $rest");
+	my $res = $db->selectcol_arrayref("SELECT song_id FROM $tbl $rest");
 	return @$res;
 }
 
 
-sub add_song($$@) {
-	my ($db, $user, @ids) = @_;
+sub add_song($$$@) {
+	my ($db, $tbl, $user, @ids) = @_;
 
-	$db->do("LOCK TABLES queue WRITE");
-	del_song($db, @ids);
-	my ($order) = $db->selectrow_array("SELECT MAX(song_order) FROM queue");
+	$db->do("LOCK TABLES $tbl WRITE");
+	del_song($db, $tbl, @ids);
+	my ($order) = $db->selectrow_array("SELECT MAX(song_order) FROM $tbl");
 	$order = 0 if $order < 0;
-	my $retval = add_song_nolock($db, $order + 1, $user, @ids);
+	my $retval = add_song_nolock($db, $tbl, $order + 1, $user, @ids);
 	$db->do("UNLOCK TABLES");
 	return $retval;
 }
 
-sub reorder_queue($@) {
-	my ($db, $order, @ids) = @_;
+sub reorder_table($$$@) {
+	my ($db, $tbl, $order, @ids) = @_;
 
 	foreach(@ids) {
-		$db->do("UPDATE queue SET song_order=$order WHERE song_id=$_");
+		$db->do("UPDATE $tbl SET song_order=$order WHERE song_id=$_");
 		$order++;
 	}
 }
 
-sub move_song_to_top($@) {
-	my ($db, @ids) = @_;
+sub move_song_to_top($$@) {
+	my ($db, $tbl, @ids) = @_;
 
-	$db->do("LOCK TABLES queue WRITE");
-	reorder_queue($db, $#ids + 2, get_queue_ids($db, "ORDER BY song_order"));
-	reorder_queue($db, 1, @ids);
+	$db->do("LOCK TABLES $tbl WRITE");
+	reorder_table($db, $tbl, $#ids + 2, get_table_ids($db, $tbl, "ORDER BY song_order"));
+	reorder_table($db, $tbl, 1, @ids);
 	$db->do("UNLOCK TABLES");
 }
 
-sub move_song_to_bottom($@) {
-	my ($db, @ids) = @_;
+sub move_song_to_bottom($$@) {
+	my ($db, $tbl, @ids) = @_;
 	my %ids;
 
 	foreach(@ids) { $ids{$_} = 1; };
-	$db->do("LOCK TABLES queue WRITE");
-	my @q = get_queue_ids($db, "ORDER BY song_order");
+	$db->do("LOCK TABLES $tbl WRITE");
+	my @q = get_table_ids($db, $tbl, "ORDER BY song_order");
 	my (@q1, @q2);
 	foreach(@q) {
 		if($ids{$_}) { push @q2, $_; } else { push @q1, $_; }
 	}
-	reorder_queue($db, 1, @q1, @q2);
+	reorder_table($db, $tbl, 1, @q1, @q2);
 	$db->do("UNLOCK TABLES");
 }
 
-sub shuffle_queue($) {
-	my ($db) = @_;
+sub shuffle_table($$) {
+	my ($db, $tbl) = @_;
 
-	$db->do("LOCK TABLES queue WRITE");
-	reorder_queue($db, 1, get_queue_ids($db, "ORDER BY rand()"));
+	$db->do("LOCK TABLES $tbl WRITE");
+	reorder_table($db, $tbl, 1, get_table_ids($db, $tbl, "ORDER BY rand()"));
 	$db->do("UNLOCK TABLES");
 }
 
@@ -496,11 +496,11 @@ sub cleanup_name {
 	$s;
 }
 
-sub add_song_next($$;$) {
-	my ($dbh, $currentsong, $user) = @_;
+sub add_song_next($$$;$) {
+	my ($dbh, $table, $currentsong, $user) = @_;
 
-	my $ids = $dbh->selectcol_arrayref("SELECT song_id FROM queue,song ".
-		"WHERE queue.song_id=song.id AND song.present");
+	my $ids = $dbh->selectcol_arrayref("SELECT song_id FROM $table,song ".
+		"WHERE $table.song_id=song.id AND song.present");
 	my %idsq;
 	foreach(@$ids) { $idsq{$_} = 1; }
 
@@ -513,7 +513,7 @@ sub add_song_next($$;$) {
 	$sth->execute;
 	while($_ = $sth->fetchrow_hashref) {
 		if(!$idsq{$_->{id}}) {
-			add_song($dbh, $user, $_->{id})
+			add_song($dbh, $table, $user, $_->{id})
 				or warn "can't add song.\n";
 			return $_;
 		}

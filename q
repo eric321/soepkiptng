@@ -35,7 +35,7 @@ my $progdir = abs_path($1);
 
 require "$progdir/soepkiptng.lib";
 
-getopts('avnc:g');
+getopts('avnc:gt:');
 
 read_configfile(\%conf, $opt_c);
 
@@ -114,7 +114,8 @@ if($opt_n) {
 
 	my $user = (getpwuid $<)[6] || getpwuid $< || "uid $<";
 	$user =~ s/,.*//;
-	my $song = add_song_next($dbh, $nowplaying, $user);
+	my $song = add_song_next($dbh, "queue", $nowplaying, $user)
+		or die "No next song.\n";
 
 	print "Adding next song ($song->{track}, $song->{title}).\n";
 	exit;
@@ -131,29 +132,38 @@ if($0 =~ /qr$/ || @ARGV) {
 	foreach(@ARGV) {
 		$q = '';
 		if(s/^-//) { $q = " NOT"; }
-		s/^\^// or $_ = "%$_";
-		s/\$$// or $_ .= "%";
+		my $a = $_;
+		$a =~ s/^\w+=//;
+		$a =~ s/^\^// or $a = "%$a";
+		$a =~ s/\$$// or $a .= "%";
 
-		if($0 =~ /qa$/) {
-			$q .= " artist.name LIKE ?";
-			push @a, $_;
+		if($0 =~ /qa$/ || s/^ar=//) {
+			$q .= " (artist.name LIKE ?)";
+			push @a, $a;
 		}
-		elsif($0 =~ /ql$/) {
-			$q .= " album.name LIKE ?";
-			push @a, $_;
+		if($0 =~ /qa$/ || s/^f=//) {
+			$q .= " (song.filename LIKE ?)";
+			push @a, $a;
 		}
-		elsif($0 =~ /qt$/) {
-			$q .= " song.title LIKE ?";
-			push @a, $_;
+		elsif($0 =~ /ql$/ || s/^al=//) {
+			$q .= " (album.name LIKE ?)";
+			push @a, $a;
+		}
+		elsif($0 =~ /qt$/ || s/^t=//) {
+			$q .= " (song.title LIKE ?)";
+			push @a, $a;
 		}
 		else {
 			$q .= " (song.title LIKE ? OR artist.name LIKE ? OR album.name LIKE ?)";
-			push @a, $_, $_, $_;
+			push @a, $a, $a, $a;
 		}
 		push @q, $q;
 	}
 	if($opt_g) {
 		push @q, "track > 0";
+	}
+	if($opt_t) {
+		push @q, "track <= $opt_t";
 	}
 	if($0 =~ /qr$/) {
 		push @q, " last_played=0 AND (unix_timestamp(now()) - unix_timestamp(time_added)) < 7*86400";
@@ -161,7 +171,7 @@ if($0 =~ /qr$/ || @ARGV) {
 	$q = "SELECT title,artist.name as artist,album.name as album,song.id as id,track,filename,length,encoding" .
 	     " FROM song,artist,album" .
 	     " WHERE song.artist_id=artist.id AND song.album_id=album.id" .
-	     " AND present AND " . join(" AND ", @q) .
+	     " AND present AND filename LIKE '/%' AND " . join(" AND ", @q) .
 	     " ORDER BY artist.name,album.name,song.track,song.title";
 #warn $q;
 	$sth = $dbh->prepare($q);
@@ -187,24 +197,34 @@ if($0 =~ /qr$/ || @ARGV) {
 				$g_output .= ">$dirname\n";
 			}
 			$_->{title} =~ s/^(\W+)/<$1>/;
+			$g_artist = $_->{artist} unless $g_artist;
+			$g_album = $_->{album} unless $g_album;
 			$g_output .=  "-$_->{track}\n" if $_->{track};
 			$g_output .=  "/$f\n";
+			$g_output .=  ":$_->{artist}\n" unless $_->{artist} eq $g_artist;
+			$g_output .=  "$_->{title}\n";
 			next;
 		}
 		print STDERR $head;
 		$head = '';
-		printf STDERR "%-3s %-${w_a}.${w_a}s %-${w_t}.${w_t}s %-${w_al}.${w_al}s\n",
+#		$sep = ($i % 5) == 4? "_":" ";
+#		printf STDERR "%-3s$sep%-${w_a}.${w_a}s$sep%-${w_t}.${w_t}s$sep%-${w_al}.${w_al}s\n",
+#			"$i.", $_->{artist}, $_->{title}, albumtrack($_->{album}, $_->{track});
+		my $s = sprintf "%-3s %-${w_a}.${w_a}s %-${w_t}.${w_t}s %-${w_al}.${w_al}s\n",
 			"$i.", $_->{artist}, $_->{title}, albumtrack($_->{album}, $_->{track});
+		$s =~ s/ /_/g if $i % 5 == 0;
+		print STDERR $s;
 		$opt_v and printf STDERR "%d:%02d %s %s\n", $_->{length} / 60, $_->{length} % 60,
 			$_->{encoding}, $_->{filename};
 		$id[$i] = $_->{id};
 		$i++;
 	}
 	if($opt_g) {
+		print "$g_artist-$g_album\n";
 		print $g_output;
 		exit 0;
 	}
-	exit if $i == 1;
+	exit 1 if $i == 1;
 	if($opt_a) {
 		$i == 2 or die "More than 1 hit\n"; 
 		$_ = 1;
@@ -218,11 +238,11 @@ if($0 =~ /qr$/ || @ARGV) {
 	$user =~ s/,.*//;
 	if(/^a/i) {
 		for($n = 1; $n < $i; $n++) {
-			add_song($dbh, $user, $id[$n]) or warn "can't add song.\n";
+			add_song($dbh, "queue", $user, $id[$n]) or warn "can't add song.\n";
 		}
 	} else {
 		foreach(splitrange($_, $i)) {
-			add_song($dbh, $user, $id[$_]) or warn "can't add song.\n"
+			add_song($dbh, "queue", $user, $id[$_]) or warn "can't add song.\n"
 				if $id[$_];
 		}
 	}
@@ -258,7 +278,7 @@ print STDERR "\nDelete (a=all): ";
 $_ = <STDIN>;
 exit unless /\S/;
 if(/^S/) {
-	shuffle_queue($dbh);
+	shuffle_table($dbh, "queue");
 } elsif(/^a/i) {
 	$sth = $dbh->prepare("DELETE FROM queue");
 	$sth->execute();
@@ -266,7 +286,7 @@ if(/^S/) {
 } else {
 	foreach(splitrange($_, $i)) {
 		if($_ == 1) { killit($nowid); }
-		else { del_song($dbh, $delid[$_]) if $delid[$_]; }
+		else { del_song($dbh, "queue", $delid[$_]) if $delid[$_]; }
 	}
 }
 
