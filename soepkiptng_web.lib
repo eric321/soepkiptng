@@ -414,6 +414,9 @@ sub print_albums_row($$$$$) {
 		$al_len_tot += $al_len{$_->{alid}} = length($_->{album});
 		$al_rp{$_->{alid}} = $_->{rp};
 	}
+	if(@alids == 0) {
+		return undef;
+	}
 	if($conf{albumlist_length_threshold} == 0 ||
 	   $al_len_tot < $conf{albumlist_length_threshold} ||
 	   $argsref->{expanded_albumlist}) {
@@ -437,6 +440,7 @@ sub print_albums_row($$$$$) {
 &nbsp; <a id=a href="%scmd=%s&expanded_albumlist=1">[%d more...].</a>
 EOF
 	}
+	return 1;
 }
 
 sub print_alllist_table($$$$@) {
@@ -462,10 +466,10 @@ EOF
 	}
 	if(!@ids) {
 		if($argsref->{artist_id}) {
-			print_albums_row($dbh, $baseurl, $argsref, $cap, $argsref->{artist_id});
-		} else {
-			print "No search results.\n";
+			print_albums_row($dbh, $baseurl, $argsref, $cap, $argsref->{artist_id})
+				and return;
 		}
+		print "No search results.\n";
 		return;
 	}
 	my $ids = ids_encode(@ids);
