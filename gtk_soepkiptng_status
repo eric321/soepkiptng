@@ -53,19 +53,6 @@ $SIG{'HUP'} = sub {
 	die;
 };
 
-sub is_paused($) {
-	my ($pid) = @_;
-
-	local *ST;
-	open ST,"/proc/$pid/stat" or next;
-	$_ = <ST>;
-	close ST;
-	if(/^\d+\s+\S+\s+(\w)/) {
-		return 1 if $1 eq "T";
-	}
-	return 0;
-};
-
 my $pause_xpm = (
 "16 16 4 1",
 "       c None s None",
@@ -116,34 +103,15 @@ my $label2 = new Gtk::Label("");
 $button_pause = Gtk::Widget->new("GtkButton",
  -label   => "Pause",
  -border_width => 1,
- -clicked => sub {
-	if($playerpid) {
-		if(is_paused($playerpid)) {
-			kill "CONT", $playerpid;
-		} else {
-			kill "STOP", $playerpid;
-		}
-	}
-  },
-  -visible=>1,
-#  -height=>15,
+ -clicked => sub { pause(); },
+ -visible=>1,
 );
-#$button_resume = Gtk::Widget->new("GtkButton",
-# -label   => "Resume",
-# -border_width => 1,
-# -clicked => sub {
-#	$playerpid and kill "CONT", $playerpid;
-#  },
-#  -visible=>1,
-#  -height=>15,
-#);
 
 $button_kill = Gtk::Widget->new("GtkButton",
  -label   => "Kill",
  -border_width => 1,
  -clicked => \&kill_song,
  -visible=>1,
-#  -height=>15,
 );
 
 
@@ -178,11 +146,11 @@ Gtk->main;
 
 
 sub update_song() {
-	my $newmtime = (stat $statusfile)[9];
+	my $newmtime = (stat $conf{statusfile})[9];
 
 	if($newmtime != $mtime) {
 		$mtime = $newmtime;
-		if(open F, $statusfile) {
+		if(open F, $conf{statusfile}) {
 			my ($nowplaying, $filename);
 			chop($nowplaying = <F>);
 			chop($filename = <F>);
@@ -210,7 +178,7 @@ sub update_song() {
 					$sth->finish;
 					$dbh->disconnect;
 				}
-				$label->set_text(sprintf("%s\n%s\n[%02d] %s\r",
+				$label->set_text(sprintf("%s\n%s\n[%02d] %s",
 					$now_playing->{artist},
 					$now_playing->{title},
 					$now_playing->{track},
