@@ -188,18 +188,24 @@ sub get_song_random() {
 	my $where = "present AND filename LIKE '/%' AND " .
 	            "unix_timestamp(now()) - unix_timestamp(last_played) > ?";
 
+	my $ordermult = $conf{ignore_random_pref}? "" : "*pow(random_pref/?,1/?)";
 	my $sth = $dbh->prepare(
 		"SELECT artist.name as artist, album.name as album,song.* " .
 		"FROM song,artist,album " .
 		"WHERE $where AND artist.id=song.artist_id AND album.id=song.album_id " .
-		"ORDER BY rand()*pow(random_pref/?,1/?) DESC LIMIT 1");
+		"ORDER BY rand() $ordermult DESC LIMIT 1");
 
 	for(; $min > 0; $min >>= 1, warn "no random song found, retrying with min_random_time=$min\n") {
-		my ($sum_pref, $count) = $dbh->selectrow_array(
-			"SELECT sum(random_pref),count(*) FROM song WHERE $where", undef, $min)
-			or next;
-		$sth->execute($min, $sum_pref, $count)
-			or next;
+		if($conf{ignore_random_pref}) {
+			$sth->execute($min)
+				or next;
+		} else {
+			my ($sum_pref, $count) = $dbh->selectrow_array(
+				"SELECT sum(random_pref),count(*) FROM song WHERE $where", undef, $min)
+				or next;
+			$sth->execute($min, $sum_pref, $count)
+				or next;
+		}
 		$s = $sth->fetchrow_hashref
 			and last;
 	}
