@@ -1,6 +1,6 @@
 
 DSTDIR:=$(shell pwd)/../bin
-PROGRAMS=cdrplay lpac2raw ogg2raw resample
+PROGRAMS=soepkiptng_play lpac2raw ogg2raw resample
 
 default:
 	for i in $(PROGRAMS); do make -C $$i; done
