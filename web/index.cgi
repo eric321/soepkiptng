@@ -478,14 +478,14 @@ EOF
 }
 
 sub print_alllist_table($$$$@) {
-	my ($dbh, $argsref, $session, $caption, $query, @val) = @_;
+	my ($dbh, $argsref, $session, $caption, $query, $limit, @val) = @_;
 	my ($output, $addall);
 
 	print <<EOF;
 <center id=hdr>$caption</center>
 EOF
 
-	my $sth = $dbh->prepare($query);
+	my $sth = $dbh->prepare($query . ($limit? " LIMIT $limit":""));
 	my $rv = $sth->execute(@val)
 		or die "can't do sql command: " . $dbh->errstr;
 	my @ids;
@@ -556,6 +556,8 @@ EOF
 	}
 
 	my $res = $#ids + 1;
+	my $limitstr = '';
+	$limitstr = " <b>(limit of $limit reached)</b>" if $limit && $res == $limit;
 	print <<EOF;
  <tr>
   <th $th_left>&nbsp;$addall&nbsp;</th>
@@ -569,7 +571,7 @@ EOF
  </tr>
  <tr><td colspan=7></td></tr>
 $output
-<tr><td colspan=8>$res search results.</td></tr>
+<tr><td colspan=8>$res search results$limitstr.</td></tr>
 </table>
 EOF
 }
@@ -870,18 +872,18 @@ sub printredirexit($$$) {
 	exit;
 }
 
-sub add_search_args($$$@) {
-	my ($list, $sort, $val, @fields) = @_;
+sub add_search_args($$$$@) {
+	my ($query, $list, $sort, $val, @fields) = @_;
 	my $v;
 
 	# split on space and latin1 'no break space'
 	foreach $v (split /[\s\xa0]+/, $val) {
 		my $m = "LIKE";
-		$list->[0] .= " AND ";
-		if($v =~ s/^!//) { $list->[0] .= "NOT "; }
+		$$query .= " AND ";
+		if($v =~ s/^!//) { $$query .= "NOT "; }
 		if($v =~ /^\^/) { $m = "REGEXP"; }
 		else { $v = "%$v%"; };
-		$list->[0] .= "(" . join(" OR ", map { "$_ $m ?" } @fields) . ")";
+		$$query .= "(" . join(" OR ", map { "$_ $m ?" } @fields) . ")";
 		foreach(@fields) { push @$list, $v; }
 	}
 	$$sort = $fields[0] unless $$sort;
@@ -1150,54 +1152,55 @@ elsif($cmd eq 'artistlist') {
 elsif($cmd eq 'alllist') {
 	printhtmlhdr;
 	printhdr($allstyle);
-	my @q = ("SELECT artist.name as artist,album.name as album,song.*," .
+	my $q = ("SELECT artist.name as artist,album.name as album,song.*," .
 		 "song.artist_id as arid, song.album_id as alid" .
 		 " FROM song,artist,album" .
 		 " WHERE present");
+	my @qargs;
 	my $cap;
 	my $s = $args{sort};
 	$s =~ s/\W//g;
 	if($args{any} =~ /\S/) {
-		add_search_args(\@q, \$s, $args{any},
+		add_search_args(\$q, \@qargs, \$s, $args{any},
 			'artist.name', 'title', 'album.name');
 		$cap = "Search any: $args{any}";
 	}
 	if($args{artist} =~ /\S/) {
-		add_search_args(\@q, \$s, $args{artist}, 'artist.name');
+		add_search_args(\$q, \@qargs, \$s, $args{artist}, 'artist.name');
 		$cap = "Search Artist: $args{artist}";
 	}
 	if($args{album} =~ /\S/) {
-		add_search_args(\@q, \$s, $args{album}, 'album.name');
+		add_search_args(\$q, \@qargs, \$s, $args{album}, 'album.name');
 		$cap = "Search Album: $args{album}";
 	}
 	if($args{title} =~ /\S/) {
-		add_search_args(\@q, \$s, $args{title}, 'title');
+		add_search_args(\$q, \@qargs, \$s, $args{title}, 'title');
 		$cap = "Search Title: $args{title}";
 	}
 	if($args{filename} =~ /\S/) {
-		add_search_args(\@q, \$s, $args{filename}, 'filename');
+		add_search_args(\$q, \@qargs, \$s, $args{filename}, 'filename');
 		$cap = "Search Filename: $args{filename}";
 	}
 
 	if($args{artist_id}) {
-		$q[0] .= " AND song.artist_id=?";
-		push @q, $args{artist_id};
+		$q .= " AND song.artist_id=?";
+		push @qargs, $args{artist_id};
 		$s = "artist.name" unless $s;
 		$cap = sprintf($args{cap}, $args{artist_id});
 	}
 	if($args{album_id}) {
-		$q[0] .= " AND song.album_id=?";
-		push @q, $args{album_id};
+		$q .= " AND song.album_id=?";
+		push @qargs, $args{album_id};
 		$s = "album.name" unless $s;
 		$cap = sprintf($args{cap}, $args{album_id});
 	}
 
 	if($s) {
 		$s =~ s/^r_(.*)/\1 DESC/;
-		$q[0] .= " AND song.artist_id=artist.id AND song.album_id=album.id ".
-			" AND filename LIKE '/%' ".
-			" ORDER BY $s,album.name,track,artist.name,title";
-		print_alllist_table($dbh, \%args, \%session, $cap, @q);
+		$q .= " AND song.artist_id=artist.id AND song.album_id=album.id ".
+		      " AND filename LIKE '/%' ".
+		      " ORDER BY $s,album.name,track,artist.name,title";
+		print_alllist_table($dbh, \%args, \%session, $cap, $q, $alllist_limit, @qargs);
 	} else {
 		print "Error: No search terms specified.\n";
 	}
@@ -1250,7 +1253,7 @@ elsif($cmd eq 'recent') {
 		" FROM song,artist,album WHERE present AND filename LIKE '/%'" .
 		" AND song.artist_id=artist.id AND song.album_id=album.id" .
 		" AND unix_timestamp(now()) - unix_timestamp(time_added) < $maxage" .
-		" ORDER BY $s,album.name,track,artist.name,title LIMIT 500");
+		" ORDER BY $s,album.name,track,artist.name,title", 500);
 	printftr;
 }
 elsif($cmd eq 'maint') {
