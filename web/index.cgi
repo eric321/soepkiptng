@@ -128,15 +128,18 @@ sub print_az_table($$) {
 			$_->{id} == $$session{'editlist'}? " selected":"", $_->{name});
 	}
 
-	printf <<EOF, $self, $self, $artistlistcmd, encurl("^[^a-zA-Z]");
+	printf <<EOF, $self;
 <table cellpadding=0 cellspacing=0><tr><td id=az nowrap>
 <a id=a href="%s?cmd=playlist">Refresh</a>&nbsp;&nbsp;
-<a id=a href="%s?cmd=%s&artist=%s" target=bframe>0-9</a>&nbsp;
 EOF
 	foreach('A'..'Z') {
 		printf qq|<a id=a href="%s?cmd=%s&artist=%s" target=bframe>%s</a>&nbsp;|,
 			$self, $artistlistcmd, encurl("^$_"), $_;
 	}
+	printf <<EOF, $self, $artistlistcmd, encurl("^([^a-zA-Z]|\$)");
+<a id=a href="%s?cmd=%s&artist=%s" target=bframe>Other</a>&nbsp;
+EOF
+
 	my $sz = $searchformsize || 10;
 	print <<EOF;
 </td>
@@ -683,6 +686,7 @@ sub printhdr($) {
 	print <<EOF;
 <html>
 <head>
+<title>$title</title>
 <style type="text/css">
 <!--
 $_[0]
