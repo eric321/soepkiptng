@@ -134,7 +134,7 @@ sub do_mp3($$) {
 	my ($dbh, $f) = @_;
 
 	if($f !~ /\.mp[123]$/i) {
-		warn "$f: not an MP3 file, skipping.\n";
+		#warn "$f: not an MP3 file, skipping.\n";
 		return undef;
 	}
 	$f =~ s|^\./+||;
@@ -160,7 +160,7 @@ sub do_mp3($$) {
 		     " AND present AND filename LIKE ?";
 		$sth = $dbh->prepare($q);
 		for(;;) {
-			warn "===== %/$shortf\n";
+#			warn "===== %/$shortf\n";
 			$sth->execute("%/$shortf")
 				or die "can't do sql command: " . $dbh->errstr;
 
@@ -264,6 +264,116 @@ sub do_ogg($$) {
 	return 1;
 }
 
+sub do_flac($$) {
+	my ($dbh, $f) = @_;
+
+	if($f !~ /\.flac$/i) {
+		warn "$f: not a Flac file, skipping.\n";
+		return undef;
+	}
+	$f =~ s|^\./+||;
+
+	my $fullf = $f;
+	$fullf =~ m|/| or $fullf = "./$f";
+	$fullf =~ s|(.*)/|abs_path($1) . "/"|e;
+
+	$q = "SELECT song.id,title,artist.name,album.name,track,length" .
+	     " FROM song,artist,album" .
+	     " WHERE song.artist_id=artist.id AND song.album_id=album.id" .
+	     " AND present AND filename=?";
+	$sth = $dbh->prepare($q);
+	$sth->execute($fullf)
+		or die "can't do sql command: " . $dbh->errstr;
+
+	($id, $ti, $ar, $al, $tr, $len) = $sth->fetchrow_array or do {
+		my $shortf = $fullf;
+		$shortf =~ s|^/+||;
+		$q = "SELECT song.id,title,artist.name,album.name,track,length" .
+		     " FROM song,artist,album" .
+		     " WHERE song.artist_id=artist.id AND song.album_id=album.id" .
+		     " AND present AND filename LIKE ?";
+		$sth = $dbh->prepare($q);
+		for(;;) {
+#			warn "===== %/$shortf\n";
+			$sth->execute("%/$shortf")
+				or die "can't do sql command: " . $dbh->errstr;
+
+			($id, $ti, $ar, $al, $tr, $len) = $sth->fetchrow_array
+				and last;
+
+			$shortf =~ s|[^/]+/+|| or do {
+				warn "$f: not found in dbase\n" unless $opt_q;
+				return 1;
+			}
+		}
+		warn "$f: partial filename match on $shortf\n" unless $opt_q;
+	};
+	$sth->finish;
+
+	next unless -s $f;
+
+	# read current tags
+	if(open(F, "-|") == 0) {
+		exec "metaflac", "--export-vc-to=-", $f;
+		die "metaflac";
+	}
+	while(<F>) {
+		s/\s+$//;
+		if(/^artist=(.*)/) { $p_ar = $1; next; }
+		if(/^title=(.*)/) { $p_ti = $1; next; }
+		if(/^album=(.*)/) { $p_al = $1; next; }
+		if(/^tracknumber=(.*)/) { $p_tr = 0 + $1; next; }
+	}
+	close F;
+
+	# see what needs to be changed
+	my @changeargs = ();
+	if($p_ar ne $ar) { push @changeargs, "--remove-vc-field=artist", "--set-vc-field=artist=$ar"; }
+	if($p_ti ne $ti) { push @changeargs, "--remove-vc-field=title", "--set-vc-field=title=$ti"; }
+	if($p_al ne $al) { push @changeargs, "--remove-vc-field=album", "--set-vc-field=album=$al"; }
+	if($p_tr != $tr) { push @changeargs, "--remove-vc-field=tracknumber", "--set-vc-field=tracknumber=$tr"; }
+
+	# change it
+	if(@changeargs) {
+		system "metaflac", @changeargs, $f;
+	}
+
+	if($opt_r) {
+		my $ext = "";
+		$f =~ /.*\.(.*?)$/ and $ext = lc($1);
+		my $newname = "";
+		$newname .= sprintf "%02d-", $tr if $tr;
+		$newname .= simplify($ar) . "-" if $ar;
+		$newname .= simplify($ti);
+		if($opt_l && length("$newname.$ext") > $opt_l) {
+			$newname = substr($newname, 0, $opt_l - length(".$ext") - 1);
+			$newname =~ s/_?$/_/;
+		}
+		$newname .= ".$ext";
+		$fullf =~ m|^(.*)/|;
+		$newname = "$1/$newname";
+
+		if($newname ne $fullf) {
+			warn "renaming $fullf -> $newname\n";
+			if(-e $newname) {
+				warn "$f: $newname exists, skipping\n";
+			} elsif(!$opt_t) {
+				if(rename $fullf, $newname) {
+					$dbh->do("DELETE FROM song WHERE filename=?",
+						undef, $newname)
+						or die "can't do sql command: " . $dbh->errstr;
+					$dbh->do("UPDATE song SET filename=? WHERE id=?",
+						undef, $newname, $id)
+						or die "can't do sql command: " . $dbh->errstr;
+				} else {
+					warn "rename $fullf -> $newname: $!\n";
+				}
+			}
+		}
+	}
+	return 1;
+}
+
 
 getopts('rhqtl:c:');
 
@@ -306,6 +416,7 @@ foreach $f (@ARGV) {
 		do_dir($dbh, $f);
 	} elsif(-s _) {
 		do_mp3($dbh, $f) ||
+		do_flac($dbh, $f) ||
 		do_ogg($dbh, $f) or warn "Filetype of $f unknown.\n";
 	}
 }
