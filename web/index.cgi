@@ -261,7 +261,7 @@ sub print_albumlist_table($@) {
 
 	print <<EOF;
 <table border=0 cellspacing=0>
-<caption>Artist: $val[0], Album: $val[1]</caption>
+<caption>Artist: $qart, Album: $qalb</caption>
  <tr>
   <th width=99%>Album</th>
   <th width=1%>#&nbsp;Songs</th>
