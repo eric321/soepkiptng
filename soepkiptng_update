@@ -424,11 +424,11 @@ sub extract_artist_title {
 		$alb = $tag->{ALBUM};
 
 		$a =~ s/_/ /g;
-		$a =~ s/([^'\w\xc0-\xff]|^)(\w)(.*)\b/\1\U\2\L\3/g;
+		$a =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g;
 		$t =~ s/_/ /g;
-		$t =~ s/([^'\w\xc0-\xff]|^)(\w)(.*)\b/\1\U\2\L\3/g;
+		$t =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g;
 		$alb =~ s/_/ /g;
-		$alb =~ s/([^'\w\xc0-\xff]|^)(\w)(.*)\b/\1\U\2\L\3/g;
+		$alb =~ s/([^'\w\xc0-\xff]|^)(\w)(\S*)\b/\1\U\2\L\3/g;
 
 		if($a && $t) {
 			print STDERR "id3";
