@@ -1,0 +1,20 @@
+#!/usr/bin/perl
+
+use MPEG::MP3Info;
+use Data::Dumper;
+
+$_ = get_mp3info($ARGV[0]);
+#warn Dumper($_);
+
+open STDERR, ">/dev/null";
+
+if(!$_->{STEREO}) {
+	# convert to stereo
+	open STDOUT, "|resample -s 44100 44100";
+}
+
+if(abs(${FREQUENCY} - 44.1) > 0.1) {
+	exec 'mpg123', '-s', '-r44100', $ARGV[0];
+} else {
+	exec 'splay', '-d', '-', $ARGV[0];
+}
