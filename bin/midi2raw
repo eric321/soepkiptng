@@ -1,0 +1,3 @@
+#!/bin/sh
+
+timidity -s 44100 -o - -Or1sl "$1"
