@@ -64,9 +64,9 @@ for(;; sleep 1) {
 
 		my $query =  "SELECT title,artist,album,id,track" .
 			" FROM songs" .
-			" WHERE id = $nowplaying";
+			" WHERE id = ?";
 		my $sth = $dbh->prepare($query);
-		my $rv = $sth->execute;
+		my $rv = $sth->execute($nowplaying);
 		if($now_playing = $sth->fetchrow_hashref) {
 			printf "\n%s\n%s\n  [%02d] %s\r",
 				$now_playing->{artist},
