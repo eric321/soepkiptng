@@ -112,24 +112,27 @@ Installation:
 
 TODO:
 -----
+* lirc support (IR remote)
+* play directly from urls
+* playlists/genres
+* multiple soepkiptng daemons
+* remote playing using esd (Enlightenment Sound Daemon) or similar program
+* message input that will be played using a text-to-speech program
+* user-level access control (limit access to database editing / song requests)
 * improve docs
 * put support programs (the ones marked with (*)) in soepkiptng tree
 * make music format more modular; maybe support xmms plugins
 * silence before random songs
 * fade-out/fade-in in pause/resume
 * release of /dev/dsp during pause
-* get correct info for VBR mp3's                   ->partially done
-* ogg-vorbis support                               ->done
-* reading of samplefreq/channels of lpac files.    ->done
-* resampling & mono->stereo conversion	           ->done (quick hack)
+* cleanup Xing VBR info detection (it's a quick hack now)
+* scan VBR mp3s without Xing VBR header for length
+* soepkiptng_write_id3v2: put length in id3 info for VBR mp3s
+* ogg-vorbis embedded songinfo support (reading/writing)
+* cleanup resampling & mono->stereo conversion
 * smooth transition between 2 songs (interpolation)
-* id3/id3v2 support				   ->done (id3/id3v2)
 * id3/id3v2 support for flac
-* putting dbase info back in to mp3s using id3v2
 * synchronize update of statusfile with cdrplay
-* if currently playing song is missing from db, show "?" instead of nothing ->done
-* fix kill problem when player spawns children	   ->done
-* don't randomly select songs that were played less than min_random_time ago ->done
 
 $Id$
 
