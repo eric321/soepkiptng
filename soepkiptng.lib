@@ -289,6 +289,7 @@ sub cleanup_name {
 	$s =~ s/([a-zA-Z])([A-Z][a-z])/\1 \2/g;
 	$s = lc($s);
 	$s =~ s/_/ /g;
+	if($s !~ / /) { $s =~ s/\./ /g; }
 	$s =~ s/^\s+|\s+$//g;
 	$s =~ s/([^'\w\xc0-\xff]|^)(\w)/\1\U\2/g;
 	$s =~ s/\b(o'\w)/\U\1/ig;
@@ -298,7 +299,7 @@ sub cleanup_name {
 	$s =~ s/ ll\b/'ll/ig;
 	$s =~ s/\b(i+)\b/\U\1/ig;
 	$s =~ s/([eiuy]) ([rv]e)\b/\1'\L\2/ig;
-	$s =~ s/-/ - /g;
+	$s =~ s/\s*-\s*/ - /g;
 	$s;
 }
 
