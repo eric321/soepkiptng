@@ -552,7 +552,10 @@ for(;;) {
 				$song = $randsong;
 				$randsong = undef;
 			} else {
-				$song = select_song_random() or next;
+				$song = select_song_random() or do {
+					$num_errors++;
+					next;
+				}
 			}
 		};
 
