@@ -138,7 +138,7 @@ sub get_song_random_recent() {
 	if(rand() < $conf{recent_prob}) {
 		my $maxage = $conf{recent_age} * 86400;
 		($song_id, $filename) = $dbh->selectrow_array(
-			"SELECT id,filename FROM song WHERE present AND " .
+			"SELECT id,filename FROM song WHERE present AND filename LIKE \"/%\" AND " .
 			"unix_timestamp(now()) - unix_timestamp(time_added) < $maxage AND " .
 			"unix_timestamp(now()) - unix_timestamp(last_played) > $conf{min_random_time} " .
 			"ORDER BY rand() LIMIT 1"
@@ -155,7 +155,7 @@ sub get_song_random() {
 	my $min = $conf{min_random_time};
 	for(;;) {
 		($song_id, $filename) = $dbh->selectrow_array(
-			"SELECT id,filename FROM song WHERE present AND " .
+			"SELECT id,filename FROM song WHERE present AND filename LIKE \"/%\" AND " .
 			"unix_timestamp(now()) - unix_timestamp(last_played) > $min " .
 			"ORDER BY rand() LIMIT 1"
 		);
@@ -194,7 +194,9 @@ sub start_play($) {
 		$filename =~ /([^.]*)$/;
 		my $ext = lc($1);
 
-		if($ext eq "mp2" || $ext eq "mp3") {
+		if($filename =~ /^http:/) {
+			exec "mpg123", "-s", "-q", "-r44100", "--stereo", $filename;
+		} elsif($ext eq "mp2" || $ext eq "mp3") {
 			exec "mp3toraw", $filename;
 		} elsif($ext eq "ogg") {
 			exec "ogg2raw", $filename;

@@ -83,7 +83,7 @@ if($ARGV[0]) {
 	$sth = $dbh->prepare("SELECT id,filename,unix_timestamp(last_played),unix_timestamp(time_added),present FROM song WHERE filename LIKE ?");
 	$sth->execute("$paths[0]/%");
 } else {
-	$sth = $dbh->prepare("SELECT id,filename,unix_timestamp(last_played),unix_timestamp(time_added),present FROM song");
+	$sth = $dbh->prepare("SELECT id,filename,unix_timestamp(last_played),unix_timestamp(time_added),present FROM song WHERE filename LIKE \"/%\"");
 	$sth->execute();
 	@paths = split /\s+/, $conf{'mp3dirs'};
 }

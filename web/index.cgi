@@ -201,6 +201,9 @@ $editlistopts
  <td id=az>&nbsp;&nbsp;
    <a id=az target=_blank href="$self?cmd=maint">*</a>
  </td>
+ <td id=az>&nbsp;&nbsp;
+   <a id=az target=bframe href="$self?cmd=shoutcast">Shoutcast</a>
+ </td>
  <td id=az width=100%>&nbsp;&nbsp;
    <a id=az target=bframe href="$self?cmd=sql">SQL</a>
  </td>
@@ -233,7 +236,7 @@ EOF
 		$td_time, $q->{length} / 60, $q->{length} % 60,
 		$td_enc, enchtml($q->{encoding}, 1),
 		$td_edit,
-		$q->{id} < 0? "" : sprintf(<<EOF, $self, $q->{id}, $ids, $edit_target || 'bframe'),
+		$ids? sprintf(<<EOF, $self, $q->{id}, $ids, $edit_target || 'bframe') : "",
 <a id=a href="%s?cmd=edit&id=%d&ids=%s" title="Edit" target=%s>*</a>
 EOF
 		$listch, $extra;
@@ -259,7 +262,8 @@ sub print_playlist_table($) {
 		"song.id as id, track, length, encoding, queue.user as user," .
 		"song.artist_id as arid, song.album_id as alid" .
 		" FROM song,queue,artist,album" .
-		" WHERE present AND song.artist_id=artist.id AND song.album_id=album.id" .
+		" WHERE (present OR filename like \"http:%\")" .
+		" AND song.artist_id=artist.id AND song.album_id=album.id" .
 		" AND song.id = queue.song_id ORDER BY queue.song_order";
 	$sth = $dbh->prepare($query);
 	$rv = $sth->execute;
@@ -290,14 +294,15 @@ sub print_playlist_table($) {
 			$_->{length} = 0;
 			$_->{encoding} = '?';
 		} else {
-			my $query =  "SELECT title,artist.name as artist,album.name as album," .
+			my $query = "SELECT title,artist.name as artist,album.name as album," .
 				"song.id as id,track,length,encoding," .
 				"song.artist_id as arid,song.album_id as alid" .
 				" FROM song,artist,album" .
 				" WHERE song.artist_id=artist.id AND song.album_id=album.id" .
-				" AND song.id = $nowplaying";
+				" AND song.id=?";
+
 			my $sth = $dbh->prepare($query);
-			my $rv = $sth->execute;
+			my $rv = $sth->execute($nowplaying);
 			$_ = $sth->fetchrow_hashref or do {
 				$nowfile =~ m|(.*/)?(.*)|;
 				$_->{artist} = 'ERROR: Not in database';
@@ -662,6 +667,75 @@ EOF
 		can_delete($_->{filename})? qq'<input type=submit ' .
 		  qq'name=action_delete value="Delete Song" ' .
 		  qq'onclick="return verifydelete();">&nbsp;&nbsp;':'';
+}
+
+sub print_shoutcast_page($$) {
+	my ($dbh, $args) = @_;
+
+	if($args->{url}) {
+		my $arid = get_id($dbh, "artist", '') or die;
+		my $alid = get_id($dbh, "album", '') or die;
+		$dbh->do("REPLACE INTO song SET title=?, filename=?, album_id=?, " .
+			"artist_id=?, present=1, encoding=\"Shoutcast\", track=0, " .
+			"length=0", undef,
+			$args->{name}, $args->{url}, $alid, $arid) or die;
+	} elsif($args->{delid}) {
+		$dbh->do("DELETE FROM song WHERE id=?", undef, $args->{delid})
+			or die sprintf "Id %d not found\n", $args->{delid};
+	}
+
+	printf <<EOF,
+<center id=hdr>Shoutcast Radio Channels</center>
+<table border=0 cellspacing=0>
+ <tr>
+  <th %s>&nbsp;&nbsp;</th>
+  <th %s>&nbsp;Name&nbsp;</th>
+  <th %s>&nbsp;URL&nbsp;</th>
+  <th %s>&nbsp;</th>
+ </tr>
+ <tr><td colspan=7></td></tr>
+EOF
+		$th_left, $th_artist, $th_album, $th_track;
+
+	my $sth = $dbh->prepare("SELECT id,filename,title FROM song WHERE " .
+		"filename LIKE \"http:%\" ORDER BY title");
+	$sth->execute;
+	while($_ = $sth->fetchrow_hashref) {
+		my $ref = sprintf(qq|<a id=a href="%s?cmd=add&ids=%d" target=tframe>|,
+			$self, $_->{id});
+		printf <<EOF,
+ <tr>
+  <td %s>&nbsp;%s&nbsp;</td>
+  <td %s>&nbsp;%s</a>&nbsp;</td>
+  <td %s>&nbsp;%s</a>&nbsp;</td>
+  <td %s>&nbsp;<a id=a href="%s?cmd=shoutcast&delid=%d" target=bframe>%s</a>&nbsp;</td>
+ </tr>
+EOF
+		$td_left, "$ref$addtext</a>",
+		$td_artist, $_->{title},
+		$td_album, $_->{filename},
+		$td_track, $self, $_->{id}, $deltext;
+	}
+
+	print <<EOF;
+</table>
+EOF
+
+	print <<EOF;
+<br>
+<hr>
+Add server:
+<form action="$self" method=get>
+ <input type=hidden name=cmd value=shoutcast>
+ <table>
+ <tr><td>URL:</td><td><input type=text size=50 name=url value=""></td></tr>
+ <tr><td>Description:</td><td><input type=text size=50 name=name></td></tr>
+ <td><td></td></tr>
+ <tr><td colspan=2><input type=submit value="Add"></td></tr>
+ </table>
+</form>
+<br>
+EOF
 }
 
 sub print_lists($) {
@@ -1130,6 +1204,12 @@ elsif($cmd eq 'edit') {
 	printhtmlhdr;
 	printhdr($editstyle);
 	print_edit_page($dbh, \%args);
+	printftr;
+}
+elsif($cmd eq 'shoutcast') {
+	printhtmlhdr;
+	printhdr($allstyle);
+	print_shoutcast_page($dbh, \%args);
 	printftr;
 }
 elsif($cmd eq 'download') {
