@@ -97,6 +97,25 @@ sub dierotate {
 	exit 1;
 }
 
+sub child_reaper {
+	for(;;) {
+		my $p = waitpid(-1, &WNOHANG);
+		return if $p < 1;
+		warn sprintf "reaped child %d, sig=%d status=%d\n",
+			$p, $? & 0x7f, $? >> 8;
+		if($p == $cdrplaypid) {
+			unlink $statusfile;
+			die "exiting because '$playercmd' died.\n";
+		} elsif($p == $pid) {
+			$pid = 0;
+			$pid_status = $? >> 8;
+			$pid_signal = $? & 0x7f;
+			warn "player finished ($p)\n";
+		}
+	}
+};
+
+
 unless($debug) {
 	if(!$opt_r) {
 		fork && exit;
@@ -114,24 +133,6 @@ unless($debug) {
 	$SIG{__WARN__} = \&warnrotate;
 }
 sleep $opt_s if $opt_s;
-
-$SIG{'CHLD'} = sub {
-	for(;;) {
-		my $p = waitpid(-1, &WNOHANG);
-		return if $p < 1;
-		warn sprintf "reaped child %d, sig=%d status=%d\n",
-			$p, $? & 0x7f, $? >> 8;
-		if($p == $cdrplaypid) {
-			unlink $statusfile;
-			die "exiting because '$playercmd' died.\n";
-		} elsif($p == $pid) {
-			$pid = 0;
-			$pid_status = $? >> 8;
-			$pid_signal = $? & 0x7f;
-			warn "player finished ($p)\n";
-		}
-	}
-};
 
 warn "********** starting (pid=$$) **********\n";
 warn "PATH=$ENV{'PATH'}\n";
@@ -152,11 +153,18 @@ if($opt_r) {
 	$cdrplaypid = $opt_r;
 	warn "cdrplaypid=$cdrplaypid (from -r)\n";
 } else {
+	# when $playercmd fails instantly, we might get SIGCHLD
+	# before $cdrplaypid is set !!!
 	$cdrplaypid = open STDOUT, "|$playercmd";
 	warn "cdrplaypid=$cdrplaypid\n";
 }
 
 $SIG{'PIPE'} = 'IGNORE';
+$SIG{'CHLD'} = \&child_reaper;
+
+# we might have missed the exiting of cdrplay, so reap once now
+child_reaper();
+
 srand;
 
 for(;;) {
