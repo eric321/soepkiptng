@@ -634,8 +634,8 @@ function closethis() {
  <input type=hidden name=ids value="%s">
 <table>
 <caption>Edit Song</caption>
-  <tr><td colspan=2>Present:</td><td>%s</td></tr>
-  <tr><td colspan=2>Artist:</td><td>
+  <tr><td valign=bottom colspan=2>Present:</td><td valign=bottom>%s</td></tr>
+  <tr><td valign=bottom colspan=2>Artist:</td><td valign=bottom>
      <input type=text size=60 name=artist value="%s">
      <input type=submit name=action_clear_artist value="Clear">
      <input type=submit name=action_fix_artist value="Fix">
@@ -643,31 +643,32 @@ function closethis() {
      <input type=submit name=action_all_artist value="Set Entire List"
       onClick="return verifyall();">
   </td></tr>
-  <tr><td colspan=2>Title:</td> <td>
+  <tr><td valign=bottom colspan=2>Title:</td> <td valign=bottom>
      <input type=text size=60 name=title  value="%s">
      <input type=submit name=action_clear_title value="Clear">
      <input type=submit name=action_fix_title value="Fix">
      <input type=submit name=action_swap value="Swap Artist/Title">
   </td></tr>
-  <tr><td colspan=2>Album:</td> <td>
+  <tr><td valign=bottom colspan=2>Album:</td> <td valign=bottom>
      <input type=text size=60 name=album  value="%s">
      <input type=submit name=action_clear_album value="Clear">
      <input type=submit name=action_fix_album value="Fix">
      <input type=submit name=action_all_album value="Set Entire List"
       onClick="return verifyall();">
   </td></tr>
-  <tr><td colspan=2>Track:</td> <td><input type=text size=3 name=track  value="%s" maxlength=3></td></tr>
-  <tr><td colspan=2>Time:</td>  <td>%s</td></tr>
-  <tr><td colspan=2>Encoding:</td>        <td>%s</td></tr>
-  <tr><td colspan=2 nowrap>Time Added:</td><td>%s</td></tr>
-  <tr><td colspan=2 nowrap>Last played:</td><td>%s%s</td></tr>
-  <tr><td colspan=2>Directory:</td>       <td><a href="%s">%s</a></td></tr>
-  <tr><td colspan=2>Filename:</td>        <td><a href="%s">%s</a></td></tr>
-  <tr><td colspan=2>Size:</td>            <td>%dk</td></tr>
+  <tr><td valign=bottom colspan=2>Track:</td> <td valign=bottom><input type=text size=3 name=track  value="%s" maxlength=3></td></tr>
+  <tr><td valign=bottom colspan=2>Time:</td>  <td valign=bottom>%s</td></tr>
+  <tr><td valign=bottom colspan=2>Encoding:</td>        <td valign=bottom>%s</td></tr>
+  <tr><td valign=bottom colspan=2 nowrap>Time Added:</td><td valign=bottom>%s</td></tr>
+  <tr><td valign=bottom colspan=2 nowrap>Last played:</td><td valign=bottom>%s%s
+     <input type=submit name=action_setlpall value=\"Set Entire List To Current Time\"></td></tr>
+  <tr><td valign=bottom colspan=2>Directory:</td>       <td valign=bottom><a href="%s">%s</a></td></tr>
+  <tr><td valign=bottom colspan=2>Filename:</td>        <td valign=bottom><a href="%s">%s</a></td></tr>
+  <tr><td valign=bottom colspan=2>Size:</td>            <td valign=bottom>%dk</td></tr>
 %s  <tr>
-   <td align=center>%s</td>
-   <td align=center>%s</td>
-   <td>
+   <td valign=bottom align=center>%s</td>
+   <td valign=bottom align=center>%s</td>
+   <td valign=bottom>
     <input type=submit value="Update">&nbsp;&nbsp;
 <script language="Javascript">
 <!--
@@ -1046,6 +1047,12 @@ elsif($cmd eq 'changefile') {
 		foreach(ids_decode($args{ids})) {
 			$dbh->do("UPDATE song SET last_played=from_unixtime(0) WHERE id=?",
 				undef, $_)
+				or die "can't do sql command: " . $dbh->errstr;
+		}
+	}
+	if($args{action_setlpall}) {
+		foreach(ids_decode($args{ids})) {
+			$dbh->do("UPDATE song SET last_played=NULL WHERE id=?", undef, $_)
 				or die "can't do sql command: " . $dbh->errstr;
 		}
 	}
