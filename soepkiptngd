@@ -290,7 +290,7 @@ for(;;) {
 	logprintf("%s %6d %s", $songtype, $song_id, $filename);
 
 	# write status file
-	if(open ST, ">$statusfile") {
+	if(open ST, ">$statusfile.tmp") {
 		print ST <<EOF;
 $song_id
 $filename
@@ -301,6 +301,8 @@ $killport
 $songtype
 EOF
 		close ST;
+		rename "$statusfile.tmp", $statusfile
+			or warn "cannot rename $statusfile.tmp -> $statusfile: $!\n";
 	} else {
 		warn "cannot open statusfile $statusfile: $!\n";
 	}
