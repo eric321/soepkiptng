@@ -4,6 +4,7 @@
  * uses mlockall(2) and real-time scheduling to achieve uninterrupted playing
  *
  * copyright (c) 1998, Eric Lammerts <eric@scintilla.utwente.nl>
+ * may be copied under the terms of the GNU General Public License
  */
 
 static char rcsid[] = "$Id$";
@@ -32,13 +33,9 @@ int pos = 0;
 int len = 0;
 int readeof = 0;
 int maywrite = 0;
-int writepause = 0;
 int do_realtime = 1;
 int debug = 0;
 int stop_on_buffer_empty = 0;
-
-int soepkiptng = 0;
-int startwrite = 0;	/*soepkiptng*/
 
 void perr(char *s)
 {
@@ -89,20 +86,9 @@ void sighandler(int s)
 	exit(1);
 }
 
-void sighup(int s)
-{
-	writepause = !writepause;
-#if 0
-	if(writepause) {
-		ioctl(fd2, SNDCTL_DSP_SYNC, 0);  /* SNDCTL_DSP_POST doesn't seem to work ... */
-	}
-#endif
-}
-
 void sigusr1(int s)
 {
 	short buf[2];
-	char discard[1024];
 
 	signal(s, sigusr1);
 /*	ioctl(fd2, SNDCTL_DSP_RESET, 0); */
@@ -112,22 +98,13 @@ void sigusr1(int s)
 	pos = len = maywrite = 0;
 	readeof = 0;
 
-	/* empty kernel buffers */
-	fcntl(fd1, F_SETFL, O_NONBLOCK);
-	while(read(fd1, discard, sizeof(discard)) > 0) { }
-	fcntl(fd1, F_SETFL, 0);
-
 	if(do_realtime) realtime(0);
 }
 
 void sigusr2(int s)
 {
-	if(soepkiptng) {
-		startwrite = 1;
-	} else {
-		stop_on_buffer_empty = 1;
-		signal(s, sigusr2);
-	}
+	stop_on_buffer_empty = 1;
+	signal(s, sigusr2);
 }
 
 /* flags should be O_RDONLY or O_WRONLY. If pid != NULL, the pid of the
@@ -156,54 +133,45 @@ int pipeopen(char **cmd, int *pid)
 
 void usage(FILE *f)
 {
-	fprintf(f,
-"Usage:   cdrplay -p [-dvMR] [-s freq] [-b bufsize_kb] [-k n|m:s] [-D file]\n"
-"                 [-S n] [command args...]\n"
-"\n"
-"or:      cdrplay [-dvMR] [-s freq] [-b bufsize_kb] [-k n|m:s] [-D file] [-S n]\n"
-"                 file\n"
-"\n"
-"         Cdrplay plays the stdout of 'command' (or stdin if command is omitted)\n"
-"         to /dev/dsp. 'Command' should deliver 44.1kHz 16-bit signed\n"
-"         little-endian audio data.\n"
-"\n"
-"         -b bufsize_kb   : set buffer size\n"
-"         -d              : enable debugging output\n"
-"         -k n            : skip first n bytes (works only on seekable files)\n"
-"         -k m:s          : skip first m minutes and s seconds\n"
-"         -s freq         : set sample frequency (default: 44100)\n"
-"         -v              : verbose status output\n"
-"         -w              : wait until audio device isn't busy\n"
-"         -D file         : send output to file instead of /dev/dsp\n"
-"         -M              : disable use of mlockall(2)\n"
-"         -R              : disable use of real-time scheduling\n"
-"         -S 1            : special soepkiptng mode, initialize dsp\n"
-"         -S 2            : special soepkiptng mode, don't initialize dsp\n"
-"\n"
-"example: cdrplay -v -b 1000 splay -v -d - mp3files...\n"
-"         (works only with 44.1kHz mp3s)\n"
-"\n"
-"example: cdrplay -v -b 1000 mpg123 -r 44100 -s mp3files...\n"
-"         (use mpg123-0.59o or higher, should work with all mp3s)\n"
-"\n"
-"Report bugs to eric@scintilla.utwente.nl.\n"
-	);
+	fprintf(f, "\
+Usage:   cdrplay [-dvMR] [-b bufsize_kb] [-k n] [-D file] [command args...]\n\
+\n\
+         Cdrplay plays the stdout of 'command' (or stdin if command is omitted)\n\
+         to /dev/dsp. 'Command' should deliver 44.1kHz 16-bit signed\n\
+         little-endian audio data.
+
+         -b bufsize_kb   : set buffer size\n\
+         -d              : enable debugging output\n\
+         -k n            : skip first n bytes (works only on seekable files)\n\
+         -v              : verbose status output\n\
+         -w              : wait until audio device isn't busy\n\
+         -D file         : send output to file instead of /dev/dsp\n\
+         -M              : disable use of mlockall(2)\n\
+         -R              : disable use of real-time scheduling\n\
+\n\
+example: cdrplay -v -b 1000 splay -v -d - mp3files...\n\
+         (works only with 44.1kHz mp3s)\n\
+
+example: cdrplay -v -b 1000 mpg123 -r 44100 -s mp3files...\n\
+         (use mpg123-0.59o or higher, should work with all mp3s)\n\
+\n\
+Report bugs to eric@scintilla.utwente.nl.\n");
 }
 
 int main(int argc, char **argv)
 {
 	char *buf, c;
-	int bufsize, sfreq = 44100, l, minlen = 0, status, i, r, w, iseek = 0, retval;
+	int bufsize, l, minlen = 0, status, i, r, w, iseek = 0, retval;
 	int write_total = 0;
 	int maxfd;
 	fd_set rfds, wfds;
-	int do_mlockall = 1, verbose = 0, busywait = 0, prog = 0;
+	int do_mlockall = 1, verbose = 0, busywait = 0;
 	char *snddev = "/dev/dsp";
 	int s_minflt = 0, s_majflt = 0, s_nswap = 0, s_nivcsw = 0;
 	char waitstr[] = "|/-\\";
 
 	bufsize = 500 * 1024;
-	while((c = getopt(argc, argv, "+b:dhk:s:vwD:RMS:")) != EOF) {
+	while((c = getopt(argc, argv, "+b:dhk:vwD:RM")) != EOF) {
 		switch(c) {
 			case 'b':
 				bufsize = atoi(optarg) * 1024;
@@ -218,20 +186,8 @@ int main(int argc, char **argv)
 			case 'h':
 				usage(stdout);
 				exit(0);
-			case 'k': {
-					int min, sec;
-
-					if(sscanf(optarg, "%d:%d", &min, &sec) == 2)
-						iseek = (min * 60 + sec) * 176400;
-					else
-						iseek = atoi(optarg);
-				}
-				break;
-			case 'p':
-				prog = 1;
-				break;
-			case 's':
-				sfreq = atoi(optarg);
+			case 'k':
+				iseek = atoi(optarg);
 				break;
 			case 'v':
 				verbose++;
@@ -248,31 +204,16 @@ int main(int argc, char **argv)
 			case 'M':
 				do_mlockall = 0;
 				break;
-			case 'S':
-				soepkiptng = atoi(optarg);
-				break;
 			default:
 				usage(stderr);
 				exit(1);
 		}
 	}
-	if(optind == argc) {
+	if(optind == argc)
 		fd1 = 0;
-	} else {
-		if(prog) {
-			fd1 = pipeopen(argv + optind, &pid1);
-		} else {
-			if((fd1 = open(argv[optind], O_RDONLY)) < 0) {
-				perror(argv[optind]);
-				exit(1);
-			}
-		}
-	}
-		
-	if(iseek) {
-		lseek(fd1, iseek, SEEK_SET);
-		write_total = iseek;
-	}
+	else
+		fd1 = pipeopen(argv + optind, &pid1);
+	if(iseek) lseek(fd1, iseek, SEEK_SET);
 
 	if(strcmp(snddev,"-") == 0) fd2 = 1;
 	else for(i = 0;;) {
@@ -286,19 +227,16 @@ int main(int argc, char **argv)
 	}
 	if(fd2 < 0) { perror(snddev); exit(1); }
 
-	if(soepkiptng <= 1) {
-		retval = ioctl(fd2, SNDCTL_DSP_SYNC, 0);
-		if(retval != -1) retval = ioctl(fd2, SNDCTL_DSP_SPEED, &sfreq);
-		i = AFMT_S16_LE;
-		if(retval != -1) retval = ioctl(fd2, SNDCTL_DSP_SETFMT, &i);
-		i = 1;
-		if(retval != -1) retval = ioctl(fd2, SNDCTL_DSP_STEREO, &i);
+	retval = ioctl(fd2, SNDCTL_DSP_SYNC, 0);
+	i = 44100;
+	if(retval != -1) retval = ioctl(fd2, SNDCTL_DSP_SPEED, &i);
+	i = AFMT_S16_LE;
+	if(retval != -1) retval = ioctl(fd2, SNDCTL_DSP_SETFMT, &i);
+	i = 1;
+	if(retval != -1) retval = ioctl(fd2, SNDCTL_DSP_STEREO, &i);
 
-		if(retval == -1 && ischardev(fd2)) fprintf(stderr, "warning: sound ioctls failed\n");
-
-		i = 0x003c000a;   // 60 fragments of 1024 bytes
-		ioctl(fd2, SNDCTL_DSP_SETFRAGMENT, &i);
-	}
+	if(retval == -1 && ischardev(fd2)) fprintf(stderr, "warning: sound ioctls failed\n");
+	
 	if((buf = malloc(bufsize)) == NULL) perr("malloc");
 	if(do_mlockall && mlockall(MCL_CURRENT | MCL_FUTURE) == -1) perror("mlockall");
 
@@ -306,7 +244,6 @@ int main(int argc, char **argv)
 	
 	signal(SIGTERM, sighandler);
 	signal(SIGINT, sighandler);
-	signal(SIGHUP, sighup);
 	signal(SIGUSR1, sigusr1);
 	signal(SIGUSR2, sigusr2);
 	signal(SIGPIPE, SIG_IGN);
@@ -352,8 +289,7 @@ int main(int argc, char **argv)
 		if(stop_on_buffer_empty && len == 0) break;
 		if(readeof && len == 0) break;
 
-		if(soepkiptng? startwrite : ((readeof || len == bufsize) && !maywrite)) {  /* off we go! */
-			startwrite = 0;
+		if((readeof || len == bufsize) && !maywrite) {  /* off we go! */
 			if(do_realtime) realtime(1);
 
 			/* don't let verbose/debug output block the audio output */
@@ -376,7 +312,7 @@ int main(int argc, char **argv)
 		FD_ZERO(&rfds);
 		if(!readeof && len < bufsize) FD_SET(fd1, &rfds);
 		FD_ZERO(&wfds);
-		if(maywrite && !writepause && len > 0) FD_SET(fd2, &wfds);
+		if(maywrite && len > 0) FD_SET(fd2, &wfds);
 		select(maxfd + 1, &rfds, &wfds, NULL, NULL);
 
 		/* try writing... */
