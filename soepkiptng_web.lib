@@ -1259,10 +1259,10 @@ EOF
 			$limit = 0 + $args{rand};
 			$s = "rand()";
 		}
-		if($args{cdda}) {
+		if($args{cdda} =~ /^(\w+)/) {
 			$s = "track";
 			$filename_restriction = "cdda:%";
-			$cap = "CD-DA";
+			$cap = "CD-DA ($1)";
 		}
 
 		if($s) {
@@ -1427,7 +1427,7 @@ EOF
 			$nr++;
 		}
 		close F;
-		$args{cdda} = 1;
+		$args{cdda} = $cddbinfo;
 	 	printredir($cgiquery, $self, 'alllist', \%args);
 	}
 	else {
