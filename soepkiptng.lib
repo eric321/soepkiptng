@@ -22,21 +22,23 @@ sub kill_song() {
 }
 
 # returns (samplefreq, channels, seconds)
-sub get_wav_params($) {
-	my ($file) = @_;
+sub get_wav_params($;$) {
+	my ($file, $offset) = @_;
+	$offset = 0 + $offset;
 	local *F;
 	my $buf;
 	my @res;
 
 	open F, $file or return undef;
-	FILE: do {
-		read F, $buf, 12 or last;
+	FILE: for(;;) {
+		read(F, $buf, $offset) or last;
+		read(F, $buf, 12)  or last;
 		my ($riff, $len, $wave) = unpack("a4Va4", $buf);
 		last if $riff ne 'RIFF' || $wave ne 'WAVE';
 
 		# find 'fmt ' chunk
 		for(;;) {
-			read F, $buf, 8 or last FILE;
+			read(F, $buf, 8) or last FILE;
 			my ($type, $len) = unpack("a4V", $buf);
 			last if $type eq 'fmt ';
 			while($len) {
@@ -45,14 +47,14 @@ sub get_wav_params($) {
 				$len -= $r;
 			}
 		}
-		read F, $buf, 16 or last;
+		read(F, $buf, 16)  or last;
 		my ($fmt, $chan, $freq, $bytespersec, $align, $bitspersample) =
 			unpack("vvVVvv", $buf);
 		last if $fmt != 1;
 
 		# find 'data' chunk
 		for(;;) {
-			read F, $buf, 8 or last FILE;
+			read(F, $buf, 8)  or last FILE;
 			my ($type, $len) = unpack("a4V", $buf);
 			last if $type eq 'data';
 			while($len) {
@@ -63,7 +65,8 @@ sub get_wav_params($) {
 		}
 
 		push @res, $freq, $chan, int($len / $bytespersec + 0.5);
-	} while 0;
+		last;
+	}
 	close F;
 	return @res;
 }

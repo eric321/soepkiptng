@@ -205,8 +205,8 @@ while(<FILES>) {
 		}		
 		$encoding .= " mono" if $chan == 1;
 	} elsif($ext eq 'pac') {
-		my ($sfreq, $chan, $sec) = get_wav_params("lpac -x $_.$ext /dev/fd/1|");
-		$length = $sec;
+		my ($sfreq, $chan, $sec) = get_wav_params("$_.$ext", 14);
+		$length = 0 + $sec;
 		$encoding = "LPAC";
 		if($sfreq != 44100) {
 			my $s = sprintf "%f", $sfreq / 1000;
