@@ -1,12 +1,12 @@
 
 # $Id$
 
-use Apache::DBI;
-use Apache::Session::MySQL;
-use Apache;
+use Apache::DBI ();
+use Apache::Session::MySQL ();
+use Apache ();
 
-use CGI; CGI->compile(':all');
-use Socket;
+use CGI (); CGI->compile(':all');
+use Socket ();
 
 $configfile = "/etc/soepkiptng.conf";
 open F, $configfile or die "$configfile: $!\n";
