@@ -35,8 +35,8 @@ sub read_configfile($;@) {
 			/^#/ and next;
 			s/\s+$//;
 			/./ or next;
-			if(/^(\w+)\s*=\s*(.*?)\s*$/) {
-				$f = $1;
+			if(/^(\w[-.\w]*)\s*=\s*(.*?)\s*$/) {
+				$f = lc $1;
 				$conf->{$f} = $2;
 			} elsif(/^\s+(.*?)\s*$/) {
 				# continuation line
