@@ -6,7 +6,7 @@ CFLAGS=-O2 -Wall
 LDFLAGS=-s
 DSTDIR=/usr/local/bin
 
-all: resample resample.nodiv
+all: resample
 
 resample: resample.c
 
