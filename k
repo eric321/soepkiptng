@@ -39,16 +39,7 @@ read_configfile(\%conf, $opt_c);
 
 $ENV{PATH} = "$progdir/bin:$ENV{PATH}";
 
-$dbh = DBI->connect("DBI:$conf{db_type}:$conf{db_name}:$conf{db_host}",
-	$conf{db_user}, $conf{db_pass}) or die "can't connect to database";
+chop(($song_id, undef, undef, undef, undef, undef, $type,
+	$user, $artist, $title, $album, $track, $len, $enc) = kill_song());
 
-($song_id) = kill_song();
-($t, $a, $al, $tr) = $dbh->selectrow_array(
-	"SELECT song.title,artist.name,album.name,song.track" .
-	" FROM song,artist,album" .
-	" WHERE song.id=$song_id" .
-	" AND song.artist_id=artist.id AND song.album_id=album.id"
-);
-printf "next: %s - %02d. %s [%s]\n", $a, $tr, $t, $al;
-
-
+printf "next: %s - %02d. %s [%s]\n", $artist, $track, $title, $album;
