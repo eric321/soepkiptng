@@ -53,7 +53,7 @@ use DBI;
 use MP3::Tag;
 #use Data::Dumper;
 
-use vars qw/$opt_r $opt_h $opt_q $opt_t/;
+use vars qw/$opt_r $opt_h $opt_q $opt_t $opt_l/;
 
 %latin1_to_ascii = (
 	192 => "A", 193 => "A", 194 => "A", 195 => "A", 196 => "A", 197 => "A",
@@ -85,6 +85,7 @@ sub do_dir($$) {
 	my ($dbh, $f) = @_;
 
 	$f = abs_path($f);
+	$f =~ s|/+$||;
 	my $q = "SELECT filename,artist.name as artist,album.name as album" .
 		" FROM song,artist,album" .
 		" WHERE song.artist_id=artist.id AND song.album_id=album.id" .
@@ -118,10 +119,11 @@ sub do_dir($$) {
 	$f =~ m|^(.*)/|;
 	$newname = "$1/$newname";
 
-	warn "renaming $f -> $newname\n";
-	if(-e $newname) {
+	if($f eq $newname) {
+	} elsif(-e $newname) {
 		warn "$f: $newname exists, skipping\n";
 	} else {
+		warn "renaming $f -> $newname\n";
 		if(rename $f, $newname) {
 			foreach(@files) {
 				(my $fnew = $_) =~ s|.*/|$newname/|;
@@ -217,7 +219,12 @@ sub do_mp3($$) {
 		my $newname = "";
 		$newname .= sprintf "%02d-", $tr if $tr;
 		$newname .= simplify($ar) . "-" if $ar;
-		$newname .= simplify($ti) . ".$ext";
+		$newname .= simplify($ti);
+		if($opt_l && length("$newname.$ext") > $opt_l) {
+			$newname = substr($newname, 0, $opt_l - length(".$ext") - 1);
+			$newname =~ s/_?$/_/;
+		}
+		$newname .= ".$ext";
 		$fullf =~ m|^(.*)/|;
 		$newname = "$1/$newname";
 
@@ -256,7 +263,7 @@ sub do_ogg($$) {
 }
 
 
-getopts('rhqt');
+getopts('rhqtl:');
 
 ($prog = $0) =~ s|.*/||;
 if($opt_h || !@ARGV) {
