@@ -263,11 +263,11 @@ EOF
 		if($al) {
 			$al =~ /(.?)(.*)/;
 			$al{$a} .= sprintf(<<EOF, encode("^$al\$"), encode("Album: $al"), $1, $2, $c);
-<a id=a href="$self?cmd=alllist&album=%s&cap=%s"><b>%s</b>%s (%d)</a>&nbsp;&nbsp;
+<a id=a href="$self?cmd=alllist&album=%s&cap=%s"><b>%s</b>%s</a> (%d)&nbsp;&nbsp;
 EOF
 		} else {
 			$al{$a} .= sprintf(<<EOF, encode("^$a\$"), encode("Artist: $a; Album: ?"), $c);
-<a id=a href="$self?cmd=alllist&artist=%s&album=%%5E%%24&cap=%s"><b>?</b> (%d)</a>&nbsp;&nbsp;
+<a id=a href="$self?cmd=alllist&artist=%s&album=%%5E%%24&cap=%s"><b>?</b></a> (%d)&nbsp;&nbsp;
 EOF
 		}
 	}
@@ -332,11 +332,11 @@ EOF
 			if($al) {
 				$al =~ /(.?)(.*)/;
 				push @al, sprintf(<<EOF, encode("^$al\$"), encode("Album: $al"), $1, $2, $c);
-<a id=a href="$self?cmd=alllist&album=%s&cap=%s"><b>%s</b>%s (%d)</a>
+<a id=a href="$self?cmd=alllist&album=%s&cap=%s"><b>%s</b>%s</a> (%d)
 EOF
 			} else {
 				push @al, sprintf(<<EOF, encode("^$a\$"), encode("Artist: $a; Album: ?"), $c);
-<a id=a href="$self?cmd=alllist&artist=%s&album=%%5E%%24&cap=%s"><b>?</b> (%d)</a>
+<a id=a href="$self?cmd=alllist&artist=%s&album=%%5E%%24&cap=%s"><b>?</b></a> (%d)
 EOF
 			}
 		}
