@@ -275,7 +275,7 @@ EOF
 		} elsif($ext eq "ogg") {
 			exec "ogg2raw", $filename;
 		} elsif($ext eq "wav") {
-			exec "splay", "-d", "-", $filename;
+			exec "wav2raw", $filename;
 		} elsif($ext eq "pac") {
 			exec "lpac2raw", $filename;
 		} else {
