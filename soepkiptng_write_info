@@ -118,7 +118,7 @@ foreach $f (@ARGV) {
 	my $fullf = $f;
 	$f =~ m|^/| or $fullf = "$cwd/$f";
 
-	$q = "SELECT song.id,title,artist.name,album.name,track" .
+	$q = "SELECT song.id,title,artist.name,album.name,track,length" .
 	     " FROM song,artist,album" .
 	     " WHERE song.artist_id=artist.id AND song.album_id=album.id" .
 	     " AND present AND filename=?";
@@ -126,11 +126,11 @@ foreach $f (@ARGV) {
 	$sth->execute($fullf)
 		or die "can't do sql command: " . $dbh->errstr;
 
-	($id, $ti, $ar, $al, $tr) = $sth->fetchrow_array or do {
+	($id, $ti, $ar, $al, $tr, $len) = $sth->fetchrow_array or do {
 		my $shortf = $fullf;
 		$shortf =~ s|.*/|%/|;
 
-		$q = "SELECT song.id,title,artist.name,album.name,track" .
+		$q = "SELECT song.id,title,artist.name,album.name,track,length" .
 		     " FROM song,artist,album" .
 		     " WHERE song.artist_id=artist.id AND song.album_id=album.id" .
 		     " AND present AND filename LIKE ?";
@@ -138,7 +138,7 @@ foreach $f (@ARGV) {
 		$sth->execute($shortf)
 			or die "can't do sql command: " . $dbh->errstr;
 	
-		($id, $ti, $ar, $al, $tr) = $sth->fetchrow_array or do {
+		($id, $ti, $ar, $al, $tr, $len) = $sth->fetchrow_array or do {
 			warn "$f: not found in dbase\n";
 			next;
 		};
@@ -169,6 +169,7 @@ foreach $f (@ARGV) {
 		$newtag->add_frame('TPE1', $ar) if $ar;
 		$newtag->add_frame('TALB', $al) if $al;
 		$newtag->add_frame('TRCK', $tr) if $tr;
+		$newtag->add_frame('TLEN', 1000 * $len) if $len;
 		warn "$f: updating ID3v2 tag\n";
 		$newtag->write_tag();
 	}
