@@ -82,11 +82,12 @@ allow_delete=0
 topwindow_title=
 #topwindow_title=
 #	<font size=+2>Titeltje</font><Br>
-title=MP3
+title=SoepkipTNG
 frameheights=40%,*
 framewidths=25%,25%,*
 marginheight=2
-body=bgcolor="#ffffcc" vlink="#000000" link="#000000"
+#body=bgcolor="#ffffcc" vlink="#000000" link="#000000"
+body=bgcolor="#e0f4ff" vlink="#000000" link="#000000"
 refreshtime=120
 refreshtime_kill=2
 
@@ -97,20 +98,20 @@ bframe_start=
   </center>
  </body>
 
-th_left   = bgcolor="#f2f2cc"
-td_left   = bgcolor="#f2f2cc"
-th_artist = bgcolor="#f2f2cc"
+th_left   = bgcolor="#cce8ff"
+td_left   = bgcolor="#cce8ff"
+th_artist = bgcolor="#cce8ff"
 td_artist =
-th_album  = bgcolor="#f2f2cc"
-td_album  = bgcolor="#f2f2cc"
-th_track  = bgcolor="#f2f2cc"
+th_album  = bgcolor="#cce8ff"
+td_album  = bgcolor="#cce8ff"
+th_track  = bgcolor="#cce8ff"
 td_track  = 
-th_song   = bgcolor="#f2f2cc"
-td_song   = bgcolor="#f2f2cc"
-th_time   = bgcolor="#f2f2cc"
-td_time   = 
-th_enc    = bgcolor="#f2f2cc"
-td_enc    = bgcolor="#f2f2cc"
+th_song   = bgcolor="#cce8ff"
+td_song   = bgcolor="#cce8ff"
+th_time   = bgcolor="#cce8ff" id=t
+td_time   = id=t
+th_enc    = bgcolor="#cce8ff"
+td_enc    = bgcolor="#cce8ff"
 th_edit   = 
 td_edit   = 
 
@@ -123,42 +124,48 @@ uptext=up
 killtext=kill
 
 plstyle=
- #search { color: black; font-size: 14pt;  }
- #a      { color: blue; font-size: 14pt; }
+ #search { color: black;  }
+ #a      { color: blue; }
  #az     { vertical-align: baseline; white-space: nowrap;
-           color: blue; font-size: 14pt;
+           color: blue;
          }
- TH      { text-align: left; vertical-align: top; font-size: 14pt;
+ TH      { text-align: left; vertical-align: top;
            color: black; font-style: bold; font-family: serif; }
- TD      { text-align: left; vertical-align: top; font-size: 14pt;
+ TD      { text-align: left; vertical-align: top;
+           color: black; font-family: serif; }
+ #t      { text-align: right; vertical-align: top;
            color: black; font-family: serif; }
 
 artiststyle=
  #hdr    { font-family: serif; font-size: large }
- body    { color: black; font-family: serif; font-size: 14pt; }
- #a      { color: blue; font-size: 14pt;}
- TH      { text-align: left; vertical-align: top; font-size: 14pt;
+ body    { color: black; font-family: serif; }
+ #a      { color: blue;}
+ TH      { text-align: left; vertical-align: top;
            color: black; font-style: bold; font-family: serif; }
- TD      { text-align: left; vertical-align: top; font-size: 14pt;
+ TD      { text-align: left; vertical-align: top;
            color: black; font-family: serif; }
  CAPTION { font-family: serif; font-size: large }
 
 allstyle=
  #hdr    { font-family: serif; font-size: large }
- body    { color: black; font-family: serif; font-size: 14pt; }
- #a      { color: blue; font-size: 14pt; }
- TH      { text-align: left; vertical-align: top; font-size: 14pt;
+ body    { color: black; font-family: serif; }
+ #a      { color: blue; }
+ TH      { text-align: left; vertical-align: top;
            color: black; font-style: bold; font-family: serif; }
- TD      { text-align: left; vertical-align: top; font-size: 14pt;
+ TD      { text-align: left; vertical-align: top;
+           color: black; font-family: serif; }
+ #t      { text-align: right; vertical-align: top;
            color: black; font-family: serif; }
  CAPTION { font-family: serif; font-size: large }
 
 editstyle=
- body    { color: black; font-family: serif; font-size: 14pt; }
- TH      { font-family: serif; font-size: 14pt; }
- TD      { font-family: serif; font-size: 14pt; }
+ body    { color: black; font-family: serif; }
+ TH      { font-family: serif; }
+ TD      { font-family: serif; }
  CAPTION { font-family: serif; font-size: large }
 
-
-searchformstyle=font-size: 50%; height: 18px
+#searchformstyle=font-size: 50%; width: 40px; height: 18px
+#searchformstyle=font-size: 50%; height: 18px
+searchformstyle=
 searchformsize=15
+

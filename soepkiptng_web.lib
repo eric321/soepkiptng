@@ -292,7 +292,7 @@ EOF
   <th %s>&nbsp;Album&nbsp;</th>
   <th %s>&nbsp;#&nbsp;</th>
   <th %s>&nbsp;Song&nbsp;</th>
-  <th %s>&nbsp;Time&nbsp;&nbsp;</th>
+  <th %s>&nbsp;Time&nbsp;</th>
   <th %s>&nbsp;Encoding&nbsp;</th>
   <th %s>&nbsp;&nbsp;</th>
  </tr>
