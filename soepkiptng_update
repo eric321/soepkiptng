@@ -86,6 +86,8 @@ if($ARGV[0]) {
 while(($id, $f, $l) = $sth->fetchrow_array) {
 	$filename{$f} = $id;
 	$last_played{$f} = $l;
+	$f =~ m|([^/]*)$|;
+	$longname{$1} = $f;
 }
 
 # scan mp3 directories
@@ -133,6 +135,19 @@ while(<FILES>) {
 			next;
 		}
 	} else {
+		# check whether an old entry (ie. the file does not exist anymore)
+		# exists with the same filename (without path)
+		/([^\/]*)$/;
+		my $oldname = $longname{$1};
+		if($oldname && ! -e $oldname) {
+			$dbh->do("UPDATE songs SET filename=?, time_added=NULL WHERE id=?",
+				undef, $_, $filename{$oldname}) or die "can't do sql command: " . $dbh->errstr . "\n";
+			delete $filename{$oldname};
+			$num_moved++;
+			$oldname =~ s|[^/]+$||;
+			print "Moving $_ (from $oldname)\n";
+			next;
+		}
 		$num_added++;
 		print "Adding $_\n";
 	}
@@ -187,14 +202,13 @@ foreach(keys %filename) {
 
 $dbh->disconnect();
 
-printf <<EOF, $num_added, $num_updated, $num_deleted, $num_skipped;
+printf <<EOF, $num_added, $num_updated, $num_deleted, $num_moved, $num_skipped;
 %4d songs added.
 %4d songs updated.
 %4d songs deleted.
+%4d songs moved.
 %4d songs skipped.
 EOF
-
-
 
 
 
