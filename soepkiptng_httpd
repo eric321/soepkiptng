@@ -163,14 +163,15 @@ sub run_instance() {
 ############################################################################
 # MAIN
 
-getopts('dhp:i:l:c:');
+getopts('dhp:i:l:c:F');
 
 $opt_h and die <<EOF;
 
-Usage: soepkiptng_httpd [-dh] [-p port] [-i servers] [-l maxrequests]
+Usage: soepkiptng_httpd [-dFh] [-p port] [-i servers] [-l maxrequests]
 
 Options:
  -d             : don't daemonize, log to stdout/stderr.
+ -F             : stay in foreground
  -h             : get this help
  -p port        : port to listen on
  -i servers     : number of child processes the parent process will spawn
@@ -187,7 +188,7 @@ $daemon = new HTTP::Daemon(LocalPort => $port, ReuseAddr => 1)
 	or die "port $port: $!\n";
 
 if(!$opt_d) {
-	fork && exit;
+	if(!$opt_F) { fork && exit; }
 	setpgrp;
 	chdir "/";
 	open STDIN, "</dev/null";
