@@ -91,8 +91,13 @@ sub splitrange($$) {
 	@ret;
 }
 
-sub killit() {
-	($song_id) = kill_song();
+sub killit($) {
+	my ($killid) = @_;
+	($song_id) = kill_song('', $killid);
+	if(!defined($song_id)) {
+		print "not killing (song $killid not playing anymore)\n";
+		return undef;
+	}
 	($t, $a, $al, $tr) = $dbh->selectrow_array(
 		"SELECT song.title,artist.name,album.name,song.track" .
 		" FROM song,artist,album" .
@@ -220,6 +225,7 @@ if($_ = get_nowplaying($dbh)) {
 	printf "1.* %-${w_a}.${w_a}s %-${w_t}.${w_t}s %-${w_al}.${w_al}s\n",
 		$_->{artist}, $_->{title}, albumtrack($_->{album}, $_->{track});
 	if($_->{id}) { $delid[$i++] = $_->{id}; }
+	$nowid = $_->{id};
 }
 
 $query = "SELECT song.title,artist.name,album.name,song.id,song.track" .
@@ -244,10 +250,10 @@ if(/^S/) {
 } elsif(/^a/i) {
 	$sth = $dbh->prepare("DELETE FROM queue");
 	$sth->execute();
-	killit()
+	killit($nowid);
 } else {
 	foreach(splitrange($_, $i)) {
-		if($_ == 1) { killit(); }
+		if($_ == 1) { killit($nowid); }
 		else { del_song($dbh, $delid[$_]) if $delid[$_]; }
 	}
 }

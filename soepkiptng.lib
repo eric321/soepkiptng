@@ -105,8 +105,20 @@ sub shuffle_queue($) {
 	$db->do("UNLOCK TABLES");
 }
 
-sub kill_song(;$) {
-	my ($user) = @_;
+sub kill_song(;$$) {
+	my ($user, $id) = @_;
+	my ($plid, $host, $port);
+	local *F;
+
+	open F, $conf{statusfile}
+		or die "$conf{statusfile}: $!\n";
+	$plid = <F>;
+	<F>; <F>; <F>;
+	chop($host = <F>);
+	$port = <F>;
+	close F;
+
+	if(defined($id) && $id != $plid) { return undef; }
 
 	if($conf{kill_song_external}) {
 		system $conf{kill_song_external}, $user || '';
@@ -118,18 +130,12 @@ sub kill_song(;$) {
 		close F;
 		return @lines;
 	}
-	return kill_song_internal();
+	return kill_song_internal($host, $port);
 }
 
-sub kill_song_internal() {
+sub kill_song_internal($$) {
+	my ($host, $port) = @_;
 	local *F;
-
-	open F, $conf{statusfile}
-		or die "$conf{statusfile}: $!\n";
-	<F>; <F>; <F>; <F>;
-	chop($host = <F>);
-	$port = <F>;
-	close F;
 
 	$host && $port or return undef;
 
