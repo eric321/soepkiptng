@@ -296,15 +296,13 @@ sub playshoutcast($) {
 	}
 }
 
-sub player_pause() {
-	warn "pausing output\n";
-	player_cmd("waitbufferempty", "pause") or warn "error pausing output\n";
-	$paused = 1;
-}
 
-sub exec_prog(;@) {
-	my (@prog) = @_;
+sub exec_prog(;$$) {
+	my ($prog, $pause) = @_;
 
+	if($pause) {
+		$paused = 1;
+	}
 	if(($pid = fork) == 0) {
 		# get our own program group so our parent can kill us easily
 		setpgrp;
@@ -312,9 +310,14 @@ sub exec_prog(;@) {
 		# restore broken pipe behavior
 		$SIG{'PIPE'} = 'DEFAULT';
 
-		if(@prog > 0) {
-			exec @prog;
-			die "exec $prog[0] failed: $!\n";
+		if($pause) {
+			warn "pausing output\n";
+			player_cmd("waitbufferempty", "pause") or warn "error pausing output\n";
+		}
+
+		if(@$prog > 0) {
+			exec @$prog;
+			die "exec $prog->[0] failed: $!\n";
 		}
 	}
 }
@@ -327,36 +330,34 @@ sub start_play($) {
 	my $ext = lc($1);
 
 	if($filename =~ /^http:/) {
-		exec_prog();
+		exec_prog;
 		$pid == 0 and playshoutcast($filename);
 	} elsif($filename =~ /^cdda:[^:]*:(\d+)/) {
-		exec_prog "$conf{cdda_prog} $1";
+		exec_prog ["$conf{cdda_prog} $1"];
 	} elsif($ext eq "mp2" || $ext eq "mp3") {
-		exec_prog "mp3toraw", $filename;
+		exec_prog ["mp3toraw", $filename];
 	} elsif($ext eq "ogg") {
 		#this does not handle mono->stereo, resampling:
-		#exec_prog qw/oggdec -Q -b16 -e0 -R1 -s1 -o-/, $filename;
-		exec_prog "ogg2raw", $filename;
+		#exec_prog [qw/oggdec -Q -b16 -e0 -R1 -s1 -o-/, $filename];
+		exec_prog ["ogg2raw", $filename];
 	} elsif($ext =~ /^(mid|rcp|r36|g18|g36|mod)$/) {
-		exec_prog "midi2raw", $filename;
+		exec_prog ["midi2raw", $filename];
 	} elsif($ext eq "wav") {
-		exec_prog "wav2raw", $filename;
+		exec_prog ["wav2raw", $filename];
 	} elsif($ext eq "pac") {
-		exec_prog "lpac2raw", $filename;
+		exec_prog ["lpac2raw", $filename];
 	} elsif($ext eq "raw") {
-		exec_prog "cat", $filename;
+		exec_prog ["cat", $filename];
 	} elsif($ext eq "flac") {
-		exec_prog qw/flac -sdc --endian=little --sign=signed/,
-			qw/--force-raw-format/, $filename;
-		#exec_prog "flac", "-d", "-fl", $filename, "-";
+		exec_prog [qw/flac -sdc --endian=little --sign=signed/,
+			qw/--force-raw-format/, $filename];
+		#exec_prog ["flac", "-d", "-fl", $filename, "-"];
 	} elsif($ext eq "shn") {
-		exec_prog qw/shntool cat -nr -nh/, $filename;
+		exec_prog [qw/shntool cat -nr -nh/, $filename];
 	} elsif($ext =~ /^(mpe?g|avi|asx|asf|vob|wmv|rm)$/) {
-		player_pause();
-		exec_prog "mp", "-m", $filename;
+		exec_prog ["soepkiptng_video", $filename], 1;
 	} elsif($ext eq "ac3") {
-		player_pause();
-		exec_prog "a52dec", "-o", "oss6", $filename;
+		exec_prog ["a52dec", "-o", "oss6", $filename], 1;
 	} else {
 		warn "no player for .$ext files.\n";
 	}
@@ -515,15 +516,6 @@ for(;;) {
 	# write to log file
 	logprintf("%s %6d %s", $song->{type}, $song->{id}, $song->{filename});
 
-	# launch player
-	my $starttime = time;
-	if($debug) {
-		my ($a, $b, $c, $d) = times;
-		$childtime = $c + $d;
-	}
-	start_play($song->{filename});
-	warn "pid=$pid\n";
-
 	# write status file
 	my $status = <<EOF;
 $song->{id}
@@ -556,6 +548,15 @@ EOF
 		$killsock_conn->close();
 		undef $killsock_conn;
 	}
+
+	# launch player
+	my $starttime = time;
+	if($debug) {
+		my ($a, $b, $c, $d) = times;
+		$childtime = $c + $d;
+	}
+	start_play($song->{filename});
+	warn "pid=$pid\n";
 
 	# wait until player is done or we get a connect on $killsock
 	my ($rin, $rout);
