@@ -1234,7 +1234,7 @@ EOF
 			$cap = "Search Title: $args{title}";
 		}
 		if($args{filename} =~ /\S/) {
-			add_search_args(\$q, \@qargs, \$s, $args{filename}, 'filename');
+			add_search_args(\$q, \@qargs, \$s, lc($args{filename}), 'lcase(filename)');
 			$cap = "Search Filename: $args{filename}";
 		}
 
