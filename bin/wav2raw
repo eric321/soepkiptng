@@ -1,6 +1,6 @@
 #!/bin/sh
 
-if file -b "$1" | grep -q '44100 Hz'; then
+if file -Lb "$1" | grep -q '44100 Hz'; then
 	exec sox -t wav "$1" -t raw -w -s -c2 -r44100 -
 else
 	exec sox -t wav "$1" -t raw -w -s -c2 -r44100 - rate
