@@ -215,6 +215,7 @@ sub cleanup_name {
 	my ($s) = @_;
 	$s =~ s/_/ /g;
 	$s =~ s/([^'\w\xc0-\xff]|^)(\w)/\1\U\2/g;
+	$s =~ s/\b(o'\w)/\U\1/ig;
 	$s =~ s/n T\b/n't/g;
 	$s =~ s/ S\b/'s/g;
 	$s =~ s/\bI M\b/I'm/g;

@@ -7,7 +7,7 @@
 
 Features:
 ---------
-* mp3, wav, lpac & Ogg-Vorbis support.
+* mp3, wav, lpac, flac & Ogg-Vorbis support.
 * (My)SQL database with songs.
 * nice web interface
 * commandline interface
@@ -31,20 +31,26 @@ Requirements: (you can get things with (*) from my homepage)
   - mp3: get mp3toraw(*) and mpg123
   - wav: for instance splay
   - lpac:
-    LPAC is a lossless compression algorithm. You can get a linux binary
-    from http://www-ft.ee.tu-berlin.de/~liebchen/lpac.html. No source
-    is available :-(.
+    LPAC is a non-free lossless compression algorithm. You can get a linux
+    binary from http://www-ft.ee.tu-berlin.de/~liebchen/lpac.html at no cost.
+    The source is not available :-(.
     Also get lpac2raw(*)
+  - flac:
+    Flac is a free lossless compression algorithm, available from
+    flac.sourceforge.net. It does not compress as well as lpac, but the
+    difference is marginal.
   - Ogg-Vorbis:
     Unfortunately ogg123 cannot play to standard output.
     Get the libraries from http://www.xiph.org and ogg2raw(*)
 
 
-On a Debian system,
-   apt-get install libapache-mod-perl libapache-dbi-perl libdbd-mysql-perl \
-      mysql-server libmpeg-mp3info-perl libterm-readkey-perl \
-      splay libvorbis-dev
-will install all the necessary software (except the programs marked with (*)).
+On a Debian system you can install all the necessary software (except the
+programs marked with (*)) with apt-get:
+
+apt-get install libapache-mod-perl libapache-dbi-perl libdbd-mysql-perl \
+   mysql-server libmpeg-mp3info-perl libterm-readkey-perl \
+   splay libvorbis-dev flac
+
 
 
 Installation:
