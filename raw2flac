@@ -41,8 +41,19 @@ use Getopt::Std;
 
 require "$progdir/soepkiptng.lib";
 
-our ($opt_d, $opt_v, $opt_c);
-getopts('dvc:');
+our ($opt_d, $opt_v, $opt_c, $opt_h, $opt_s);
+getopts('dvc:hs');
+
+$opt_h and die <<EOF;
+usage: raw2flac [-dvsh] [-c configfile] file.raw...
+
+options:
+-d            : delete original after successful compression
+-v            : verbose operation
+-c configfile : SoepkipTNG configfile
+-h            : print this help text
+-s            : put output files in current directory
+EOF
 
 my %conf;
 read_configfile(\%conf, $opt_c);
@@ -108,6 +119,7 @@ sub convert_raw($) {
 	$rawfile =~ s!(^|/)(\./)+!$1!g;
 
 	(my $qfile = $rawfile) =~ s/(.*)\.\w+?$/$1.%/;
+	$qfile =~ s~^(.*/)?(.*)~abs_path($1 || ".") . "/$2"~e;
 	my $q = "SELECT title,artist.name,album.name,track" .
 		" FROM song,artist,album" .
 		" WHERE song.artist_id=artist.id AND song.album_id=album.id" .
@@ -132,7 +144,8 @@ sub convert_raw($) {
 
 	print "\nPacking file $rawfile\n" if $opt_v;
 	my $flacfile = $rawfile;
-	$flacfile =~ s/raw$/flac/i;
+	$flacfile =~ s/\.raw$/.flac/i;
+	if($opt_s) { $flacfile =~ s|.*/||; }
 	
 	if(-e $flacfile) {
 		warn "$flacfile: file exists\n";
