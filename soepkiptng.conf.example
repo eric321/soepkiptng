@@ -49,6 +49,10 @@ httpd_port=8888
 httpd_instances=5
 httpd_lifetime=100
 
+# http proxy for lyrics search
+#http_proxy=http://proxy.example.com:8000/
+#no_proxy=www.example.com
+
 artistlistcmd=artistlist
 #artistlistcmd=alllist
 

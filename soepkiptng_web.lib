@@ -738,11 +738,27 @@ EOF
 }
 
 
+sub getuseragent()
+{
+	my $ua = new LWP::UserAgent();
+	$ua->agent('Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.4b) Gecko/20030516 Mozilla Firebird/0.6');
+
+	if($conf{http_proxy}) {
+		$ua->proxy('http', $conf{http_proxy});
+	} else {
+		$ua->env_proxy();
+	}
+
+	if($conf{no_proxy}) {
+		$ua->no_proxy(split /[\s,]+/, $conf{http_proxy});
+	}	
+	return $ua;
+}
+
 sub getlyrics_purelyrics_com($) {
 	my ($info) = @_;
 
-	my $ua = new LWP::UserAgent;
-	$ua->agent('Mozilla/4.77 [en] (X11; I; Linux 2.4.19 i686)');
+	my $ua = getuseragent();
 
 	my $baseurl = "http://www.purelyrics.com/index.php";
 
@@ -754,22 +770,30 @@ sub getlyrics_purelyrics_com($) {
 	my $req = HTTP::Request->new(GET => $url);
 	my $res = $ua->request($req);
 
-	$res->code == 200
-		or return undef; #die sprintf "%d %s\n", $res->code, $res->message;
+	if($res->code != 200) {
+		$info->{errormsg} = sprintf "%d %s", $res->code, $res->message;
+		return undef;
+	}
 
-	$res->content =~ /^(\d+) matches.*<a href="([^"]+)">/m
-		or return undef; #die "no matches\n";
+	if($res->content !~ /^(\d+) matches.*<a href="([^"]+)">/m) {
+		$info->{errormsg} = "no matches";
+		return undef;
+	}
 
 	my ($num, $url) = ($1, $2);
-	$num == 1
-		or return undef; #die "Not a single match\n";
+	if($num != 1) {
+		$info->{errormsg} = "more than one match";
+		return undef;
+	}
 
 	$info->{description} = "http://www.purelyrics.com/$url";
 	$req = HTTP::Request->new(GET => $info->{description});
 	$res = $ua->request($req);
 
-	$res->code == 200
-		or return undef; #die sprintf "%d %s\n", $res->code, $res->message;
+	if($res->code != 200) {
+		$info->{errormsg} = sprintf "%d %s", $res->code, $res->message;
+		return undef;
+	}
 
 	foreach(split /\n+/, $res->content) {
 		s/^\s+|\s+$|\r+//g;
@@ -789,8 +813,7 @@ sub getlyrics_purelyrics_com($) {
 sub getlyrics_lyricsdomain_com($) {
 	my ($info) = @_;
 
-	my $ua = new LWP::UserAgent;
-	$ua->agent('Mozilla/4.77 [en] (X11; I; Linux 2.4.19 i686)');
+	my $ua = getuseragent();
 
 	my $url = "http://www.lyricsdomain.com/src.php?action=+++Search+++";
 	$url .= "&artist=" . encurl(lc $info->{artist});
@@ -799,22 +822,30 @@ sub getlyrics_lyricsdomain_com($) {
 	my $req = HTTP::Request->new(GET => $url);
 	my $res = $ua->request($req);
 
-	$res->code == 200
-		or return undef; #die sprintf "%d %s\n", $res->code, $res->message;
+	if($res->code != 200) {
+		$info->{errormsg} = sprintf "%d %s", $res->code, $res->message;
+		return undef;
+	}
 
-	$res->content =~ /Your query generated (\d+) matches.*lyricsdomain\.asp\?cat=(\d+)">/m
-		or return undef; #die "no matches\n";
+	if($res->content !~ /Your query generated (\d+) matches.*lyricsdomain\.asp\?cat=(\d+)">/m) {
+		$info->{errormsg} = "no matches";
+		return undef;
+	}
 
 	my ($num, $lyrnum) = ($1, $2);
-	$num == 1
-		or return undef; #die "Not a single match\n";
+	if($num != 1) {
+		$info->{errormsg} = "more than one match";
+		return undef;
+	}
 
 	$info->{description} = "http://www.lyricsdomain.com/lyrics/$lyrnum/";
 	$req = HTTP::Request->new(GET => $info->{description});
 	$res = $ua->request($req);
 
-	$res->code == 200
-		or return undef; #die sprintf "%d %s\n", $res->code, $res->message;
+	if($res->code != 200) {
+		$info->{errormsg} = sprintf "%d %s", $res->code, $res->message;
+		return undef;
+	}
 
 	foreach(split /\n+/, $res->content) {
 		s/^\s+|\s+$|\r+//g;
@@ -930,6 +961,7 @@ sub print_lyrics_page($) {
 		$downloaded = "<tr><td colspan=2><b>(";
 		if($f->{lyrics} eq "") {
 			$downloaded .= "No lyrics found";
+			$downloaded .= ": $f->{errormsg}" if $f->{errormsg};
 			delete $f->{description};
 		} else {
 			$downloaded .= sprintf "Downloaded lyrics from <a href=\"%s\">%s</a>",
