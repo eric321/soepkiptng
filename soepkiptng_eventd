@@ -1,0 +1,162 @@
+#!/usr/bin/perl
+
+############################################################################
+# soepkiptng (c) copyright 2000 Eric Lammerts <eric@lammerts.org>.
+# $Id$
+############################################################################
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License, version 2, as 
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# A copy of the GNU General Public License is available on the World Wide Web
+# at `http://www.gnu.org/copyleft/gpl.html'.  You can also obtain it by
+# writing to the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+# Boston, MA 02111-1307, USA.
+############################################################################
+
+use integer;
+use Cwd 'abs_path';
+use Errno;
+use Fcntl;
+use Getopt::Std;
+use IO::File;
+use IO::Socket;
+
+$opt_m = "$ENV{HOME}/.mplayer.fifo";
+
+# find program directory
+$_ = $0;
+while(-l) {
+	my $l = readlink or die "readlink $_: $!\n";
+	if($l =~ m|^/|) { $_ = $l; } else { s|[^/]*$|/$l|; }
+}
+m|(.*)/|;
+my $progdir = abs_path($1);
+
+require "$progdir/soepkiptng.lib";
+
+getopts('c:dFm:');
+
+read_configfile(\%conf, $opt_c);
+
+if(!$opt_d) {
+	if(!$opt_F) {
+		fork && exit;
+		setpgrp;
+	}
+	chdir "/";
+	open STDIN, "</dev/null";
+	open STDOUT, ">/dev/null";
+	open STDERR, ">&STDOUT";
+}
+
+sub EV_KEY () {0x1;}
+sub KEY_NEXTSONG () {163;}
+sub KEY_PLAYPAUSE () {164;}
+sub KEY_PREVIOUSSONG () {165;}
+
+sub handle_event($) {
+	my ($event) = @_;
+	($sec, $usec, $type, $code, $value) = unpack "llSSl", $event;
+
+	printf "%10d.%06d type=%d code=%d value%d\n", $sec, $usec, $type, $code, $value
+		if $opt_d;
+
+	next unless $type == EV_KEY && $value == 1;
+	printf "key %d\n", $code
+		if $opt_d;
+
+	if($code == KEY_NEXTSONG || $code == 90) {
+		print "kill_song();\n" if $opt_d;
+		kill_song();
+	} elsif($code == KEY_PLAYPAUSE || $code == 91) {
+		mplayer_cmd("pause") || pause_toggle();
+	} elsif($code == 116) {
+		mplayer_cmd("quit");
+	}
+}
+
+sub pause_toggle()
+{
+	local *F;
+
+	print "pause_toggle()\n" if $opt_d;
+	open F, $conf{statusfile} or do {
+		warn "$conf{statusfile}: $!\n";
+		return undef;
+	};
+	<F>; <F>; <F>; <F>;
+	chop(my $host = <F>);
+	close F;
+
+	my $s = IO::Socket::INET->new("$host:2222") or do {
+		warn "$host:2222: $!\n";
+		return undef;
+	};
+	$s->autoflush(1);
+	<$s>;	#discard greeting
+	$s->print("pausetoggle\n");
+	<$s>;
+	$s->close();
+}
+
+sub mplayer_cmd()
+{
+	local *M;
+	sysopen M, $opt_m, O_WRONLY|O_NONBLOCK
+		or return undef;
+	fcntl M, F_SETFL, 0;
+	print M "$_[0]\n";
+	close M;
+	return 1;
+}
+
+sub check_nodes()
+{
+	local *D;
+
+	if(opendir D, "/dev/input") {
+		foreach(grep { /^event\d+$/ } readdir D) {
+			next if $fd{$_};
+			if($fd{$_} = new IO::File "/dev/input/$_", "r") {
+				print "opened /dev/input/$_\n" if $opt_d;
+				$fd{$_}->blocking(0);
+				vec($rin,$fd{$_}->fileno(),1) = 1;
+			} else {
+				print "/dev/input/$_: $!\n" if $opt_d;
+				delete $fd{$_};
+			}
+		}
+		closedir D;
+	}
+}
+
+my $tcheck;
+for(;;) {
+	my $rout;
+
+	if(time > $tcheck) {
+		check_nodes();
+		$tcheck = time + 10;
+	}
+	if(select($rout=$rin, undef, undef, 10)) {
+		foreach(keys %fd) {
+			if(vec($rout, $fd{$_}->fileno(),1)) {
+				my $event;
+				my $r = $fd{$_}->sysread($event, 16);
+				print "read $r bytes from $_\n" if $opt_d;
+				if($r == 16) {
+					handle_event($event);
+				} elsif(! $!{EAGAIN} && ! $!{EINTR}) {
+					$fd{$_}->close();
+					delete $fd{$_};
+				}
+			}
+		}
+	}
+}
