@@ -123,9 +123,9 @@ sub print_az_table($$) {
 	$sth->execute;
 	while($_ = $sth->fetchrow_hashref) {
 		$playlistopts .= sprintf("   <option value=%d%s>%s\n", $_->{id},
-			$_->{id} == $$session{'playlist'}? " selected":"", $_->{name});
+			$_->{id} == $session->{playlist}? " selected":"", $_->{name});
 		$editlistopts .= sprintf("   <option value=%d%s>%s\n", $_->{id},
-			$_->{id} == $$session{'editlist'}? " selected":"", $_->{name});
+			$_->{id} == $session->{editlist}? " selected":"", $_->{name});
 	}
 
 	printf <<EOF, $self;
@@ -240,7 +240,7 @@ sub table_entry($;$$$$) {
   <td %s>&nbsp;%d:%02d&nbsp;</td>
   <td %s>&nbsp;%s&nbsp;</td>
   <td %s> %s</td>
-  %s
+  %s %s
  </tr>
 EOF
 		$td_left, $col1,
@@ -448,14 +448,14 @@ EOF
 	foreach(keys %$argsref) {
 		next if $_ eq "cmd";
 		next if /^add_/;
-		$baseurl .= "$_=" . encurl($$argsref{$_}) . "&";
+		$baseurl .= "$_=" . encurl($argsref->{$_}) . "&";
 	}
 
 	my %artistids;
 	foreach $id (@ids) {
 		$_ = $records{$id};
 		$artistids{$_->{arid}}++;
-		my $el = $$session{'editlist'};
+		my $el = $session->{editlist};
 		my $listch;
 		if($el) {
 			if($dbh->do("SELECT entity_id FROM list_contents" .
@@ -497,9 +497,9 @@ EOF
 		}
 		if($albumlist_length_threshold == 0 ||
 		   $al_len_tot < $albumlist_length_threshold ||
-		   $$argsref{'expanded_albumlist'}) {
+		   $argsref->{expanded_albumlist}) {
 			my $sep = "&nbsp; ";
-			if($$argsref{'expanded_albumlist'}) { $sep = "<br>\n"; }
+			if($argsref->{expanded_albumlist}) { $sep = "<br>\n"; }
 			printf "Albums:%s%s.\n", $sep, join(",$sep",
 				map { $al{$_} } @alids);
 		} else {
@@ -514,7 +514,7 @@ EOF
 			printf "Albums: %s", join(",&nbsp; ",
 				map { $al{$_} } @alids2);
 			
-			printf <<EOF, $baseurl, $$argsref{'cmd'}, $#alids - $#alids2;
+			printf <<EOF, $baseurl, $argsref->{cmd}, $#alids - $#alids2;
 &nbsp; <a id=a href="%scmd=%s&expanded_albumlist=1">[%d more...].</a>
 EOF
 		}
@@ -529,24 +529,24 @@ EOF
 	}
 
 	my %revsort;
-	$revsort{$$argsref{'sort'}} = "r_";
+	$revsort{$argsref->{sort}} = "r_";
 
 	my $baseurl = "$self?";
 	foreach(keys %$argsref) {
 		next if $_ eq 'sort';
-		$baseurl .= "$_=" . encurl($$argsref{$_}) . "&";
+		$baseurl .= "$_=" . encurl($argsref->{$_}) . "&";
 	}
 
 	my $res = $#ids + 1;
 	print <<EOF;
  <tr>
   <th $th_left>&nbsp;$addall&nbsp;</th>
-  <th $th_artist>&nbsp;<a href="${baseurl}sort=$revsort{'artist'}artist">Artist</a>&nbsp;</th>
-  <th $th_album>&nbsp;<a href="${baseurl}sort=$revsort{'album'}album">Album</a>&nbsp;</th>
-  <th $th_track>&nbsp;<a href="${baseurl}sort=$revsort{'track'}track">#</a>&nbsp;</th>
-  <th $th_song>&nbsp;<a href="${baseurl}sort=$revsort{'title'}title">Song</a>&nbsp;</th>
-  <th $th_time>&nbsp;<a href="${baseurl}sort=$revsort{'length'}length">Time</a>&nbsp;</th>
-  <th $th_enc>&nbsp;<a href="${baseurl}sort=$revsort{'encoding'}encoding">Encoding</a>&nbsp;</th>
+  <th $th_artist>&nbsp;<a href="${baseurl}sort=$revsort{artist}artist">Artist</a>&nbsp;</th>
+  <th $th_album>&nbsp;<a href="${baseurl}sort=$revsort{album}album">Album</a>&nbsp;</th>
+  <th $th_track>&nbsp;<a href="${baseurl}sort=$revsort{track}track">#</a>&nbsp;</th>
+  <th $th_song>&nbsp;<a href="${baseurl}sort=$revsort{title}title">Song</a>&nbsp;</th>
+  <th $th_time>&nbsp;<a href="${baseurl}sort=$revsort{length}length">Time</a>&nbsp;</th>
+  <th $th_enc>&nbsp;<a href="${baseurl}sort=$revsort{encoding}encoding">Encoding</a>&nbsp;</th>
   <th $th_edit>&nbsp;&nbsp;</th>
  </tr>
  <tr><td colspan=7></td></tr>
@@ -562,15 +562,15 @@ sub print_edit_page($$) {
 	my $sth = $dbh->prepare("SELECT artist.name as artist,album.name as album,song.*," .
 		" unix_timestamp(last_played) as lp," .
 		" unix_timestamp(time_added) as ta" .
-		" FROM song,artist,album WHERE song.id=$$argsref{'id'}" .
+		" FROM song,artist,album WHERE song.id=$argsref->{id}" .
 		" AND song.artist_id=artist.id AND song.album_id=album.id");
 	$sth->execute();
-	$_ = $sth->fetchrow_hashref() or die "id $$argsref{'id'} not found.\n";
+	$_ = $sth->fetchrow_hashref() or die "id $argsref->{id} not found.\n";
 
 	my $i = 0;
-	my @ids = ids_decode($$argsref{'ids'});
+	my @ids = ids_decode($argsref->{ids});
 	foreach(@ids) {
-		last if $_ == $$argsref{'id'};
+		last if $_ == $argsref->{id};
 		$i++;
 	}
 	my $prev = '&nbsp;&nbsp;&nbsp;&nbsp;';
@@ -587,7 +587,7 @@ sub print_edit_page($$) {
 		$next = "<input type=submit name=go_$ids[$#ids] value=Next disabled>";
 	}
 
-	my $f = $_->{'filename'};
+	my $f = $_->{filename};
 	$f =~ s|.*/||;
 	$f =~ s|\\|_|g;
 	$f = encurl($f);
@@ -662,7 +662,7 @@ function closethis() {
 </table>
 </form>
 EOF
-		$#ids + 1, $self, $$argsref{'id'}, $$argsref{'ids'},
+		$#ids + 1, $self, $argsref->{id}, $argsref->{ids},
 		$_->{present}? "Yes" : "No",
 		enchtml($_->{artist}),
 		enchtml($_->{title}),
@@ -674,7 +674,7 @@ EOF
 		$_->{lp}? scalar localtime($_->{lp}) : "-",
 		$_->{lp}? " <font size=-1><input type=submit name=action_clearlp value=Reset></font>":"",
 		"$self?cmd=alllist&sort=artist&filename=" . encurl($dir_), $dir,
-		"$self/$f?cmd=download&id=$$argsref{'id'}", $file,
+		"$self/$f?cmd=download&id=$argsref->{id}", $file,
 		((-s $_->{filename}) + 512) / 1024,
 		$prev, $next,
 		can_delete($_->{filename})? qq'<input type=submit ' .
@@ -751,7 +751,7 @@ EOF
 
 sub printredirexit($$$) {
 	my ($q, $cmd, $argsref) = @_;
-	$$argsref{'cmd'} = $cmd;
+	$argsref->{cmd} = $cmd;
  	print $q->redirect(construct_url($q->url(-full=>1), $argsref));
 	exit;
 }
@@ -763,11 +763,11 @@ sub add_search_args($$$@) {
 	# split on space and latin1 'no break space'
 	foreach $v (split /[\s\xa0]+/, $val) {
 		my $m = "LIKE";
-		$$list[0] .= " AND ";
-		if($v =~ s/^!//) { $$list[0] .= "NOT "; }
+		$list->[0] .= " AND ";
+		if($v =~ s/^!//) { $list->[0] .= "NOT "; }
 		if($v =~ /^\^/) { $m = "REGEXP"; }
 		else { $v = "%$v%"; };
-		$$list[0] .= "(" . join(" OR ", map { "$_ $m ?" } @fields) . ")";
+		$list->[0] .= "(" . join(" OR ", map { "$_ $m ?" } @fields) . ")";
 		foreach(@fields) { push @$list, $v; }
 	}
 	$$sort = $fields[0] unless $$sort;
@@ -778,7 +778,7 @@ sub delete_file($$) {
 
 	printhtmlhdr;
 	printhdr($allstyle);
-	$$argsref{'id'} =~ /(\d+)/;
+	$argsref->{id} =~ /(\d+)/;
 	my $id = $1;
 	my ($file) = $dbh->selectrow_array("SELECT filename FROM song WHERE id=$id")
 		or die "id $id not found in database\n";
@@ -822,7 +822,7 @@ tie %session, 'Apache::Session::MySQL', $cookie, {
 $r->header_out("Set-Cookie" => "SESSION_ID=$session{_session_id};");
 $r->no_cache(1);
 
-my $cmd = $args{'cmd'};
+my $cmd = $args{cmd};
 
 my $rt = $refreshtime;
 
@@ -844,15 +844,15 @@ if($cmd eq 'add') {
 		$user = ${"user_from_$1"} || ${"user_from_$host"} || $host;
 	}
 		
-	add_song($dbh, $user, ids_decode($args{'ids'}));
+	add_song($dbh, $user, ids_decode($args{ids}));
  	printredirexit($q, 'playlist', undef);
 }
 elsif($cmd eq 'del') {
-	del_song($dbh, ids_decode($args{'ids'}));
+	del_song($dbh, ids_decode($args{ids}));
  	printredirexit($q, 'playlist', undef);
 }
 elsif($cmd eq 'up') {
-	foreach(reverse split /,/, $args{'id'}) { move_song_to_top($dbh, $_); }
+	foreach(reverse split /,/, $args{id}) { move_song_to_top($dbh, $_); }
  	printredirexit($q, 'playlist', undef);
 }
 elsif($cmd eq 'kill') {
@@ -860,31 +860,31 @@ elsif($cmd eq 'kill') {
  	printredirexit($q, 'playlist', undef);
 }
 elsif($cmd eq 'setplaylist') {
-	$session{'playlist'} = $args{'list'};
+	$session{playlist} = $args{list};
  	printredirexit($q, 'playlist', undef);
 }
 elsif($cmd eq 'seteditlist') {
-	$session{'editlist'} = $args{'list'};
+	$session{editlist} = $args{list};
  	printredirexit($q, 'playlist', undef);
 }
 elsif($cmd eq 'addlist') {
-	$dbh->do("REPLACE INTO list SET name=?", undef, $args{'listname'})
+	$dbh->do("REPLACE INTO list SET name=?", undef, $args{listname})
 		or die;
  	printredirexit($q, 'lists', \%args);
 }
 elsif($cmd eq 'addtolist') {
 	$dbh->do("REPLACE INTO list_contents SET type=?, list_id=?, entity_id=?", undef,
-		$args{'add_type'}, $args{'add_list'}, $args{'add_id'})
+		$args{add_type}, $args{add_list}, $args{add_id})
 		or die;
-	delete $args{'add_type'};
-	delete $args{'add_list'};
-	delete $args{'add_id'};
+	delete $args{add_type};
+	delete $args{add_list};
+	delete $args{add_id};
  	printredirexit($q, 'alllist', \%args);
 }
 elsif($cmd eq 'dellist') {
-	$dbh->do("DELETE FROM list WHERE id=?", undef, $args{'id'})
+	$dbh->do("DELETE FROM list WHERE id=?", undef, $args{id})
 		or die;
-	$dbh->do("DELETE FROM list_contents WHERE list_id=?", undef, $args{'id'})
+	$dbh->do("DELETE FROM list_contents WHERE list_id=?", undef, $args{id})
 		or die;
  	printredirexit($q, 'lists', \%args);
 }
@@ -895,31 +895,31 @@ elsif($cmd eq 'shuffle') {
 elsif($cmd eq 'changefile') {
 	my $newid = 0;
 
-	if($args{'action_delete'}) {
+	if($args{action_delete}) {
 		delete_file($dbh, \%args);
 		exit;
 	}
-	if($args{'action_download'}) {
+	if($args{action_download}) {
 		download_file($dbh, \%args, $q);
 		exit;
 	}
-	if($args{'action_clearlp'}) {
+	if($args{action_clearlp}) {
 		$dbh->do("UPDATE song SET last_played=from_unixtime(0) WHERE id=?",
-			undef, $args{'id'})
+			undef, $args{id})
 			or die "can't do sql command: " . $dbh->errstr;
 	}
-	elsif($args{'action_clear_artist'})   { $args{'artist'} = '' }
-	elsif($args{'action_clear_title'}) { $args{'title'} = '' }
-	elsif($args{'action_clear_album'}) { $args{'album'} = '' }
-	elsif($args{'action_fix_artist'}) { $args{'artist'} = cleanup_name($args{'artist'}); }
-	elsif($args{'action_fix_title'}) { $args{'title'} = cleanup_name($args{'title'}); }
-	elsif($args{'action_fix_album'}) { $args{'album'} = cleanup_name($args{'album'}); }
-	elsif($args{'action_swap'}) {
-		($args{'title'}, $args{'artist'}) = ($args{'artist'}, $args{'title'});
+	elsif($args{action_clear_artist})   { $args{artist} = '' }
+	elsif($args{action_clear_title}) { $args{title} = '' }
+	elsif($args{action_clear_album}) { $args{album} = '' }
+	elsif($args{action_fix_artist}) { $args{artist} = cleanup_name($args{artist}); }
+	elsif($args{action_fix_title}) { $args{title} = cleanup_name($args{title}); }
+	elsif($args{action_fix_album}) { $args{album} = cleanup_name($args{album}); }
+	elsif($args{action_swap}) {
+		($args{title}, $args{artist}) = ($args{artist}, $args{title});
 	}
-	elsif($args{'action_swapa'}) {
-		$args{'artist'} =~ s/(.*)\s*,\s*(.*)/$2 $1/
-			or $args{'artist'} =~ s/(.*?)\s+(.*)/$2 $1/
+	elsif($args{action_swapa}) {
+		$args{artist} =~ s/(.*)\s*,\s*(.*)/$2 $1/
+			or $args{artist} =~ s/(.*?)\s+(.*)/$2 $1/
 	} else {
 		foreach(keys %args) {
 			if(/^go_(\d+)$/) {
@@ -928,23 +928,23 @@ elsif($cmd eq 'changefile') {
 			}
 		}
 	}
-	my $arid = get_id($dbh, "artist", $args{'artist'}) or die;
-	my $alid = get_id($dbh, "album", $args{'album'}) or die;
+	my $arid = get_id($dbh, "artist", $args{artist}) or die;
+	my $alid = get_id($dbh, "album", $args{album}) or die;
 
 	$dbh->do("UPDATE song SET artist_id=?, title=?, album_id=?, track=? WHERE id=?",
-		undef, $arid, $args{'title'}, $alid, $args{'track'}, $args{'id'})
+		undef, $arid, $args{title}, $alid, $args{track}, $args{id})
 		or die "can't do sql command: " . $dbh->errstr;
 
 	my ($all_field, $all_field_arg);
-	if($args{'action_all_artist'}) {
+	if($args{action_all_artist}) {
 		$all_field = 'artist';
 		$all_field_arg = $arid;
-	} elsif($args{'action_all_album'}) {
+	} elsif($args{action_all_album}) {
 		$all_field = 'album';
 		$all_field_arg = $alid;
 	}
 	if($all_field) {
-		my @ids = ids_decode($args{'ids'});
+		my @ids = ids_decode($args{ids});
 
 		while(@ids) {
 			my @ids2 = splice(@ids, 0, 50);
@@ -955,20 +955,20 @@ elsif($cmd eq 'changefile') {
 		}
 	}
 
-	if($newid) { $args{'id'} = $newid; }
+	if($newid) { $args{id} = $newid; }
  	printredirexit($q, 'edit', \%args);
 }
 
 if($cmd eq 'search') {
-	if(!$args{'stype'}) {
+	if(!$args{stype}) {
 		printhtmlhdr;
 		printhdr($allstyle);
 		print "Error: No search type specified.\n";
 		printftr;
 		exit;
 	}
-	$args{$args{'stype'}} = $args{'sval'};
-	if($args{'stype'} eq 'artist') {
+	$args{$args{stype}} = $args{sval};
+	if($args{stype} eq 'artist') {
 		$cmd = 'artistlist';
 	} else {
 		$cmd = 'alllist';
@@ -984,7 +984,7 @@ elsif($cmd eq 'playlist') {
 	printhtmlhdr;
 	my $s = $q->url(-full=>1);
 	print <<EOF;
-<META HTTP-EQUIV="Refresh" CONTENT="$rt;URL=$s?cmd=playlist&s=$args{'s'}">
+<META HTTP-EQUIV="Refresh" CONTENT="$rt;URL=$s?cmd=playlist&s=$args{s}">
 EOF
 	printhdr($plstyle);
 	print_az_table($dbh, \%session);
@@ -1002,13 +1002,13 @@ elsif($cmd eq 'artistlist') {
 		 " UCASE(album.name) as sort" .
 		 " FROM song,artist,album WHERE present");
 
-	if($args{'artist'} =~ /\S/) {
-		add_search_args(\@q, \$s, $args{'artist'}, 'artist.name');
-		$cap = "Search Artist: $args{'artist'}";
+	if($args{artist} =~ /\S/) {
+		add_search_args(\@q, \$s, $args{artist}, 'artist.name');
+		$cap = "Search Artist: $args{artist}";
 	}
-	if($args{'album'} =~ /\S/) {
-		add_search_args(\@q, \$s, $args{'album'}, 'album.name');
-		$cap = "Search Album: $args{'album'}";
+	if($args{album} =~ /\S/) {
+		add_search_args(\@q, \$s, $args{album}, 'album.name');
+		$cap = "Search Album: $args{album}";
 	}
 
 	if($#q > 0) {
@@ -1029,41 +1029,41 @@ elsif($cmd eq 'alllist') {
 		 " FROM song,artist,album" .
 		 " WHERE present");
 	my $cap;
-	my $s = $args{'sort'};
+	my $s = $args{sort};
 	$s =~ s/\W//g;
-	if($args{'any'} =~ /\S/) {
-		add_search_args(\@q, \$s, $args{'any'},
+	if($args{any} =~ /\S/) {
+		add_search_args(\@q, \$s, $args{any},
 			'artist.name', 'title', 'album.name');
-		$cap = "Search any: $args{'any'}";
+		$cap = "Search any: $args{any}";
 	}
-	if($args{'artist'} =~ /\S/) {
-		add_search_args(\@q, \$s, $args{'artist'}, 'artist.name');
-		$cap = "Search Artist: $args{'artist'}";
+	if($args{artist} =~ /\S/) {
+		add_search_args(\@q, \$s, $args{artist}, 'artist.name');
+		$cap = "Search Artist: $args{artist}";
 	}
-	if($args{'album'} =~ /\S/) {
-		add_search_args(\@q, \$s, $args{'album'}, 'album.name');
-		$cap = "Search Album: $args{'album'}";
+	if($args{album} =~ /\S/) {
+		add_search_args(\@q, \$s, $args{album}, 'album.name');
+		$cap = "Search Album: $args{album}";
 	}
-	if($args{'title'} =~ /\S/) {
-		add_search_args(\@q, \$s, $args{'title'}, 'title');
-		$cap = "Search Title: $args{'title'}";
+	if($args{title} =~ /\S/) {
+		add_search_args(\@q, \$s, $args{title}, 'title');
+		$cap = "Search Title: $args{title}";
 	}
-	if($args{'filename'} =~ /\S/) {
-		add_search_args(\@q, \$s, $args{'filename'}, 'filename');
-		$cap = "Search Filename: $args{'filename'}";
+	if($args{filename} =~ /\S/) {
+		add_search_args(\@q, \$s, $args{filename}, 'filename');
+		$cap = "Search Filename: $args{filename}";
 	}
 
-	if($args{'artist_id'}) {
+	if($args{artist_id}) {
 		$q[0] .= " AND song.artist_id=?";
-		push @q, $args{'artist_id'};
+		push @q, $args{artist_id};
 		$s = "artist.name" unless $s;
-		$cap = sprintf($args{'cap'}, $args{'artist_id'});
+		$cap = sprintf($args{cap}, $args{artist_id});
 	}
-	if($args{'album_id'}) {
+	if($args{album_id}) {
 		$q[0] .= " AND song.album_id=?";
-		push @q, $args{'album_id'};
+		push @q, $args{album_id};
 		$s = "album.name" unless $s;
-		$cap = sprintf($args{'cap'}, $args{'album_id'});
+		$cap = sprintf($args{cap}, $args{album_id});
 	}
 
 	if($s) {
@@ -1080,7 +1080,7 @@ elsif($cmd eq 'sql') {
 	printhtmlhdr;
 	printhdr($allstyle);
 
-	printf <<EOF, enchtml($args{'sql'});
+	printf <<EOF, enchtml($args{sql});
 SQL-query:<br>
 <form action="$self" method=get>
   <input type=hidden name=cap value="SQL-query">
@@ -1091,21 +1091,21 @@ SELECT ... FROM ... WHERE ... AND <input type=text size=80 name=sql value="%s">
 </form>
 EOF
 
-	if($args{'sql'}) {
+	if($args{sql}) {
 		print_alllist_table($dbh, \%args, \%session, "User SQL-query",
 			"SELECT artist.name as artist,album.name as album,song.*," .
 			"song.artist_id as arid, song.album_id as alid" .
 			" FROM song,artist,album WHERE present " .
 			" AND song.artist_id=artist.id AND song.album_id=album.id AND " .
-			$args{'sql'});
+			$args{sql});
 	}
 	printftr;
 }
 elsif($cmd eq 'recent') {
 	printhtmlhdr;
 	printhdr($allstyle);
-	my $maxage = $args{'days'} * 86400;
-	my $s = $args{'sort'} || "r_time_added";
+	my $maxage = $args{days} * 86400;
+	my $s = $args{sort} || "r_time_added";
 	$s =~ s/\W//g;
 	$s =~ s/^r_(.*)/\1 DESC/;
 	print_alllist_table($dbh, \%args, \%session, "Most recent $n songs",
@@ -1151,7 +1151,7 @@ elsif($cmd eq 'edit') {
 	printftr;
 }
 elsif($cmd eq 'download') {
-	$args{'id'} =~ /(\d+)/;
+	$args{id} =~ /(\d+)/;
 	my $id = $1;
 	my ($file) = $dbh->selectrow_array("SELECT filename FROM song WHERE id=$id")
 		or die "id $id not found in database\n";
