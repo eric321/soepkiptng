@@ -18,11 +18,12 @@ Features:
 ---------
 * supports mp3 (+id3/id3v2), wav, lpac, flac & Ogg-Vorbis audio files.
 * supports playing Shoutcast streams.
+* supports playing directly from CD (using cdparanoia)
 * player uses real-time scheduling and memory locking for uninterrupted music
   playback; zero silence period between two songs (very nice for consecutive
   songs of a live cd).
 * song information is kept in a MySQL database, but can be written back
-  to mp3s (using ID3v2) too.
+  to mp3 files (using ID3v2) or flac files (using vorbis comments) too.
 * plays from request queue; plays random songs if nothing is on the request
   queue
 * versatile web interface:
@@ -143,11 +144,12 @@ TODO:
 * playlists/genres
 * ripping integration
 * multiple soepkiptng daemons & request queues
-* remote playing using esd (Enlightenment Sound Daemon) or similar program
+* remote playing using esd (Enlightenment Sound Daemon), http streaming or
+  similar stuff
 * message input that will be played using a text-to-speech program
 * user-level access control (limit access to database editing / song requests)
 * improve docs
-* make music format more modular; maybe support xmms plugins
+* make music format more modular; maybe support xmms plugins (well, they suck)
 * silence before random songs
 * fade-out/fade-in in pause/resume
 * cleanup Xing VBR info detection (it's a quick hack now)
@@ -155,10 +157,11 @@ TODO:
 * Ogg-Vorbis embedded songinfo support (reading/writing)
 * cleanup resampling & mono->stereo conversion
 * smooth transition between 2 songs (interpolation)
-* id3/id3v2 support for flac
 * synchronize update of statusfile with cdrplay
 * CD-DA support: don't re-enter info into db every time you click "CD-DA"
   maybe use persistent info and cddb disc_id?
+* clean up soepkiptng_write_id3v2, add Ogg-Vorbis support (use vorbiscomment),
+  rename it to some better name
 
 $Id$
 
