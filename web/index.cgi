@@ -550,29 +550,30 @@ elsif($cmd eq 'alllist') {
 	$args{'f'} =~ /^\w*$/ or die;
 	my $q = "SELECT * FROM songs WHERE present";
 	my @qa;
+	my $cap;
 	if($args{'artist'}) {
 		$q .= " AND artist REGEXP ?";
-		my $v = $args{'artist'};
-		$v =~ s/[^-^\$ _0-9a-z]+/.*/ig;
-		push @qa, $v;
+		push @qa, $args{'artist'};
+		$qa[$#qa] =~ s/[^-^\$_0-9a-z]+/.*/ig;
 		$order = "artist";
+		$cap = sprintf($args{'cap'}, $args{'artist'});
 	}
 	if($args{'album'}) {
 		$q .= " AND album REGEXP ?";
-		my $v = $args{'album'};
-		$v =~ s/[^-^\$ _0-9a-z]+/.*/ig;
-		push @qa, $v;
+		push @qa, $args{'album'};
+		$qa[$#qa] =~ s/[^-^\$_0-9a-z]+/.*/ig;
 		$order = "album";
+		$cap = sprintf($args{'cap'}, $args{'album'});
 	}
 	if($args{'title'}) {
 		$q .= " AND title REGEXP ?";
-		my $v =  $args{'title'};
-		$v =~ s/[^-^\$ _0-9a-z]+/.*/ig;
-		push @qa, $v;
+		push @qa, $args{'title'};
+		$qa[$#qa] =~ s/[^-^\$_0-9a-z]+/.*/ig;
 		$order = "title";
+		$cap = sprintf($args{'cap'}, $args{'title'});
 	}
 	$q .= " ORDER BY $order,album,track,artist,title";
-	print_alllist_table($dbh, $args{'cap'}, $q, @qa);
+	print_alllist_table($dbh, $cap, $q, @qa);
 	printftr;
 }
 elsif($cmd eq 'recent') {
