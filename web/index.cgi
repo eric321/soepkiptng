@@ -517,6 +517,9 @@ sub print_edit_page($$) {
 function verifydelete() {
    return confirm("Are you sure you want to delete this file?");
 }
+function verifyall() {
+   return confirm("Are you sure you want to apply this value to the entire list?");
+}
 function closethis() {
    window.close(self);
 }
@@ -533,9 +536,27 @@ function closethis() {
     <input type=hidden name=ids value="%s">
   <tr><td>%s</td></tr>
   <tr><td>Present:</td><td>%s</td></tr>
-  <tr><td>Artist:</td><td><input type=text size=60 name=artist value="%s"><input type=submit name=action_clear_artist value="Clear"><input type=submit name=action_fix_artist value="Fix"><input type=submit name=action_swapa value="Swap First/Last"></td></tr>
-  <tr><td>Title:</td> <td><input type=text size=60 name=title  value="%s"><input type=submit name=action_clear_title value="Clear"><input type=submit name=action_fix_title value="Fix"><input type=submit name=action_swap value="Swap Artist/Title"></td></tr>
-  <tr><td>Album:</td> <td><input type=text size=60 name=album  value="%s"><input type=submit name=action_clear_album value="Clear"><input type=submit name=action_fix_album value="Fix"></td></tr>
+  <tr><td>Artist:</td><td>
+     <input type=text size=60 name=artist value="%s">
+     <input type=submit name=action_clear_artist value="Clear">
+     <input type=submit name=action_fix_artist value="Fix">
+     <input type=submit name=action_swapa value="Swap First/Last">
+     <input type=submit name=action_all_artist value="Set Entire List"
+      onClick="return verifyall();">
+  </td></tr>
+  <tr><td>Title:</td> <td>
+     <input type=text size=60 name=title  value="%s">
+     <input type=submit name=action_clear_title value="Clear">
+     <input type=submit name=action_fix_title value="Fix">
+     <input type=submit name=action_swap value="Swap Artist/Title">
+  </td></tr>
+  <tr><td>Album:</td> <td>
+     <input type=text size=60 name=album  value="%s">
+     <input type=submit name=action_clear_album value="Clear">
+     <input type=submit name=action_fix_album value="Fix">
+     <input type=submit name=action_all_album value="Set Entire List"
+      onClick="return verifyall();">
+  </td></tr>
   <tr><td>Track:</td> <td><input type=text size=3 name=track  value="%s" maxlength=2></td></tr>
   <tr><td>Time:</td>  <td>%d:%02d</td></tr>
   <tr><td>Encoding:</td>        <td>%s</td></tr>
@@ -804,9 +825,9 @@ elsif($cmd eq 'changefile') {
 	elsif($args{'action_clear_artist'})   { $args{'artist'} = '' }
 	elsif($args{'action_clear_title'}) { $args{'title'} = '' }
 	elsif($args{'action_clear_album'}) { $args{'album'} = '' }
-	elsif($args{'action_fix_artist'}) { $args{'artist'} = cleanup_name(lc($args{'artist'})); }
-	elsif($args{'action_fix_title'}) { $args{'title'} = cleanup_name(lc($args{'title'})); }
-	elsif($args{'action_fix_album'}) { $args{'album'} = cleanup_name(lc($args{'album'})); }
+	elsif($args{'action_fix_artist'}) { $args{'artist'} = cleanup_name($args{'artist'}); }
+	elsif($args{'action_fix_title'}) { $args{'title'} = cleanup_name($args{'title'}); }
+	elsif($args{'action_fix_album'}) { $args{'album'} = cleanup_name($args{'album'}); }
 	elsif($args{'action_swap'}) {
 		($args{'title'}, $args{'artist'}) = ($args{'artist'}, $args{'title'});
 	}
@@ -827,6 +848,27 @@ elsif($cmd eq 'changefile') {
 	$dbh->do("UPDATE song SET artist_id=?, title=?, album_id=?, track=? WHERE id=?",
 		undef, $arid, $args{'title'}, $alid, $args{'track'}, $args{'id'})
 		or die "can't do sql command: " . $dbh->errstr;
+
+	my ($all_field, $all_field_arg);
+	if($args{'action_all_artist'}) {
+		$all_field = 'artist';
+		$all_field_arg = $arid;
+	} elsif($args{'action_all_album'}) {
+		$all_field = 'album';
+		$all_field_arg = $alid;
+	}
+	if($all_field) {
+		my @ids = ids_decode($args{'ids'});
+
+		while(@ids) {
+			my @ids2 = splice(@ids, 0, 4);
+			$dbh->do("UPDATE song SET ${all_field}_id=? WHERE " .
+				join(" OR ", map { "id=$_" }  @ids2),
+				undef, $all_field_arg, @ids2)
+				or die "can't do sql command: " . $dbh->errstr;
+		}
+	}
+
 	if($newid) { $args{'id'} = $newid; }
  	printredirexit($q, 'edit', \%args);
 }

@@ -244,6 +244,9 @@ sub construct_url($@) {
 
 sub cleanup_name {
 	my ($s) = @_;
+	$s =~ s/\.mp3$//;
+	$s =~ s/([a-zA-Z])([A-Z])/\1 \2/g;
+	$s = lc($s);
 	$s =~ s/_/ /g;
 	$s =~ s/^\s+|\s+$//g;
 	$s =~ s/([^'\w\xc0-\xff]|^)(\w)/\1\U\2/g;
