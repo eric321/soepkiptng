@@ -29,7 +29,7 @@ use Cwd;
 use DBI;
 use MP3::Tag;
 
-use vars qw/$opt_r/;
+use vars qw/$opt_r $opt_h/;
 
 %latin1_to_ascii = (
 	192 => "A", 193 => "A", 194 => "A", 195 => "A", 196 => "A", 197 => "A",
@@ -57,7 +57,28 @@ sub simplify($) {
 	return lc($a);
 };
 
-getopts('r');
+getopts('rh');
+
+($prog = $0) =~ s|.*/||;
+if($opt_h || !@ARGV) {
+	print <<EOF;
+Usage: $prog [-r] mp3files...
+
+$prog reads Artist/Title/Album/Track info from the SoepkipTNG
+database and writes it to the specified files using ID3v2 (unless the files
+already have ID3v2 tags containing the exact same info). All ID3v1 tags are
+removed.
+
+If the -r switch is used, the files are renamed to a standard format:
+track-artist-title.mp3 (if there is a track number) or artist-title.mp3
+(if there is no track number).
+* track consists of two or more digits.
+* artist may contain only alphanumeric characters and underscores.
+* title may contain only alphanumeric characters, underscores and dashes.
+
+EOF
+	exit;
+}
 
 $cwd = cwd;
 
@@ -125,9 +146,10 @@ foreach $f (@ARGV) {
 		warn "$f: $!\n";
 		next;
 	};
-	seek F, -128, 2;
-	read F, $buf, 128;
-	if($buf =~ /^TAG/) {
+	for(;;) {
+		seek F, -128, 2;
+		read F, $buf, 128;
+		$buf =~ /^TAG/ or last;
 		warn "$f: removed ID3 tag\n";
 		seek F, -128, 2;
 		truncate F, tell F or warn "truncate $f: $!\n";
@@ -164,6 +186,9 @@ foreach $f (@ARGV) {
 				warn "$f: $newname exists, skipping\n";
 			} else {
 				if(rename $fullf, $newname) {
+					$dbh->do("DELETE FROM song WHERE filename=?",
+						undef, $newname)
+						or die "can't do sql command: " . $dbh->errstr;
 					$dbh->do("UPDATE song SET filename=? WHERE id=?",
 						undef, $newname, $id)
 						or die "can't do sql command: " . $dbh->errstr;
