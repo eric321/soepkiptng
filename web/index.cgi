@@ -538,7 +538,7 @@ function closethis() {
   <tr><td>Time:</td>  <td>%d:%02d</td></tr>
   <tr><td>Encoding:</td>        <td>%s</td></tr>
   <tr><td>Time Added:</td><td>%s</td></tr>
-  <tr><td>Last played time:</td><td>%s</td></tr>
+  <tr><td>Last played time:</td><td>%s%s</td></tr>
   <tr><td>Directory:</td>       <td>%s</td></tr>
   <tr><td>Filename:</td>        <td>%s</td></tr>
   <tr><td>Size:</td>            <td>%dk</td></tr>
@@ -571,6 +571,7 @@ EOF
 		$_->{encoding},
 		$_->{ta}? scalar localtime($_->{ta}) : "-",
 		$_->{lp}? scalar localtime($_->{lp}) : "-",
+		$_->{lp}? " <font size=-1><input type=submit name=action_clearlp value=Reset></font>":"",
 		$1, $2,
 		((-s $_->{filename}) + 512) / 1024;
 
@@ -793,7 +794,12 @@ elsif($cmd eq 'shuffle') {
 elsif($cmd eq 'changefile') {
 	my $newid = 0;
 
-	if($args{'action_clear_artist'})   { $args{'artist'} = '' }
+	if($args{'action_clearlp'}) {
+		$dbh->do("UPDATE song SET last_played=from_unixtime(0) WHERE id=?",
+			undef, $args{'id'})
+			or die "can't do sql command: " . $dbh->errstr;
+	}
+	elsif($args{'action_clear_artist'})   { $args{'artist'} = '' }
 	elsif($args{'action_clear_title'}) { $args{'title'} = '' }
 	elsif($args{'action_clear_album'}) { $args{'album'} = '' }
 	elsif($args{'action_fix_artist'}) { $args{'artist'} = cleanup_name(lc($args{'artist'})); }
