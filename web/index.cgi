@@ -263,7 +263,7 @@ sub print_playlist_table($$) {
 	$query =  "SELECT title,artist.name as artist,album.name as album,song.id as id,track,length,encoding," .
 		"song.artist_id as arid,song.album_id as alid" .
 		" FROM song,queue,artist,album" .
-		" WHERE song.artist_id=artist.id AND song.album_id=album.id" .
+		" WHERE present AND song.artist_id=artist.id AND song.album_id=album.id" .
 		" AND song.id = queue.song_id ORDER BY queue.song_order";
 	$sth = $dbh->prepare($query);
 	$rv = $sth->execute;
@@ -472,7 +472,9 @@ sub print_edit_page($$) {
 	my ($dbh, $id) = @_;
 
 	my $sth = $dbh->prepare("SELECT artist.name as artist,album.name as album,song.*," .
-		" unix_timestamp(last_played) as lp FROM song,artist,album WHERE song.id=$id" .
+		" unix_timestamp(last_played) as lp," .
+		" unix_timestamp(time_added) as ta" .
+		" FROM song,artist,album WHERE song.id=$id" .
 		" AND song.artist_id=artist.id AND song.album_id=album.id");
 	$sth->execute();
 	$_ = $sth->fetchrow_hashref() or die "id $id not found.\n";
@@ -481,6 +483,7 @@ sub print_edit_page($$) {
 	my $t = $_->{track} || "";
 	my $size = sprintf("%dk", ((-s $_->{filename}) + 512) / 1024);
 	my $lp = $_->{lp}? localtime($_->{lp}) : "-";
+	my $ta = $_->{ta}? localtime($_->{ta}) : "-";
 	my $pr = $_->{present}? "Yes" : "No";
 	(my $dir = $_->{filename}) =~ s|/*[^/]+$||;
 	(my $file = $_->{filename}) =~ s|.*/||;
@@ -508,6 +511,7 @@ function verifydelete() {
   <tr><td>Track:</td> <td><input type=text size=3 name=track  value="$t" maxlength=2></td></tr>
   <tr><td>Time:</td>  <td>$l</td></tr>
   <tr><td>Encoding:</td>        <td>$_->{encoding}</td></tr>
+  <tr><td>Time Added:</td><td>$ta</td></tr>
   <tr><td>Last played time:</td><td>$lp</td></tr>
   <tr><td>Directory:</td>       <td>$dir</td></tr>
   <tr><td>Filename:</td>        <td>$file</td></tr>
