@@ -358,14 +358,20 @@ sub print_artistlist_table($$$@) {
 	}
 
 
+	print "<center id=hdr>$caption</center>\n";
+	if(!%artistname) {
+		print "No search results.\n";
+		return;
+	}
+
 	printf <<EOF;
-<center id=hdr>$caption</center>
 <table border=0 cellspacing=0>
  <tr>
   <th>&nbsp;Artist&nbsp;</th>
   <th>&nbsp;Albums&nbsp;</th>
  </tr>
 EOF
+	my $res = 0;
 	foreach(sort {lc($artistname{$a}) cmp lc($artistname{$b})} keys %artistname) {
 		$al{$_} =~ s/,&nbsp;$//;
 		printf <<EOF, encurl("Artist: $artistname{$_}"), $artistname{$_}, $al{$_};
@@ -374,8 +380,10 @@ EOF
  <td>&nbsp;%s&nbsp;</td>
 </tr>
 EOF
+		$res++;
 	}
 	print <<EOF;
+<tr><td colspan=2>$res search results.</td></tr>
 </table>
 EOF
 }
@@ -448,7 +456,7 @@ EOF
 
 	if(@ids) {
 	$addall = sprintf <<EOF, ids_encode(@ids);
-   <a id=a href="$self?cmd=add&ids=%s" target=tframe>$addalltext</a>
+<a id=a href="$self?cmd=add&ids=%s" target=tframe>$addalltext</a>
 EOF
 	}
 
