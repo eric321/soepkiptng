@@ -195,7 +195,10 @@ sub start_play($) {
 		my $ext = lc($1);
 
 		if($filename =~ /^http:/) {
-			exec "mpg123", "-s", "-q", "-r44100", "--stereo", $filename;
+			# append trailing slash if necessary
+			# (mpg123 gets confused if it's missing)
+			$filename =~ m|http:/+[^/]+/| or $filename .= "/";
+			exec "mpg123", "-s", "-pnone", "-q", "-r44100", "--stereo", $filename;
 		} elsif($ext eq "mp2" || $ext eq "mp3") {
 			exec "mp3toraw", $filename;
 		} elsif($ext eq "ogg") {
