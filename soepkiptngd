@@ -121,8 +121,8 @@ $SIG{'CHLD'} = sub {
 warn "********** starting (pid=$$) **********\n";
 
 $SIG{'TERM'} = sub {
-	warn "got SIGTERM, killing -$pid and $cdrplaypid, exiting\n";
 	unlink $statusfile;
+	warn "got SIGTERM, kill -KILL -$pid and $cdrplaypid, exiting\n";
 	kill 'KILL', -$pid, $cdrplaypid;
 	exit;
 };
@@ -270,11 +270,13 @@ EOF
 			# kill player
 			$p = $pid;
 			if($p) {
+				warn "kill -KILL -$p\n";
 				kill 'KILL', -$p
 					or warn "kill -KILL -$p: $!\n";
 			}
 
 			# tell cdrplay to flush its buffers
+			warn "kill -USR1 $cdrplaypid\n";
 			kill 'SIGUSR1', $cdrplaypid
 				or warn "kill -USR1 $cdrplaypid: $!\n";
 
