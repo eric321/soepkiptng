@@ -1,7 +1,0 @@
-#!/bin/sh 
-
-while :; do
-	mpg123 -s -y -pnone -q -r44100 --stereo "$1"
-	sleep 1
-	echo "`date`" restarting mpg123. >&2
-done
