@@ -885,6 +885,14 @@ sub print_lyrics_page($$) {
 #	if($rows == 1) { $rows = 30; }
 	$rows = 30;
 
+	my $source = $_->{source};
+	$source =~ s/\s.*//;
+	if($source =~ /^(ftp|http):/) {
+		$source = "<a href=\"$source\" target=_blank>Open page</a>";
+	} else {
+		$source = "";
+	}
+
 	printf <<EOF,
 <form action="%s" method=get>
  <input type=hidden name=id value="%d">
@@ -897,10 +905,10 @@ sub print_lyrics_page($$) {
  <tr><td>Artist:</td><td>%s</td></tr> 
  <tr><td>Title:</td><td>%s</td></tr> 
  <tr><td>Album:</td><td>%s</td></tr> 
- <tr><td>Track:</td><td>%d</td></tr> 
+ <tr><td>Track:</td><td>%s</td></tr> 
  <tr>
   <td>Source:</td>
-  <td><input type=text name=source size=74 value="%s"><a href="%s" target=_blank>Open page</a></td>
+  <td><input type=text name=source size=74 value="%s">%s</td>
  </tr>
  <tr><td colspan=2><textarea name=lyrics cols=80 rows=%d>%s</textarea></td></tr>
  <tr>
@@ -919,8 +927,8 @@ sub print_lyrics_page($$) {
 EOF
 		$self, $argsref->{id}, $argsref->{ids}, $downloaded,
 		enchtml($_->{artist}), enchtml($_->{title}),
-		enchtml($_->{album}), $_->{track},
-		enchtml($_->{source}), encurl($_->{source}),
+		enchtml($_->{album}), $_->{track}? $_->{track} : "",
+		enchtml($_->{source}), $source,
 		$rows, enchtml($_->{lyrics}),
 		$prev, $next;
 }
