@@ -473,6 +473,7 @@ EOF
 			" count(*) as c, song.artist_id as arid, song.album_id as alid " .
 			" FROM song,artist,album WHERE present AND song.artist_id = ?".
 			" AND song.artist_id=artist.id AND song.album_id=album.id".
+			" AND filename LIKE '/%'".
 			" GROUP BY album ORDER BY album";
 		my $sth = $dbh->prepare($query);
 		my $rv = $sth->execute(keys %artistids);
@@ -695,7 +696,7 @@ sub print_shoutcast_page($$) {
 		my $arid = get_id($dbh, "artist", '') or die;
 		my $alid = get_id($dbh, "album", '') or die;
 		$dbh->do("REPLACE INTO song SET title=?, filename=?, album_id=?, " .
-			"artist_id=?, present=1, encoding=\"Shoutcast\", track=0, " .
+			"artist_id=?, present=1, encoding='Shoutcast', track=0, " .
 			"length=0, time_added=NULL", undef,
 			$args->{name}, $args->{url}, $alid, $arid) or die;
 	}
@@ -713,7 +714,7 @@ EOF
 		$th_left, $self, $th_artist, $th_album;
 
 	my $sth = $dbh->prepare("SELECT id,filename,title FROM song WHERE " .
-		"filename LIKE \"http:%\" ORDER BY title");
+		"filename LIKE 'http:%' ORDER BY title");
 	$sth->execute;
 
 	my ($editurl, $editname);
@@ -1085,7 +1086,7 @@ elsif($cmd eq 'artistlist') {
 	my @q = ("SELECT DISTINCT artist.name as artist, album.name as album," .
 		 " count(*) as c, song.artist_id as arid, song.album_id as alid," .
 		 " UCASE(album.name) as sort" .
-		 " FROM song,artist,album WHERE present");
+		 " FROM song,artist,album WHERE present AND filename LIKE '/%'");
 
 	if($args{artist} =~ /\S/) {
 		add_search_args(\@q, \$s, $args{artist}, 'artist.name');
