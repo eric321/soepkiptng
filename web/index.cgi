@@ -1154,7 +1154,8 @@ elsif($cmd eq 'alllist') {
 	if($s) {
 		$s =~ s/^r_(.*)/\1 DESC/;
 		$q[0] .= " AND song.artist_id=artist.id AND song.album_id=album.id ".
-		      " ORDER BY $s,album.name,track,artist.name,title";
+			" AND filename LIKE '/%' ".
+			" ORDER BY $s,album.name,track,artist.name,title";
 		print_alllist_table($dbh, \%args, \%session, $cap, @q);
 	} else {
 		print "Error: No search terms specified.\n";
@@ -1196,7 +1197,7 @@ elsif($cmd eq 'recent') {
 	print_alllist_table($dbh, \%args, \%session, "Most recent $n songs",
 		"SELECT artist.name as artist,album.name as album,song.*," .
 		"song.artist_id as arid, song.album_id as alid" .
-		" FROM song,artist,album WHERE present " .
+		" FROM song,artist,album WHERE present AND filename LIKE '/%'" .
 		" AND song.artist_id=artist.id AND song.album_id=album.id" .
 		" AND unix_timestamp(now()) - unix_timestamp(time_added) < $maxage" .
 		" ORDER BY $s,album.name,track,artist.name,title LIMIT 500");
