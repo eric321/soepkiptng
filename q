@@ -24,9 +24,15 @@
 $configfile = "/etc/soepkiptng.conf";
 
 use integer;
-use Term::ReadKey;
 use DBI;
 use Socket;
+
+eval "use Term::ReadKey;";
+if($@) {
+	$screen_width = 80;
+} else {
+	($screen_width) = GetTerminalSize();
+}
 
 open F, $configfile or die "$configfile: $!\n";
 while(<F>) {
@@ -95,11 +101,10 @@ $| = 1;
 $dbh = DBI->connect("DBI:$db_type:$db_name:$db_host", $db_user, $db_pass)
 	or die "can't connect to database";
 
-($wchar, $hchar, $wpixels, $hpixels) = GetTerminalSize();
-$wchar = 80 if $wchar == 0; # just in case
-$w_a = $wchar * 25 / 100;
-$w_t = $wchar * 45 / 100;
-$w_al = $wchar - $w_a - $w_t - 7;
+$screen_width = 80 if $screen_width == 0; # just in case
+$w_a = $screen_width * 25 / 100;
+$w_t = $screen_width * 45 / 100;
+$w_al = $screen_width - $w_a - $w_t - 7;
 $w_a > 0 && $w_t > 0 && $w_al > 0 or die "screen size too small.\n";
 
 if(@ARGV) {

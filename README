@@ -1,19 +1,81 @@
 
-Soepkip The Next Generation
----------------------------
-by Eric Lammerts <eric@lammerts.org>
-$Id$
+                  Soepkip The Next Generation
+     ----------------------------------------------------
+             by Eric Lammerts <eric@lammerts.org>
 
-Install procedure:
-* sudo mysql -u root < soepkiptng_create.my
+
+Features:
+---------
+* mp3, wav, lpac & Ogg-Vorbis support.
+* (My)SQL database with songs.
+* nice web interface
+* commandline interface
+
+Requirements:
+-------------
+* perl5
+* mysql 3.22
+  (3.23 recommended; 3.22 cannot do case-insensitive regexps)
+* apache + mod_perl
+* perl modules:
+  - MP3-Info (optional)
+  - CGI
+  - DBI
+  - ApacheDBI
+  - Msql-Mysql-modules
+  - TermReadKey (optional)
+* program that can play raw pcm data from standard input
+  (for instance splay, bplay or cdrplay)
+* programs that decode the various sound formats to standard output:
+  - mp3: for instance mpg123 or splay
+  - wav: for instance splay
+  - lpac:
+    LPAC is a lossless compression algorithm. You can get a linux binary
+    from http://www-ft.ee.tu-berlin.de/~liebchen/lpac.html.
+    (no source available AFAIK) 
+  - Ogg-Vorbis:
+    Unfortunately ogg123 cannot play to standard output.
+    Get the libraries from http://www.xiph.org and compile
+    the supplied ogg2raw.c:
+    gcc -O2 -Wall -s -o ogg2raw ogg2raw.c /usr/lib/vorbisfile.a -lm -lvorbis
+    Put ogg2raw somewhere in your $PATH. Ogg2raw is also used to get
+    file info for the database.
+
+On a Debian system,
+   apt-get install libapache-dbi-perl libdbd-mysql-perl \
+      mysql-server libmpeg-mp3info-perl libterm-readkey-perl \
+      splay libvorbis-dev
+will install all the necessary software.
+
+
+Installation:
+-------------
+* create the database:
+  sudo mysql -u root < soepkiptng_create.my
 * cp soepkiptng.conf /etc
   (or edit all scripts if you want a different location)
 * edit /etc/soepkiptng.conf
+* Add something like the following to /etc/apache/httpd.conf:
+
+  Alias /soepkiptng /usr/local/soepkiptng/web
+
+  <Directory /usr/local/soepkiptng/web>
+    Options +ExecCGI
+    DirectoryIndex index.cgi
+    AddHandler perl-script .cgi
+    PerlHandler Apache::Registry
+    PerlRequire /usr/local/soepkiptng/modperl.pl
+    PerlSendHeader On
+  </Directory>
+
 * run soepkiptng_update to add songs to the database
 * run soepkiptngd
 
-TODO
-----
+
+TODO:
+-----
+* improve docs
+* make music format more modular; maybe support xmms plugins
 * silence before random songs
 * fade-out/fade-in in pause/resume
 * release of /dev/dsp during pause
@@ -25,4 +87,5 @@ TODO
 * synchronize update of statusfile with cdrplay
 
 
+$Id$
 
