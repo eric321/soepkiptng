@@ -400,14 +400,14 @@ sub extract_artist_title {
 		warn "ANDRE-NOTATIE: $f\n";
 	}
 
-	$p = '' if -e "$p/.noalbum";
+	my $pp = $p;
+	$pp = '' if -e "$p/.noalbum";
 	$f =~ s/\s*$//;
 	$f =~ s/^\s*(\d\d)(\D)/\2/i;	# nummer weg, 2 digits
 	$f =~ s/^\s*(\d{0,3})[^a-z0-9]+//i;	# nummer weg, 1-3 digits met separator
 	$f =~ s/^\W+//;
 	$tr = $1;
 
-	my $pp = $p;
 	$pp =~ s|/+$||;
 	$pp =~ s|.*/||;
 
