@@ -50,6 +50,11 @@ read_configfile(\%conf, $opt_c);
 
 $mixerchannel = 'pcm';
 
+sub numtext($)
+{
+	return join(" ", split(//, $_[0]));
+}
+
 sub open_db() {
 	# (re)open database connection if necessary
 	if(!$dbh) {
@@ -145,6 +150,7 @@ sub setvol($;$) {
 	if($volume < 0) { $volume = 0; }
 
 	warn "setting volume, volume=$volume, muted=$muted\r\n";
+	say("volume " . numtext($volume)) if $debug;
 	Audio::Mixer::set_cval($mixerchannel, ($muted? 0 : $volume));
 }
 
@@ -152,6 +158,7 @@ sub killsong() {
 	my $iaddr   = inet_aton($killhost) or return;
 	$paddr   = sockaddr_in($killport, $iaddr);
 
+	say("kill song") if $debug;
 	socket SOCK, PF_INET, SOCK_STREAM, getprotobyname('tcp')
 		or return;
 	connect SOCK, $paddr
@@ -188,6 +195,7 @@ sub playlist() {
 	my $reboots = 0;
 	my $killdelete = 0;
 	foreach(@keypadvalues) {
+		say("dot command $_") if $debug;
 		if($_ == 0) {
 		}
 		elsif($_ == 1) {
@@ -203,6 +211,9 @@ sub playlist() {
 			playlist_addall_artist();
 		}
 		elsif($_ == 5) {
+			$debug++;
+			if($debug == 3) { $debug = 0; }
+			say("deebug $debug");
 		}
 		elsif($_ == 6) {
 			$killdelete++;
@@ -211,6 +222,7 @@ sub playlist() {
 			$reboots++;
 		}
 		elsif($_ == 8) {
+			sayit();
 		}
 		elsif($_ == 9) {
 			playlist_clear();
@@ -218,30 +230,95 @@ sub playlist() {
 	}
 	digit_reset();
 	if($reboots >= 3) {
+		say("reboot") if $debug;
 		system "sync";
 		system "reboot -nf";
 	}
 	if($killdelete >= 3) {
+		say("kill and delete") if $debug;
 		killdelete();
 	}
+}
+
+sub say($) {
+	my ($t) = @_;
+
+	my $wavfile = "/tmp/soepkiptngd_mobile_say_$t.wav";
+	warn "say wavfile=$wavfile\r\n";
+
+	my $tmpfile = "/tmp/soepkiptngd_mobile_say.wav";
+	unlink $tmpfile;
+	symlink $wavfile, $tmpfile;
+
+	# pause _before_ doing text2speech (to speed it up)
+	kill 'USR2', $cdrplaypid;	# pause: make it close /dev/dsp
+
+	if(! -f $wavfile) {
+		local *F;
+		open F, "| text2wave -scale 5 -F 44100 -o $tmpfile";
+		print F "$t\n";
+		close F;
+	}
+
+	warn "wavfile size=" . (-s $wavfile) . " bytes.\r\n";
+
+	system "wav2raw $tmpfile | cdrplay -w";
+	kill 'HUP', $cdrplaypid;	# resume
+	unlink $tmpfile;
+}
+
+sub sayit() {
+	my $now = get_nowplaying($dbh) or do {
+		warn "no now!\r\n";
+		return;
+	};
+
+	my $t = "$now->{artist} ... $now->{title}";
+	$t =~ s|/| |g;
+	say($t);
 }
 	
 sub request() {
 	open_db() or return;
+
+	say("request song " . numtext($keypadvalue))
+		if $debug;
 	add_song($dbh, '', $keypadvalue);
 	warn "adding song: $keypadvalue.\r\n";
 	digit_reset();
 }
 
 sub request_album() {
+	my $alid = $keypadvalue;
 	open_db() or return;
 
 	my $songsref = $dbh->selectcol_arrayref(
 		"SELECT song.id FROM song,album WHERE present AND filename LIKE '/%' AND ".
-		"song.album_id=album.id AND album.id=$keypadvalue ".
+		"song.album_id=album.id AND album.id=$alid ".
 		"ORDER BY track");
 	digit_reset();
 	warn "adding songs: " . join(",", @{$songsref}) . ".\r\n";
+	return if @{$songsref} == 0;
+	say("request album " . numtext($alid) .
+	    " found " . numtext(scalar @{$songsref}))
+		if $debug;
+	add_song($dbh, '', @{$songsref});
+	warn "adding song: @{$songsref}.\r\n";
+}
+
+sub request_artist() {
+	my $arid = $keypadvalue;
+	open_db() or return;
+
+	my $songsref = $dbh->selectcol_arrayref(
+		"SELECT song.id FROM song,artist WHERE present AND filename LIKE '/%' AND ".
+		"song.artist_id=artist.id AND artist.id=$arid ".
+		"ORDER BY track");
+	digit_reset();
+	warn "adding songs: " . join(",", @{$songsref}) . ".\r\n";
+	say("request artist " . numtext($arid) .
+	    " found " . numtext(scalar @{$songsref}))
+		if $debug;
 	return if @{$songsref} == 0;
 	add_song($dbh, '', @{$songsref});
 	warn "adding song: @{$songsref}.\r\n";
@@ -332,9 +409,6 @@ sub wait_for_soepkiptng() {
 $mypath = "/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin:$progdir:$progdir/bin";
 warn "path=$mypath\r\n";
 
-warn "unlink\r\n";
-unlink $conf{statusfile};
-
 warn "volume\r\n";
 setvol($conf{volume_init}, 1) if $conf{volume_init};
 
@@ -357,6 +431,9 @@ if($$ == 1) {
 		warn "hostname -F /etc/hostname\r\n";
 		system "hostname -F /etc/hostname";
 
+		warn "unlink $conf{statusfile}\r\n";
+		unlink $conf{statusfile};
+
 		warn "starting soepkiptngd\r\n";
 		exec 'sched', 'soepkiptngd', '-d';
 		warn "sched: $!\r\n";
@@ -368,7 +445,14 @@ if($$ == 1) {
 
 	warn "wait_for_soepkiptng\r\n";
 	wait_for_soepkiptng;
+} else {
+	local *ST;
+	if(open ST, $conf{statusfile}) {
+		chop((undef, undef, undef, $cdrplaypid, $killhost, $killport) = <ST>);
+		close ST;
+	}
 }
+warn "killhost=$killhost:$killport\n";
 
 warn "funkeyd\r\n";
 funkeyd;
