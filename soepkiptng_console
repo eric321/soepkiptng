@@ -65,7 +65,10 @@ for(;;) {
 		printf "     %-74s\r", songinfo();
 	}
 	/time=(\d+)/;
-	printf "\r%2d:%02d\r", $1 / 60, $1 % 60;
+	if($1 != $t) {
+		$t = $1;
+		printf "\r%2d:%02d\r", $t / 60, $t % 60;
+	}
 
 	# wait for 0.1s or until a key is pressed
 	while($_ = lc ReadKey 0.1) {
