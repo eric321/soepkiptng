@@ -670,7 +670,7 @@ function closethis() {
   <tr><td valign=bottom colspan=2 nowrap>Last played:</td><td valign=bottom>%s%s
      <input type=submit name=action_setlpall value=\"Set entire list to current time\"></td></tr>
   <tr><td valign=bottom colspan=2 nowrap>Random pref.:</td><td valign=bottom><input type=text size=8 name=random_pref value="%d" maxlength=8>
-     <input type=submit name=action_setrpall value=\"Set entire list.\"></td></tr>
+     <input type=submit name=action_setrpall value="Set entire list." onClick="return verifyall();"></td></tr>
   <tr><td valign=bottom colspan=2>Directory:</td>       <td valign=bottom><a href="%s">%s</a></td></tr>
   <tr><td valign=bottom colspan=2>Filename:</td>        <td valign=bottom><a href="%s">%s</a></td></tr>
   <tr><td valign=bottom colspan=2>Size:</td>            <td valign=bottom>%dk</td></tr>
