@@ -93,6 +93,7 @@ if(@ARGV) {
 			use Cwd;
 			
 			my $cddb = new FreeDB;
+			$cddb->proxy_value($ENV{http_proxy});
 			$cddb->cdrom_device($dev);
 			my $success = 0;
 			
