@@ -317,7 +317,7 @@ sub get_wav_params($;$) {
 
 sub read_eric_files() {
 	foreach $file (split /\s+/, $description_files) {
-		open ALB, $file or die;
+		open ALB, $file or die "$file: $!\n";
 		while(<ALB>) {
 			/\S/ or do { $artist = $album = $dirname = ""; next; };
 			/^artist\s*(.*?)\s*$/ and do { $artist = $1; next; };
