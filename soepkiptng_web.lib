@@ -452,9 +452,11 @@ EOF
 		or die "can't do sql command: " . $dbh->errstr;
 	my @ids;
 	my %records;
+	my $totaltime;
 	while($_ = $sth->fetchrow_hashref) {
 		$records{$_->{id}} = $_;
 		push @ids, $_->{id};
+		$totaltime += $_->{length};
 	}
 	if(!@ids) {
 		print "No search results.\n";
@@ -520,6 +522,9 @@ EOF
 	my $res = $#ids + 1;
 	my $limitstr = '';
 	$limitstr = " <b>(limit of $limit reached)</b>" if $limit && $res == $limit;
+	$totaltime = sprintf "%d:%02d:%02d", $totaltime / 3600,
+		$totaltime / 60 % 60, $totaltime % 60;
+	$totaltime =~ s/^0:0?//;
 	print <<EOF;
  <tr>
   <th $conf{th_left}>&nbsp;$addall&nbsp;</th>
@@ -533,7 +538,7 @@ EOF
  </tr>
  <tr><td colspan=7></td></tr>
 $output
-<tr><td colspan=8>$res search results$limitstr.</td></tr>
+<tr><td colspan=8>$res search results$limitstr, total time: $totaltime</td></tr>
 </table>
 EOF
 }
