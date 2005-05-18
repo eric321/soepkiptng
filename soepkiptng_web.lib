@@ -563,9 +563,7 @@ EOF
 	my $ids;
 	if(@ids) {
 		$ids = ids_encode(@ids);
-		$addall = <<EOF;
-<a id=a href="$req->{self}?cmd=add&ids=$ids" target=tframe>$conf{addalltext}</a>
-EOF
+		$addall = qq|<a id=a href="$req->{self}?cmd=add&ids=$ids" target=tframe>$conf{addalltext}</a>|
 	}
 
 	my %revsort;
@@ -724,6 +722,7 @@ function closethis() {
   <tr><td valign=bottom colspan=2>Directory:</td>       <td valign=bottom>%s</td></tr>
   <tr><td valign=bottom colspan=2>Filename:</td>        <td valign=bottom>%s</td></tr>
   <tr><td valign=bottom colspan=2>Size:</td>            <td valign=bottom>%dk</td></tr>
+  <tr><td valign=bottom colspan=2>Volume correction:</td><td valign=bottom>%s</td></tr>
   <tr>
    <td valign=bottom align=center>%s</td>
    <td valign=bottom align=center>%s</td>
@@ -754,6 +753,7 @@ EOF
 			"<input type=submit name=action_clearlpall value=\"Reset entire list\"></font>":"",
 		$_->{random_pref}, $dir, $file,
 		((-s $_->{filename}) + 512) / 1024,
+		defined($_->{gain})? sprintf("%.3fdB", $_->{gain} / 1000) : "-",
 		$prev, $next,
 		(can_delete($_->{filename})? qq'<input type=submit ' .
 		  qq'name=action_delete value="Delete Song" ' .
@@ -1368,7 +1368,7 @@ sub handle_request($) {
 	my %args;
 	foreach($req->{cgiquery}->param) {
 		$args{$_} = $req->{cgiquery}->param($_);
-		warn "\$args{$_} = $args{$_}\n";
+#		warn "\$args{$_} = $args{$_}\n";
 	}
 	$req->{args} = \%args;
 #	if($args{sid}) {
