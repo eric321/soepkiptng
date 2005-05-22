@@ -46,8 +46,20 @@ require "$progdir/soepkiptng_web.lib";
 ############################################################################
 # SUBROUTINES
 
-sub printhttphdr(;$) {
-	print $cgiquery->header("text/html; charset=ISO-8859-15");
+sub printhttphdr($) {
+	my ($cookies) = @_;
+
+	my $cookie;
+	if($cookies) {
+		$cookie = $cgiquery->cookie(
+			-name=>'sv',
+			-value=>$cookies,
+			-path=>'/',
+			-expires=>'+365d');
+	}
+	print $cgiquery->header(
+		-type=>"text/html; charset=ISO-8859-15",
+		-cookie=>$cookie);
 }
 
 sub require_write_access() {
@@ -90,5 +102,7 @@ $req->{dbh} = $dbh;
 $req->{cgiquery} = $cgiquery;
 $req->{self} = $cgiquery->script_name();
 $req->{host} = $cgiquery->remote_host();
+my %cookies = $cgiquery->cookie('sv');
+$req->{cookies} = \%cookies;
 
 handle_request($req);
