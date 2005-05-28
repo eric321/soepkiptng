@@ -62,6 +62,7 @@ sub read_eric_files();
 sub extract_artist_title($\%);
 sub is_nfs($);
 
+$opt_R = 10000;
 getopts('Cfredqvhc:LR:p');
 $force = 1 if $opt_f;
 $| = 1;
@@ -279,7 +280,7 @@ EOF
 
 	$dbh->do($q, undef, $filename{$_}, $artistid_cache{$info{artist}},
 		$info{title}, $albumid_cache{$info{album}}, $info{track} || 0,
-		$_, $info{len}, $info{encoding}, $opt_R || 10000,
+		$_, $info{len}, $info{encoding}, $opt_R,
 		$last_played{$_} || ($opt_L? time : 0),
 		$time_added{$_} || time)
                 or die "can't do sql command: " . $dbh->errstr . "\n";
