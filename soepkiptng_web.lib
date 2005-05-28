@@ -73,12 +73,25 @@ sub ids_decode($) {
 sub print_frame($) {
 	my ($req) = @_;
 
-	my $bframe_args = exists $req->{args}->{sval}?
-		sprintf("cmd=search&stype=%s&sval=%s",
+	my $bframe_args = "cmd=empty";
+	if(exists $req->{args}->{sval}) {
+		$bframe_args = sprintf("cmd=search&stype=%s&sval=%s",
 			encurl($req->{args}->{stype}) || "any",
-			encurl($req->{args}->{sval})) :
-		"cmd=empty";
-
+			encurl($req->{args}->{sval}));
+	} elsif(my $np = get_nowplaying($req->{dbh})) {
+		$bframe_args = "cmd=alllist&";
+		my $cap;
+		if($np->{arid}) {
+			$bframe_args .= '&artist_id=' . $np->{arid};
+			$cap = "Artist: $np->{artist}";
+			if($np->{alid}) { $cap .= "; "; }
+		}
+		if($np->{alid}) {
+			$bframe_args .= '&album_id=' . $np->{alid};
+			$cap .= "Album: $np->{album}";
+		}
+		$bframe_args .= "&cap=" . encurl($cap);
+	}
 	print <<EOF;
 <html>
 <head>
@@ -1092,7 +1105,6 @@ sub print_shoutcast_page($) {
 
 	$req->{args}->{name} =~ s/^\s+|\s+$//g;
 	$req->{args}->{url} =~ s/^\s+|\s+$//g;
-	$req->{args}->{url} =~ s|^/*(?!http:)(.)|http://$1|;
 	foreach(keys %{$req->{args}}) {
 		if(/^delete_(\d+)$/) {
 			require_write_access;
@@ -1131,7 +1143,7 @@ EOF
 		$conf{th_left}, $req->{self}, $conf{th_artist}, $conf{th_album};
 
 	my $sth = $req->{dbh}->prepare("SELECT id,filename,title FROM song WHERE " .
-		"filename LIKE 'http:%' ORDER BY title");
+		"filename REGEXP '^[a-z]+:' ORDER BY title");
 	$sth->execute
 		or die "can't do sql command: " . $req->{dbh}->errstr;
 
