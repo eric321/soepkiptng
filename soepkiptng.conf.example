@@ -78,6 +78,10 @@ edit_target=_blank
 # global enable/disable of "Delete Song" button
 allow_delete=0
 
+# automatically try to download lyrics from www.purelyrics.com and
+# www.lyricsdomain.com (can be slow)
+auto_download_lyrics=0
+
 # perl func that determines if write access to database should be allowed
 # FIXME
 #write_access_func=

@@ -990,7 +990,7 @@ sub print_lyrics_page($) {
 	my $f = $sth->fetchrow_hashref() or die "id $req->{args}->{id} not found.\n";
 
 	my $downloaded;
-	if($f->{lyrics} eq "" && !$req->{args}->{action_clear}) {
+	if($conf{auto_download_lyrics} && $f->{lyrics} eq "" && !$req->{args}->{action_clear}) {
 		getlyrics($f);
 		if($f->{lyrics} eq "") { getlyrics($f, 2); }
 		if($f->{lyrics} eq "") { getlyrics($f, 3); }
