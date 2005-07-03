@@ -25,6 +25,7 @@ CREATE TABLE song (
   present tinyint NOT NULL,
   random_pref INT DEFAULT 10000 NOT NULL,
   uuid char(36),
+  gain mediumint,
   PRIMARY KEY (id),
   KEY artist_id (artist_id),
   KEY title (title(4)),

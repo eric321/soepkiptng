@@ -37,6 +37,7 @@ sub clip($) {
 		 /(\d+) clipped sample/ and $clipped = $1;
 	}
 	close M;
+	$? and die "madplay failed, skipping file\n";
 	warn "trying $gain -> $clipped\n";
 	return $clipped;
 }
@@ -48,11 +49,14 @@ sub doit($) {
 	my $gain_min = -1;
 	my $gain_max = 1;
 	while(clip($gain_max) == 0) {
-		if($gain_max > 18) {
-			return;
-		}
 		$gain_min = $gain_max;
 		$gain_max *= 2;
+		if($gain_max > 35) {
+			$dbh->do("UPDATE song SET gain=18000 WHERE filename=?", undef, $f);
+			return;
+		} elsif($gain_max > 18) {
+			$gain_max = 18;
+		}
 	}
 	if($gain_min < 0) {
 		while(clip($gain_min) > 0) {
@@ -99,7 +103,9 @@ $| = 1;
 $dbh = DBI->connect("DBI:$conf{db_type}:$conf{db_name}:$conf{db_host}",
 	$conf{db_user}, $conf{db_pass}) or die "can't connect to database";
 
-$sth = $dbh->prepare("SELECT filename FROM song WHERE present AND gain IS NULL AND filename LIKE '/%'");
+$sth = $dbh->prepare(
+	"SELECT filename FROM song WHERE present AND gain IS NULL AND filename LIKE '/%'" .
+	"AND (encoding LIKE 'mp3%' OR encoding LIKE 'mpeg%layer%')");
 $sth->execute();
 while($_ = $sth->fetchrow_hashref) {
 	-e $_->{filename} or next;
@@ -107,6 +113,7 @@ while($_ = $sth->fetchrow_hashref) {
 		warn "$_->{filename}: $!\n";
 		next;
 	};
-	doit($_->{filename});
+	eval { doit($_->{filename}); };
+	warn $@ if $@;
 	close STDIN;
 }
