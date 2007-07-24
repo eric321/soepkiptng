@@ -1,6 +1,6 @@
 ############################################################################
 # soepkiptng (c) copyright 2000 Eric Lammerts <eric@lammerts.org>.
-# $Id$
+# $Id: soepkiptng.lib,v 1.49 2005/07/03 04:33:03 eric Exp $
 ############################################################################
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License, version 2, as 
@@ -19,6 +19,9 @@
 
 use IO::Socket;
 use Socket;
+use POSIX qw(locale_h);
+
+setlocale(LC_CTYPE, "en_US.ISO-8859-1");
 
 my @globalconfigfiles = ($ENV{SOEPKIPTNG_CONFIGFILE},
    "$ENV{HOME}/.soepkiptng.conf", "/etc/soepkiptng.conf");
@@ -170,12 +173,14 @@ sub read_configfile($;@) {
 	255 => 'ij',		# small y, dieresis or umlaut mark
 );
 
-sub string_to_filename($) {
-	my ($a) = @_;
+sub string_to_filename($;$) {
+	my ($a, $lang) = @_;
+
+	my $ampr = $lang eq "dut"? "en" : "and";
 
 	$a =~ s/-/_/g;
 	$a =~ s/[\[(](.*)/-$1/;
-	$a =~ s/[ _]?&[_ ]?/_and_/g;
+	$a =~ s/[ _]?&[_ ]?/_${ampr}_/g;
 	$a =~ s/([\x80-\xff])/lc($latin9_to_ascii{ord($1)}) || $1/ge;
 	$a =~ s/[^-A-Za-z0-9]+/_/g;
 	$a =~ s/_?-_?/-/g;
@@ -211,7 +216,8 @@ sub del_song($$@) {
 sub add_song_nolock($$$$@) {
 	my ($db, $tbl, $order, $user, @ids) = @_;
 
-	my $firstid = shift @ids or return;
+	@ids or return;
+	my $firstid = shift @ids;
 	my $q = "INSERT INTO $tbl (song_order, song_id, user) " .
 		"VALUES ($order, $firstid, \"$user\")";
 	foreach(@ids) {
@@ -476,6 +482,7 @@ sub construct_url($@) {
 }
 
 sub cleanup_name {
+	use locale;
 	my ($s) = @_;
 	$s =~ s/\.mp3\s*$//i;
 	$s =~ s/%([0-9a-f][0-9a-f])/chr(hex($1))/eig;
