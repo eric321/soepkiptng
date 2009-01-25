@@ -176,7 +176,7 @@ sub read_configfile($;@) {
 sub string_to_filename($;$) {
 	my ($a, $lang) = @_;
 
-	my $ampr = $lang eq "dut"? "en" : "and";
+	my $ampr = $lang eq "dut"? "en" : $lang eq "fre"? "et" : $lang eq "ger"? "und" : "and";
 
 	$a =~ s/-/_/g;
 	$a =~ s/[\[(](.*)/-$1/;

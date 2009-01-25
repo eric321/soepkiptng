@@ -20,7 +20,7 @@
 
 my $progdir;
 BEGIN {
-	use Cwd 'abs_path';
+	use Cwd qw'abs_path cwd';
 
 	# find program directory
 	$_ = $0;
@@ -42,7 +42,7 @@ use Getopt::Std;
 use MP3::Tag;
 #use Data::Dumper;
 
-use vars qw/$opt_r $opt_h $opt_q $opt_t $opt_l $opt_c $opt_f $opt_1 $opt_s/;
+use vars qw/$opt_r $opt_h $opt_q $opt_t $opt_l $opt_c $opt_f $opt_1 $opt_s $opt_A $opt_R $opt_S/;
 
 sub do_dir($$) {
 	my ($dbh, $f) = @_;
@@ -50,8 +50,10 @@ sub do_dir($$) {
 	$opt_r or return;
 	$f = abs_path($f);
 	$f =~ s|/+$||;
-	my $q = "SELECT filename,artist.name as artist,album.name as album" .
-		" FROM song,artist,album" .
+	my $q = "SELECT filename,artist.name as artist,album.name as album, language FROM song" .
+		" LEFT JOIN artist ON artist.id=song.artist_id" .
+		" LEFT JOIN album ON album.id=song.album_id" .
+		" LEFT JOIN lyrics ON lyrics.id=song.id" .
 		" WHERE song.artist_id=artist.id AND song.album_id=album.id" .
 		" AND present AND filename LIKE ?";
 	my $sth = $dbh->prepare($q);
@@ -60,29 +62,39 @@ sub do_dir($$) {
 
 	my $album;
 	my $artist;
+	my %language;
 	my @files;
 	while($_ = $sth->fetchrow_hashref) {
 		(my $dir = $_->{filename}) =~ s|^(.*)/[^/]+$|\1|;
 		next unless $dir eq $f;		# skip files in subdirs
-		if($artist && $artist ne $_->{artist}) {
-			warn "$f: No common artist name found.\n";
-			return;
+		if(!$opt_A) {
+			if($artist && $artist ne $_->{artist}) {
+				warn "$f: No common artist name found.\n";
+				return;
+			}
+			$artist = $_->{artist};
 		}
-		$artist = $_->{artist};
 		if($album && $album ne $_->{album}) {
 			warn "$f: No common album name found.\n";
 			return;
 		}
+		$language{$_->{language}} = 1;
 		$album = $_->{album};
 		push @files, $_->{filename};
 	}
+	my ($language) = (keys %language == 1)? keys %language : ();
 	$sth->finish;
 	my $newname = "";
-	$newname .= string_to_filename($artist) . "-" if $artist;
-	$newname .= string_to_filename($album);
+	$newname .= string_to_filename($artist, $language);
+	$newname .= "-" if $artist && $album;
+	$newname .= string_to_filename($album, $language);
 	$newname =~ s/--+/-/;
-	$f =~ m|^(.*)/|;
-	$newname = "$1/$newname";
+	if($opt_S) {
+		$newname = cwd . "/$newname";
+	} else {
+		$f =~ m|^(.*)/|;
+		$newname = "$1/$newname";
+	}
 
 	if($f eq $newname) {
 	} elsif(-e $newname) {
@@ -169,8 +181,14 @@ sub do_file($$) {
 		my $ext = "";
 		$f =~ /.*\.(.*?)$/ and $ext = lc($1);
 		my $newname = "";
+		if($opt_D) {
+			$newname .= string_to_filename($ar, $language) . "-" if $ar;
+			$newname .= string_to_filename($al);
+			mkdir $newname;
+			$newname .= "/";
+		}
 		$newname .= sprintf "%02d-", $tr if $tr;
-		$newname .= string_to_filename($ar) . "-" if $ar;
+		$newname .= string_to_filename($ar, $language) . "-" if $ar;
 		$newname .= string_to_filename($ti);
 		$newname =~ s/--+/-/;
 		if($opt_l && length("$newname.$ext") > $opt_l) {
@@ -414,7 +432,7 @@ sub do_flac($$$$$$$) {
 }
 
 
-getopts('rfhqtl:c:1s');
+getopts('rfhqtl:c:1sADS');
 
 read_configfile(\%conf, $opt_c);
 
