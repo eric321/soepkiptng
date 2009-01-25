@@ -33,6 +33,7 @@ use IO::Handle;
 use IO::Socket;
 use POSIX ":sys_wait_h";
 use Sys::Hostname;
+no warnings 'qw';
 
 use integer;
 use strict;
@@ -149,10 +150,10 @@ sub get_song_queued() {
 		my $sth = $dbh->prepare(
 			"SELECT queue.song_id as id,queue.song_order as song_order,".
 			"       queue.user as user, artist.name as artist,".
-			"       album.name as album, song.*".
-			" FROM queue,song,artist,album" .
-			" WHERE queue.song_id=song.id AND artist.id=song.artist_id" .
-			"       AND album.id=song.album_id" .
+			"       album.name as album, song.* FROM queue".
+			" LEFT JOIN song ON song.id=queue.song_id" .
+			" LEFT JOIN artist ON artist.id=song.artist_id" .
+			" LEFT JOIN album ON album.id=song.album_id" .
 			" ORDER BY queue.song_order" .
 			" LIMIT 1"
 		);
@@ -180,18 +181,28 @@ sub get_song_random_recent() {
 	no integer;
 	my $s = undef;
 
-	rand() < $conf{recent_prob} or return undef;
+	my $r = rand();
+	warn "recent rand $r $conf{recent_prob}\n";
+	$r < $conf{recent_prob} or return undef;
 
 	my $sth = $dbh->prepare(
-		"SELECT artist.name as artist, album.name as album,song.*".
-		" FROM song,artist,album WHERE present AND filename LIKE '/%' AND" .
-		"      artist.id=song.artist_id AND album.id=song.album_id AND" .
-		" unix_timestamp(now()) - unix_timestamp(time_added) < ? AND" .
-		" unix_timestamp(now()) - unix_timestamp(last_played) > ? AND" .
+		"SELECT artist.name as artist, album.name as album,song.*,".
+		" (unix_timestamp(now()) - unix_timestamp(time_added) < ?) as r".
+		" FROM song".
+		" LEFT JOIN artist ON artist.id=song.artist_id" .
+		" LEFT JOIN album ON album.id=song.album_id" .
+		" WHERE present AND filename LIKE '/%' AND" .
+		" (unix_timestamp(now()) - unix_timestamp(time_added) < ?" .
+		"  OR (last_played=0 AND unix_timestamp(now()) - unix_timestamp(time_added) < ?))" .
+		" AND unix_timestamp(now()) - unix_timestamp(last_played) > ? AND" .
 		" random_pref > 0" .
-		" ORDER BY rand() LIMIT 1"
+		" ORDER BY r desc, rand() LIMIT 1"
 	);
-	$sth->execute($conf{recent_age} * 86400, $conf{min_random_time}) or return undef;
+	$sth->execute($conf{recent_age} * 86400,
+		$conf{recent_age} * 86400,
+		$conf{recent_age_never_played} * 86400,
+		$conf{min_random_time})
+		or return undef;
 	$s = $sth->fetchrow_hashref or return undef;
 
 	warn "playing recent $s->{filename}\n";
@@ -208,11 +219,14 @@ sub select_song_random() {
 	            "unix_timestamp(now()) - unix_timestamp(last_played) > ?";
 
 	my $ordermult = $conf{ignore_random_pref}? "" : "*pow(random_pref/?,1/?)";
+	if($conf{random_boost_by_years_since_last_play}) {
+		$ordermult .= "* if(last_played, round((unix_timestamp(now()) - unix_timestamp(last_played)) / 86400 / 365 + 0.5), 1)";
+	}
 	my $sth = $dbh->prepare(
-		"SELECT artist.name as artist, album.name as album,song.* " .
-		"FROM song,artist,album " .
-		"WHERE $where AND artist.id=song.artist_id AND album.id=song.album_id " .
-		"AND random_pref > 0 " .
+		"SELECT artist.name as artist, album.name as album,song.* FROM song " .
+		"LEFT JOIN artist ON artist.id=song.artist_id " .
+		"LEFT JOIN album ON album.id=song.album_id " .
+		"WHERE $where AND random_pref > 0 " .
 		"ORDER BY rand() $ordermult DESC LIMIT 1");
 
 	for(; $min > 0; $min >>= 1, warn "no random song found, retrying with min_random_time=$min\n") {
@@ -231,7 +245,7 @@ sub select_song_random() {
 	}
 	$s or return undef;
 
-	warn "selecting random $s->{filename} (pref $s->{random_pref})\n";
+	warn "selecting random $s->{filename} (pref $s->{random_pref}) (last played $s->{last_played})\n";
 	return $s;
 }
 
@@ -245,16 +259,17 @@ sub validate_song_random($) {
 	            "unix_timestamp(now()) - unix_timestamp(last_played) > ?";
 
 	my $sth = $dbh->prepare(
-		"SELECT artist.name as artist, album.name as album,song.* " .
-		"FROM song,artist,album " .
-		"WHERE $where AND artist.id=song.artist_id AND album.id=song.album_id");
+		"SELECT artist.name as artist, album.name as album,song.* FROM song " .
+		"LEFT JOIN artist ON artist.id=song.artist_id " .
+		"LEFT JOIN album ON album.id=song.album_id " .
+		"WHERE $where");
 
 	$sth->execute($song->{id}, $min)
 		or return undef;
 	$s = $sth->fetchrow_hashref
 		or return undef;
 
-	warn "playing random $s->{filename} (pref $s->{random_pref})\n";
+	warn "playing random $s->{filename} (pref $s->{random_pref}, last_played $s->{last_played})\n";
 	$s->{type} = 'R';
 	$s->{user} = '';
 
@@ -267,10 +282,12 @@ sub update_preload() {
 	$conf{preloadfile} or return;
 
 	my $sth = $dbh->prepare(
-		"SELECT song.id, song.filename, artist.name, album.name,".
-		"       song.track, song.title, song.length, song.encoding".
-		" FROM song,artist,album WHERE present AND filename LIKE '/%' AND" .
-		"      artist.id=song.artist_id AND album.id=song.album_id AND" .
+		"SELECT song.id, song.filename, artist.name, album.name," .
+		"       song.track, song.title, song.length, song.encoding" .
+		" FROM song" .
+		" LEFT JOIN artist ON artist.id=song.artist_id" .
+		" LEFT JOIN album ON album.id=song.album_id" .
+		" WHERE present AND filename LIKE '/%' AND" .
 		" unix_timestamp(now()) - unix_timestamp(last_played) > $conf{min_random_time}" .
 		" ORDER BY rand()*random_pref DESC LIMIT 10"
 	);
