@@ -689,7 +689,7 @@ sub getinfo_aac($\%) {
 	if(open(F, "-|") == 0) {
 		open STDERR, ">&STDOUT";
 		exec "faad", "-i", $file;
-		die "faad";
+		kill 'KILL', $$;
 	}
 	while($l = <F>) {
 		if($l =~ /(\w+)\s+([.\d]+)\s+secs,\s+(\d+)\s+ch,\s+(\d+)\s+Hz/) {
