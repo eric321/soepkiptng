@@ -379,7 +379,7 @@ sub play_mplayer(@) {
 
 	if($prog[$#prog] =~ /^http:/) { unshift @prog, "-cache", 512; }
 
-	unshift @prog, qw"mplayer -quiet -srate 44100 -vc dummy -vo null -ao",
+	unshift @prog, qw"mplayer -quiet -af resample=44100,channels=2,format=s16ne -vc dummy -vo null -ao",
 		"pcm:nowaveheader:file=/dev/fd/" . fileno(F);
 
 	warn "running: " . join(" ", @prog) . "\n";
@@ -412,10 +412,10 @@ sub start_play($) {
 	$filename =~ /([^.]*)$/;
 	my $ext = lc($1);
 
-	if($filename =~ /^http:/ || $ext =~ /^(wma|wav)$/ || $song->{encoding} =~ /RealAudio/) {
-		play_mplayer($filename);
-	} elsif($filename =~ /^cdda:[^:]*:(\d+)/) {
+	if($filename =~ /^cdda:[^:]*:(\d+)/) {
 		exec_prog ["$conf{cdda_prog} $1"];
+	} elsif($filename =~ /^\w+:/ || $ext =~ /^(wma|wav)$/ || $song->{encoding} =~ /RealAudio/) {
+		play_mplayer($filename);
 	} elsif($ext eq "mp2" || $ext eq "mp3") {
 		play_mp3($song);
 	} elsif($ext eq "ogg") {
@@ -438,7 +438,7 @@ sub start_play($) {
 		exec_prog [qw/shntool cat -nr -nh/, $filename];
 	} elsif($ext =~ /^mp[cp+]$/) {
 		exec_prog [qw/musepack2raw/, $filename];
-	} elsif($ext =~ /^(mpe?g|m2v|avi|asx|asf|vob|wmv|ra?m|ra|mov)$/) {
+	} elsif($ext =~ /^(mpe?g|m2v|avi|asx|asf|vob|wmv|ra?m|ra|mov|mp4|flv)$/) {
 		exec_prog ["soepkiptng_video", $filename], 1;
 	} elsif($ext eq "ac3") {
 		exec_prog ["a52dec", "-o", "oss6", $filename], 1;
