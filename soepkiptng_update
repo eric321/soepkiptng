@@ -542,26 +542,25 @@ sub getinfo_flac($\%) {
 			--show-channels
 			--show-total-samples
 			--show-bps
-			--show-vc-field=artist
-			--show-vc-field=title
-			--show-vc-field=tracknumber
-			--show-vc-field=album
+			--show-tag=artist
+			--show-tag=title
+			--show-tag=tracknumber
+			--show-tag=album
 			/, $file;
 		die;
 	}
-	my ($totsamp, $bps);
-	($info->{freq}, $info->{chan}, $totsamp, $bps, $info->{artist},
-		$info->{title}, $info->{track}, $info->{album}) = <F>;
-	close F;
+	my ($totsamp, $bps, @rest, @a);
+	($info->{freq}, $info->{chan}, $totsamp, $bps, @rest) = <F>;
+	foreach(@rest) {
+		if(s/^title=(.*\S)//i) { $info->{title} = $1; }
+		elsif(s/^tracknumber=(.*\S)//i) { $info->{track} = $1; }
+		elsif(s/^album=(.*\S)//i) { $info->{album} = $1; }
+		elsif(s/^artist=(.*\S)//i) { push @a, $1; }
+	}
+	$info->{artist} = join " & ", @a;
 
 	my $totbytes = $totsamp * $info->{chan} * $bps / 8;
 	$info->{encoding} = "flac" . ($totbytes? sprintf(" (%d%%)", 100 * $filesize / $totbytes) : "");
-
-	$info->{artist} =~ s/^[^=]+=|\s+$//g;
-	$info->{title} =~ s/^[^=]+=|\s+$//g;
-	$info->{album} =~ s/^[^=]+=|\s+$//g;
-	$info->{track} =~ s/^[^=]+=|\s+$//g;
-
 	$info->{len} = $totsamp / $info->{freq};
 	$info->{info_origin} = "flac" if $info->{artist} && $info->{title};
 	return 1;
