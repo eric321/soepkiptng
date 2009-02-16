@@ -300,6 +300,8 @@ sub do_mp3($$$$$$$$$) {
 	} else {
 		$newtag = $mp3->newTag('ID3v2');
 	}
+	$p_uslt->{Text} =~ s/\s+$//;
+	$lyrics =~ s/\s+$//;
 	if($opt_f || $p_ti ne $ti || $p_tr != $tr || $p_ar ne $ar || $p_al ne $al ||
 		$p_len != 1000 * $len || $p_uslt->{Description} ne $lyrdesc || 
 		($lyrics && $p_uslt->{Language} ne $lyrlang) ||
