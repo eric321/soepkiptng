@@ -353,24 +353,19 @@ sub do_ogg($$$$$$$) {
 	local *FW;
 
 	# read current tags & see what needs to be changed
-	my $needchange = 0;
 	if(open(FR, "-|") == 0) {
 		exec "vorbiscomment", "-ql", $f;
 		die "vorbiscomment";
 	}
+	my $oldtag;
 	while(<FR>) {
 		s/\s+$//;
-		if((/^artist=(.*)/ && $1 ne $ar) ||
-		   (/^title=(.*)/ && $1 ne $ti) ||
-		   (/^album=(.*)/ && $1 ne $al) ||
-		   (/^tracknumber=(.*)/ && $1 != $tr)) {
-			$needchange = 1;
-			last;
-		}
+		/^(\w+)=(.*)/ and $oldtag{$1} = $2;
 	}
 	close FR;
 
-	$needchange or return 1;
+	return 1 if $oldtag{artist} eq $ar && $oldtag{title} eq $ti &&
+		$oldtag{album} eq $al && $oldtag{tracknumber} == $tr;
 	warn "$f: updating vorbis comments\n";
 	return 1 if $opt_t;
 
