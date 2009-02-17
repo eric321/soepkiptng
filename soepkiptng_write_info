@@ -366,8 +366,8 @@ sub do_ogg($$$$$$$) {
 	}
 	close FR;
 
-	return 1 if $oldtag{artist} eq $ar && $oldtag{title} eq $ti &&
-		$oldtag{album} eq $al && $oldtag{tracknumber} == $tr;
+	return 1 if !$opt_f && $oldtag{artist} eq $ar && $oldtag{title} eq $ti && $oldtag{album} eq $al && $oldtag{tracknumber} == $tr;
+
 	warn "$f: updating vorbis comments\n";
 	return 1 if $opt_t;
 
@@ -403,22 +403,19 @@ sub do_flac($$$$$$$) {
 	# read current tags & see what needs to be changed
 	my @changeargs = ();
 	if(open(F, "-|") == 0) {
-		exec "metaflac", "--export-vc-to=-", $f;
+		exec "metaflac", "--export-tags-to=-", $f;
 		die "metaflac";
 	}
+	my %oldtag;
 	while(<F>) {
 		s/\s+$//;
-		if($opt_f || (/^artist=(.*)/ && $1 ne $ar)) { 
-			push @changeargs, "--remove-vc-field=artist", "--set-vc-field=artist=$ar";
-		} elsif($opt_f || (/^title=(.*)/ && $1 ne $ti)) {
-			push @changeargs, "--remove-vc-field=title", "--set-vc-field=title=$ti";
-		} elsif($opt_f || (/^album=(.*)/ && $1 ne $al)) {
-			push @changeargs, "--remove-vc-field=album", "--set-vc-field=album=$al";
-		} elsif($opt_f || (/^tracknumber=(.*)/ && $1 != $tr)) {
-			push @changeargs, "--remove-vc-field=tracknumber", "--set-vc-field=tracknumber=$tr";
-		}
+		/^(\w+)=(.*)/ and $oldtag{$1} = $2;
 	}
 	close F;
+	if($opt_f || $oldtag{artist} ne $ar) { push @changeargs, "--remove-tag=artist", "--set-tag=artist=$ar"; }
+	if($opt_f || $oldtag{title} ne $ti)  { push @changeargs, "--remove-tag=title", "--set-tag=title=$ti"; }
+	if($opt_f || $oldtag{album} ne $al)  { push @changeargs, "--remove-tag=album", "--set-tag=album=$al"; }
+	if($opt_f || $oldtag{tracknumber} != $tr) { push @changeargs, "--remove-tag=tracknumber", "--set-tag=tracknumber=$tr"; }
 
 	# change it
 	if(@changeargs) {
