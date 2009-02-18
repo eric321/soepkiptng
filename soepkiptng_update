@@ -690,18 +690,22 @@ sub getinfo_aac($\%) {
 		exec "faad", "-i", $file;
 		kill 'KILL', $$;
 	}
+	my $retval;
 	while($l = <F>) {
 		if($l =~ /(\w+)\s+([.\d]+)\s+secs,\s+(\d+)\s+ch,\s+(\d+)\s+Hz/) {
 			$info->{encoding} = $1;
 			$info->{freq} = $4;
 			$info->{chan} = $3;
 			$info->{len} = int($2 + 0.5);
-			close F;
-			return 1;
+			$retval = 1;
+		}
+		if($l =~ /^(artist|title|album|track):\s*(.*\S)/i) {
+			$info->{lc $1} = $2;
+			$info->{info_origin} = "aac";
 		}
 	}
 	close F;
-	return undef;
+	return $retval;
 }
 
 sub getinfo_ac3($\%) {
