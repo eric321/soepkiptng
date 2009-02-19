@@ -694,6 +694,7 @@ sub getinfo_aac($\%) {
 	while($l = <F>) {
 		if($l =~ /(\w+)\s+([.\d]+)\s+secs,\s+(\d+)\s+ch,\s+(\d+)\s+Hz/) {
 			$info->{encoding} = $1;
+			push @{$info->{encoding_extra}}, sprintf("%dkb/s", (-s $file) / $2 * 8e-3) if $2;
 			$info->{freq} = $4;
 			$info->{chan} = $3;
 			$info->{len} = int($2 + 0.5);
