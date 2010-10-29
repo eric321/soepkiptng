@@ -205,12 +205,14 @@ sub do_file($$) {
 				warn "$f: $newname exists, skipping\n";
 			} elsif(!$opt_t) {
 				if(rename $full_filename, $newname) {
-					$dbh->do("DELETE FROM song WHERE filename=?",
-						undef, $newname)
-						or die "can't do sql command: " . $dbh->errstr;
-					$dbh->do("UPDATE song SET filename=? WHERE id=?",
-						undef, $newname, $id)
-						or die "can't do sql command: " . $dbh->errstr;
+					if(!$partial) {
+						$dbh->do("DELETE FROM song WHERE filename=?",
+							undef, $newname)
+							or die "can't do sql command: " . $dbh->errstr;
+						$dbh->do("UPDATE song SET filename=? WHERE id=?",
+							undef, $newname, $id)
+							or die "can't do sql command: " . $dbh->errstr;
+					}
 				} else {
 					warn "rename $full_filename -> $newname: $!\n";
 				}
