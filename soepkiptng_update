@@ -51,7 +51,6 @@ sub getinfo_mp3($\%);
 sub getinfo_ogg($\%);
 sub getinfo_mid($\%);
 sub getinfo_wav($\%);
-sub getinfo_pac($\%);
 sub getinfo_flac($\%);
 sub getinfo_shorten($\%);
 sub getinfo_musepack($\%);
@@ -183,7 +182,6 @@ while(defined(my $file = <FILES>)) {
 	getinfo_ogg($file, %info) ||
 	getinfo_mid($file, %info) ||
 	getinfo_wav($file, %info) ||
-	getinfo_pac($file, %info) ||
 	getinfo_flac($file, %info) ||
 	getinfo_shorten($file, %info) ||
 	getinfo_musepack($file, %info) ||
@@ -593,26 +591,6 @@ sub getinfo_mid($\%) {
 		or return undef;
 
 	$info->{encoding} = "Midi";
-	return 1;
-}
-
-sub getinfo_pac($\%) {
-	my ($file, $info) = @_;
-
-	$file =~ /\.pac$/i
-		or return undef;
-
-	if(open(F, "-|") == 0) {
-		exec "lpac2raw", "-i", $file;
-		die;
-	}
-	my $bytes;
-	($info->{freq}, $info->{chan}, $info->{len}, $bytes) = split(/,/, <F>);
-	close F;
-	$bytes or return undef;
-
-	$info->{encoding} = "LPAC";
-	push @{$info->{encoding_extra}}, sprintf("%d%%", (-s $file) / ($bytes / 100));
 	return 1;
 }
 
