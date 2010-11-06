@@ -1,3 +1,0 @@
-#!/bin/sh
-
-faad -w -f2 -s44100 -d "$1" 2>/dev/null

@@ -335,8 +335,19 @@ sub logprintf($@) {
 	}
 }
 
-sub exec_prog(;$$) {
-	my ($prog, $pause) = @_;
+sub update_log($$;$$$) {
+	my ($id, $time, $reason, $result, $prevplaytime) = @_;
+
+	my $q = "REPLACE INTO log SET id=?, playtime=from_unixtime(?)";
+	my @q = ($id, $time);
+	if(defined $reason) { $q .= ", reason=?"; push @q, $reason; }
+	if(defined $result) { $q .= ", result=?"; push @q, $result; }
+	if(defined $prevplaytime) { $q .= ", prevplaytime=?"; push @q, $prevplaytime; }
+	$dbh->do($q, undef, @q);
+}
+
+sub exec_prog(;$$$) {
+	my ($prog, $pause, $convert24to32) = @_;
 
 	if($pause) {
 		$paused = 1;
@@ -347,6 +358,16 @@ sub exec_prog(;$$) {
 
 		# restore broken pipe behavior
 		$SIG{'PIPE'} = 'DEFAULT';
+
+		if($convert24to32) {
+			if(open(STDOUT, "|-") == 0) {
+				$| = 0;
+				while(read STDIN, $_, 3) {
+					print "\0$_";
+				}
+				exit;
+			}
+		}
 
 		if($pause) {
 			warn "pausing output\n";
@@ -379,8 +400,11 @@ sub play_mplayer(@) {
 
 	if($prog[$#prog] =~ /^http:/) { unshift @prog, "-cache", 512; }
 
-	unshift @prog, qw"mplayer -quiet -af resample=44100,channels=2,format=s16ne -vc dummy -vo null -ao",
-		"pcm:nowaveheader:file=/dev/fd/" . fileno(F);
+	my $samplefreq = $conf{samplefreq} || 44100;
+	my $bits = $conf{bitspersample} || 16;
+	unshift @prog, "mplayer", "-quiet", "-vc", "dummy", "-vo", "null",
+		"-af", "resample=$samplefreq,channels=2,format=s${bits}ne",
+		"-ao", "pcm:nowaveheader:file=/dev/fd/" . fileno(F);
 
 	warn "running: " . join(" ", @prog) . "\n";
 	exec @prog;
@@ -392,7 +416,11 @@ sub play_mp3($) {
 	no integer;
 	my ($song) = @_;
 
-	my @madplay = qw"madplay --ignore-crc -SQoraw:- -R44100";
+	my $samplefreq = $conf{samplefreq} || 44100;
+	my $bits = $conf{bitspersample} || 16;
+	my @madplay = qw"madplay --ignore-crc -SQoraw:-";
+	push @madplay, "-R$samplefreq";
+	push @madplay, "-b$bits" if $bits != 16;
 	if($dbh) {
 		my $gainrec = $dbh->selectrow_hashref("SELECT gain FROM song WHERE id=$song->{id}");
 		if($gainrec->{gain}) {
@@ -412,39 +440,120 @@ sub start_play($) {
 	$filename =~ /([^.]*)$/;
 	my $ext = lc($1);
 
+	my $samplefreq = $conf{samplefreq} || 44100;
+	my $bits = $conf{bitspersample} || 16;
 	if($filename =~ /^cdda:[^:]*:(\d+)/) {
 		exec_prog ["$conf{cdda_prog} $1"];
-	} elsif($filename =~ /^\w+:/ || $ext =~ /^(wma|wav)$/ || $song->{encoding} =~ /RealAudio/) {
+	} elsif($filename =~ /^\w+:/ || $ext =~ /^(wma|wav|m4a|ape|flac|aac|ac3|ogg|shn|mp[cp+])$/ || $song->{encoding} =~ /RealAudio/) {
 		play_mplayer($filename);
 	} elsif($ext eq "mp2" || $ext eq "mp3") {
 		play_mp3($song);
-	} elsif($ext eq "ogg") {
-		#this does not handle mono->stereo, resampling:
-		#exec_prog [qw/oggdec -Q -b16 -e0 -R1 -s1 -o-/, $filename];
-		exec_prog ["ogg2raw", $filename];
 	} elsif($ext =~ /^(mid|rcp|r36|g18|g36|mod)$/) {
-		exec_prog ["midi2raw", $filename];
-	} elsif($ext eq "pac") {
-		exec_prog ["lpac2raw", $filename];
+		if($bits == 16) {
+			exec_prog ["timidity", "-s", $samplefreq, "-o", "-", "-Or1Ssl", $filename];
+		} else {
+			exec_prog ["timidity", "-s", $samplefreq, "-o", "-", "-Or2Ssl", $filename], undef, 1;
+		}
 	} elsif($ext eq "raw") {
-		exec_prog ["cat", $filename];
-	} elsif($ext eq "flac") {
-		exec_prog [qw/flac -sdc --endian=little --sign=signed/,
-			qw/--force-raw-format/, $filename];
-		#exec_prog ["flac", "-d", "-fl", $filename, "-"];
-	} elsif($ext =~ /^(aac|m4a)$/) {
-		exec_prog ["aac2raw", $filename];
-	} elsif($ext eq "shn") {
-		exec_prog [qw/shntool cat -nr -nh/, $filename];
-	} elsif($ext =~ /^mp[cp+]$/) {
-		exec_prog [qw/musepack2raw/, $filename];
+		# assume that 'raw' means: 44100Hz, 16-bit, stereo
+		play_mplayer("-demuxer", "rawaudio", "-rawaudio", "channels=2:rate=44100:samplesize=2", $filename);
 	} elsif($ext =~ /^(mpe?g|m2v|avi|asx|asf|vob|wmv|ra?m|ra|mov|mp4|flv)$/) {
 		exec_prog ["soepkiptng_video", $filename], 1;
-	} elsif($ext eq "ac3") {
-		exec_prog ["a52dec", "-o", "oss6", $filename], 1;
-		#play_mplayer("-demuxer", 17, $filename);
 	} else {
 		warn "no player for .$ext files.\n";
+	}
+}
+
+sub get_statusfile {
+	open F, $conf{statusfile} or return;
+	chop(my @f = <F>);
+	close F;
+	return @f;
+}
+
+sub mpd_get_status($) {
+	my $host = shift @_;
+
+	my $s = IO::Socket::INET->new("$host:2222") or return;
+	$_ = <$s>;
+	$s->print("status\n");
+	$_ = <$s>;
+	$s->close;
+	/\brunning=(\d+)\b.*\bsong=(\d+)\b.*\btime=(\d+)\b/ or return;
+	return ($1, $2, $3);
+}
+
+sub mpd_soepkip_status {
+	my (undef, $filename, undef, undef, $host, undef, undef, undef, $ar, $t, $al, $tr, $len) = get_statusfile();
+	my ($running, $songno, $time) = mpd_get_status($host);
+	$running = $running? "play" : "pause";
+	return <<EOF;
+repeat: 0   
+random: 0   
+single: 0   
+consume: 0  
+playlist: 0
+playlistlength: 1
+xfade: 0    
+state: $running
+time: $time:$len
+EOF
+}
+
+sub mpd_soepkip_currentsong {
+	my (undef, $filename, undef, undef, $host, undef, undef, undef, $ar, $t, $al, $tr, $len) = get_statusfile();
+	$filename =~ s|.*/||;
+	$ar =~ s/\s+$//;
+	$t =~ s/\s+$//;
+	$al =~ s/\s+$//;
+	if(length("$ar $t $al") > 65) {
+		if(length($al) > 21) {
+			$al = substr($al, 0, 20) . "\\";
+		}
+		if(length("$ar $t $al") > 65) {
+			if(length($ar) > 21) {
+				$ar = substr($ar, 0, 20) . "\\";
+			}
+			if(length("$ar $t $al") > 65) {
+				if(length($t) > 21) {
+					$t = substr($t, 0, 20) . "\\";
+				}
+			}
+		}
+	}
+	return <<EOF;
+file: $filename
+Time: $len
+Artist: $ar
+Title: $t
+Album: $al
+Track: $tr
+EOF
+}
+
+sub mpd_accept($) {
+	my ($lsock) = @_;
+	if(fork == 0) {
+		alarm 10;
+		my ($sock, $paddr) = $lsock->accept or die "accept mpdsock: $!\n";
+		$lsock = undef; # prevent "address already in use" if parent is restarted
+		my ($port, $iaddr) = sockaddr_in($paddr);
+		my $name = inet_ntoa($iaddr);
+		warn "pid $$ got MPD connection from $name:$port\n";
+		$sock->print("OK MPD 0.1.0\n");
+		alarm 0;
+		while(<$sock>) {
+			if(/^status/) {
+				$sock->print(mpd_soepkip_status());
+				$sock->print("OK\n");
+			} elsif(/^currentsong/) {
+				$sock->print(mpd_soepkip_currentsong());
+				$sock->print("OK\n");
+			} else {
+				$sock->print("ACK [5\@0] {} unknown command \"bla\"\n");
+			}
+		}
+		exit;
 	}
 }
 
@@ -479,6 +588,13 @@ my $killsock = IO::Socket::INET->new(Listen => 5)
 	or die "cannot create listening TCP socket: $!\n";
 my $killhost = hostname;
 my $killport = $killsock->sockport();
+
+my $mpdport = $conf{mpd_port} || 6600;
+my $mpdsock;
+if($mpdport) {
+	$mpdsock = IO::Socket::INET->new(Proto => "tcp", LocalPort =>$mpdport, ReuseAddr => 1, Listen => 5)
+		or die "cannot open listening socket on port $mpdport: $!\n";
+}
 
 unless($debug) {
 	if(!$opt_r) {
@@ -618,6 +734,10 @@ for(;;) {
 	# write to log file
 	logprintf("%s %6d %s", $song->{type}, $song->{id}, $song->{filename});
 
+	# write to log table
+	$song->{playtime} = time;
+	update_log($song->{id}, $song->{playtime}, $song->{type}, undef, $song->{last_played});
+
 	# write status file
 	my $status = <<EOF;
 $song->{id}
@@ -647,6 +767,7 @@ EOF
 	# close accepted socket after statusfile was updated
 	if($killsock_conn) {
 		print $killsock_conn $status;
+		$killsock_conn->shutdown(2); # in case a child process still has it open
 		$killsock_conn->close();
 		undef $killsock_conn;
 	}
@@ -674,41 +795,55 @@ EOF
 	# wait until player is done or we get a connect on $killsock
 	my ($rin, $rout);
 	vec($rin = '', $killsock->fileno(), 1) = 1;
+	vec($rin, $mpdsock->fileno(), 1) = 1 if $mpdsock;
 	for(;;) {
 		child_reaper();
 		last if $pid == 0;
-		if(select($rout = $rin, undef, undef, 0.1) == 1) {
-			warn "got connection\n";
+		if(select($rout = $rin, undef, undef, 0.1) > 0) {
+			if(vec($rout, $killsock->fileno(), 1)) {
+				warn "got connection\n";
+				$song->{result} = "killed";
 
-			# kill player
-			my $p = $pid;
-			if($p) {
-				warn "kill -KILL -$p\n";
-				kill 'KILL', -$p
-					or warn "kill -KILL -$p: $!\n";
+				# kill player
+				my $p = $pid;
+				if($p) {
+					warn "kill -KILL -$p\n";
+					kill 'KILL', -$p
+						or warn "kill -KILL -$p: $!\n";
+				}
+
+				# tell cdrplay to flush its buffers
+				warn "kill -USR1 $cdrplaypid\n";
+				kill 'SIGUSR1', $cdrplaypid
+					or warn "kill -USR1 $cdrplaypid: $!\n";
+
+				# accept the tcp connection; we close it later,
+				# after a new song has been selected
+				$killsock_conn = $killsock->accept();
+
+				# write to log file
+				logprintf("K %6d", $song->{id});
 			}
-
-			# tell cdrplay to flush its buffers
-			warn "kill -USR1 $cdrplaypid\n";
-			kill 'SIGUSR1', $cdrplaypid
-				or warn "kill -USR1 $cdrplaypid: $!\n";
-
-			# accept the tcp connection; we close it later,
-			# after a new song has been selected
-			$killsock_conn = $killsock->accept();
-
-			# write to log file
-			logprintf("K %6d", $song->{id});
+			if($mpdsock && vec($rout, $mpdsock->fileno(), 1)) {
+				mpd_accept($mpdsock);
+			}
 		}
 	}
 
 	if(($pid_status || $pid_signal) && !$killsock_conn) {
 		# write to log file
 		logprintf("E %6d status=%d signal=%d", $song->{id}, $pid_status, $pid_signal);
+
+		$song->{result} = sprintf("error: status=%d signal=%d", $pid_status, $pid_signal)
+			unless $song->{result};
 		$num_errors++;
 	} else {
+		$song->{result} = "finished" unless $song->{result};
 		$num_errors = 0;
 	}
+
+	# write to log table
+	update_log($song->{id}, $song->{playtime}, $song->{type}, $song->{result}, $song->{last_played});
 
 	if($debug) {
 		my ($a, $b, $c, $d) = times;
