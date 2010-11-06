@@ -1,6 +1,5 @@
 ############################################################################
 # soepkiptng (c) copyright 2000 Eric Lammerts <eric@lammerts.org>.
-# $Id: soepkiptng.lib,v 1.49 2005/07/03 04:33:03 eric Exp $
 ############################################################################
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License, version 2, as 
@@ -446,7 +445,8 @@ sub get_nowplaying(;$) {
 	chop (($s->{id}, $s->{filename}, $s->{pid}, $s->{cdrplaypid},
 	       $s->{killhost}, $s->{killport}, $s->{type},
 	       $s->{user}, $s->{artist}, $s->{title}, $s->{album},
-	       $s->{track}, $s->{length}, $s->{encoding}) = <F>);
+	       $s->{track}, $s->{length}, $s->{encoding},
+	       $s->{artisturl}, $s->{albumurl}, $s->{titleurl}) = <F>);
 	close F;
 
 	if($dbh) {

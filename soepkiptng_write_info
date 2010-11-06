@@ -1,7 +1,6 @@
 #!/usr/bin/perl
 ############################################################################
 # soepkiptng (c) copyright 2000 Eric Lammerts <eric@lammerts.org>.
-# $Id$
 ############################################################################
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License, version 2, as 
@@ -191,6 +190,7 @@ sub do_file($$) {
 		$newname .= string_to_filename($ar, $language) . "-" if $ar;
 		$newname .= string_to_filename($ti);
 		$newname =~ s/--+/-/;
+		#$newname = sprintf "%02d - ", $tr if $tr; $newname .= "$ar - $ti"; $newname =~ s/([\x80-\xff])/lc($latin9_to_ascii{ord($1)}) || $1/ge;
 		if($opt_l && length("$newname.$ext") > $opt_l) {
 			$newname = substr($newname, 0, $opt_l - length(".$ext") - 1);
 			$newname =~ s/_?$/_/;

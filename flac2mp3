@@ -2,7 +2,6 @@
 
 ############################################################################
 # soepkiptng (c) copyright 2000 Eric Lammerts <eric@lammerts.org>.
-# $Id$
 ############################################################################
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -48,7 +47,7 @@ require "$progdir/soepkiptng.lib";
 $ENV{PATH} = "$progdir/bin:$ENV{PATH}";
 use lib "$progdir/lib";
 
-getopts('dc:p:b:h');
+getopts('dc:p:b:ho:');
 
 $opt_h and die <<EOF;
 
@@ -92,13 +91,21 @@ foreach $flacfile (@ARGV) {
 	my $mp3file = $flacfile;
 	$mp3file =~ s/\.\w+$//;
 	$mp3file .= ".mp3";
+	$opt_o and $mp3file =~ s|.*/|$opt_o/|;
 
 	if(-e $mp3file) {
 		warn "$mp3file exists, skipping.\n";
 		next;
 	}
 
-	my @lamecmd = (qw/lame -h -r -x -s 44.1 -m j --add-id3v2 --id3v2-only --pad-id3v2 --abr/, $bitrate);
+	my @lamecmd = qw/lame -h -r -s 44.1 -m j --add-id3v2 --id3v2-only --pad-id3v2/;
+	if($bitrate =~ /^(\d+)/) {
+		push @lamecmd, "--abr", $bitrate;
+	} elsif($bitrate =~ /^(v\d+)/) {
+		push @lamecmd, uc("-$1"), "--vbr-new";
+	} else {
+		die "invalid bitrate: $bitrate\n";
+	}
 	if($ti) { push @lamecmd, "--tt", $ti; }
 	if($ar) { push @lamecmd, "--ta", $ar; }
 	if($al) { push @lamecmd, "--tl", $al; }
@@ -107,12 +114,13 @@ foreach $flacfile (@ARGV) {
 	if(open(STDIN, "-|") == 0) {
 		exec $flac, qw/-sdc --endian=little --sign=signed --force-raw-format/,
 			$flacfile;
+		die "$flac: $!\n";
 	}
 
 	system @lamecmd, '-', "$mp3file.tmp";
 
 	if($?) {
-		warn "$flacfile: oggenc failed.\n";
+		warn "$flacfile: $flac failed.\n";
 		close STDIN;
 		unlink "$mp3file.tmp" or warn "delete $mp3file.tmp: $!\n";
                 if(($? & 0x7f) == 2) { die "aborted.\n"; }

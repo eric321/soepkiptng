@@ -1,6 +1,4 @@
 
-# $Id$
-
 use Apache::DBI ();
 use Apache::Session::MySQL ();
 use Apache ();

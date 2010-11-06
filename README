@@ -45,6 +45,9 @@ Features:
   - configurable look (CSS style)
   - tested with Netscape, Mozilla, Konqueror, Opera & MSIE.
 * commandline interface
+* partial emulation of a Music Player Daemon on port 6600
+  (http://www.musicpd.org/doc/protocol/), for use with Conky
+  (http://conky.sourceforge.net/)
 
 
 Requirements:
@@ -125,7 +128,12 @@ Installation:
 * run soepkiptng_httpd -d to start the webinterface. By default it runs on
   port 8888. 
   If everything works alright, start it without -d to run it in the
-  background.  
+  background.
+* for status display through conky, put something like this in your .conkyrc:
+    ${mpd_artist} - ${mpd_title} (${mpd_album}, \#${mpd_track}) ${mpd_elapsed}/${mpd_length}
+  If you don't want soepkiptngd to listen on port 6600, add mpd_port=0 to
+  the config file.
+
 
 TODO:
 -----
