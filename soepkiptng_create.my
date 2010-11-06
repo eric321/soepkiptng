@@ -85,3 +85,12 @@ CREATE TABLE lyrics (
   description blob,
   PRIMARY KEY (id)
 );
+
+CREATE TABLE log (
+  id int(11) NOT NULL,
+  playtime timestamp NOT NULL,
+  reason char NOT NULL,
+  result varchar(255),
+  KEY playtime (playtime),
+  UNIQUE (id, playtime)
+);

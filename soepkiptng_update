@@ -121,7 +121,7 @@ if(scalar @ARGV) {
 	$sth = $dbh->prepare("SELECT id,filename,unix_timestamp(last_played)," .
 		"unix_timestamp(time_added),present FROM song WHERE (0" .
 		(" OR binary filename LIKE ?" x scalar @paths) . ")");
-	$sth->execute(map { "$_/%" } @paths);
+	$sth->execute(map { $_ . "%" } @paths);
 } else {
 	$sth = $dbh->prepare("SELECT id,filename,unix_timestamp(last_played),unix_timestamp(time_added),present FROM song WHERE filename LIKE \"/%\"");
 	$sth->execute();
@@ -627,7 +627,7 @@ sub getinfo_flac($\%) {
 
 	my $totbytes = $totsamp * $info->{chan} * $info->{bps} / 8;
 	$info->{encoding} = "flac" . ($totbytes? sprintf(" (%d%%)", 100 * $filesize / $totbytes) : "");
-	$info->{len} = $totsamp / $info->{freq};
+	$info->{len} = $info->{freq}? $totsamp / $info->{freq} : 0;
 	$info->{info_origin} = "flac" if $info->{artist} && $info->{title};
 	return 1;
 }
