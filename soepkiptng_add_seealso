@@ -53,9 +53,9 @@ sub get_artist($$) {
 		my @a = split(/\s+/, $input);
 		scalar @a > 0 or next;
 
-		my $q = "SELECT id,name FROM artist WHERE " .
-			join(" AND ", map { "name LIKE ?" } @a) .
-			" ORDER BY name";
+		my $q = "SELECT artist.id,artist.name FROM artist LEFT JOIN song ON song.artist_id=artist.id WHERE song.present AND " .
+			join(" AND ", map { "artist.name LIKE ?" } @a) .
+			" GROUP BY artist.id,artist.name ORDER BY artist.name";
 		my @q = map { "%$_%" } @a;
 
 		$sth = $dbh->prepare($q);
