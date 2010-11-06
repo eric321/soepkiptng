@@ -1,5 +1,4 @@
 #!/usr/bin/perl
-# $Id$
 
 use Getopt::Std;
 require 'syscall.ph';
@@ -24,7 +23,7 @@ my $progdir = abs_path($1);
 
 require "$progdir/../soepkiptng.lib";
 
-getopts('c:d:hnsweoWXYZ');
+getopts('c:d:hnsweoTWXYZz');
 read_configfile(\%conf, $opt_c);
 
 $dev = $opt_d || $conf{grabcd_dev} || "/dev/cdrom";
@@ -32,10 +31,12 @@ $fake = $opt_n;
 $waitdf = $opt_w;
 $eject = !$opt_e;
 $omitalbum = $opt_o;
+$T = "-T" if $opt_T;
 $W = "-W" if $opt_W;
 $X = "-X" if $opt_X;
 $Y = "-Y" if $opt_Y;
 $Z = "-Z" if $opt_Z;
+$z = "-z" if $opt_z;
 
 
 $output = "-w";
@@ -86,23 +87,22 @@ if(@ARGV) {
 	$id =~ s/^\s*(\w+).*/\1/s;
 	if($id) {
 		if(! -s "$ENV{HOME}/.grabids/$id") {
+			mkdir "$ENV{HOME}/.grabids";
 			open F, ">$ENV{HOME}/.grabids/$id"
 				or die "$ENV{HOME}/.grabids/$id: $!\n";
 
-			use FreeDB::FreeDB;
+			use CDDB_get 'get_cddb';
 			use Cwd;
 			
-			my $cddb = new FreeDB;
-			$cddb->proxy_value($ENV{http_proxy});
-			$cddb->cdrom_device($dev);
+			my %config = ("CD_DEVICE" => $dev, "input" => 1);
+			my %cd = get_cddb(\%config);
 			my $success = 0;
-			
-			if($cddb->fetch) {
-				printf F "%s-%s\n", $cddb->artist, $cddb->title or die;
-				printf F "~%s\n", $cddb->discid or die;
+			if(defined($cd{title})) {
+				printf F "%s-%s\n", $cd{artist}, $cd{title} or die;
+				printf F "~%s\n", $cd{id} or die;
 
-				while ($cddb->next_track) {
-					print F $cddb->current_track_info . "\n" or die;
+				foreach(@{$cd{track}}) {
+					print F "$_\n" or die;
 				}
 				close F or die;
 			} else {
@@ -130,8 +130,7 @@ while(<F>) {
 	s/\s+$//;
 	$_ or next;
 	/^\/([-\w+]+)\s*$/ and do {
-		$file{$nr++} = $1;
-		$omitalbum = 1;
+		$file{$nr} = $1;
 		next;
 	};
 	/^-(\d+)$/ and do {
@@ -157,7 +156,7 @@ while(<F>) {
 		($artist = $_) =~ s/\s*-\s*(.*)//  and
 			($title, $origtitle) = simplify($1);
 		($artist, $origartist) = simplify($artist);
-		$origartist{$nr} = $origartist if $origartist =~ /[^a-z0-9 ]/i;
+		$origartist{$nr} = $origartist if $origartist =~ /[^a-z0-9 ]/i || $origartist ne $origcdartist;
 		$origcdartist = $origartist unless $origcdartist;
 		if(!$dirname) {
 			$dirname = $artist;
@@ -182,7 +181,8 @@ while(<F>) {
 			$orig = 1;
 		}
 		undef $origname{$nr} unless $orig;
-		$file{$nr} = sprintf "%02d-$artist-$_", $nr + $offset;
+		$file{$nr} = sprintf "%02d-$artist-$_", $nr + $offset
+			unless exists $file{$nr};
 		$ext{$nr} = $ext;
 	}
 	$nr++;
@@ -230,7 +230,7 @@ printf <<EOF, ($totlen * 176400 + 1048575) / 1048576, $totlen / 60, $totlen % 60
 EOF
 
 if(!$omitalbum) {
-	if(open ALBUMS,"/home/eric/albums/albums") {
+	if(open ALBUMS,"/home/eric/soepkiptng/albums/albums") {
 		while(<ALBUMS>) {
 			/^track\s+(\S+)\.mp3/ or next;
 			$track{$1} = 1;
@@ -276,7 +276,7 @@ if(!$fake) {
 }
 
 if(!$omitalbum) {
-	my $f = "/home/eric/albums/albums.new";
+	my $f = "/home/eric/soepkiptng/albums/albums.new";
 	open ALBUMS,">>$f" or die "$f: $!\n";
 	printf ALBUMS <<EOF,
 
@@ -307,7 +307,7 @@ if($fake) { exit; }
 #	print " done\n";
 #}
 
-if(open TL, ">>/home/eric/albums/tracklengths") {
+if(open TL, ">>/home/eric/soepkiptng/albums/tracklengths") {
 	foreach(@nrs) {
 		printf TL "%6d $file{$_}\n", $len{$_};
 	}
@@ -333,7 +333,7 @@ delsymlinks;
 foreach(@nrs) {
 	symlink "$realdir/$file{$_}$ext{$_}.$output_ext", sprintf("track%02d.cdparanoia.$output_ext", $_) or die;
 }
-$cmd = "$cdparanoia $W $X $Y $Z -v $output -d $dev -B $nrs[0]-$nrs[$#nrs] cdparanoia.$output_ext";
+$cmd = "$cdparanoia $T $W $X $Y $Z $z -v $output -d $dev -B $nrs[0]-$nrs[$#nrs] cdparanoia.$output_ext";
 print "$cmd\n";
 system $cmd;
 $eject = 0 if $?;

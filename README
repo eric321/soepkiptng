@@ -6,12 +6,7 @@
 
 Download:
 ---------
-A daily cvs snapshot .tar.gz is available from
-http://www.lammerts.org/software/soepkiptng/.
-
-Direct (read-only) cvs access is also possible. Set your CVSROOT to
-:pserver:anonymous@lammerts.org:/var/local/cvs, do "cvs login"
-(empty password) and "cvs checkout soepkiptng".
+https://github.com/eric321/soepkiptng
 
 
 Features:
@@ -27,9 +22,8 @@ Features:
     RealMedia and more)
   - midi/mod (using TiMidity++)
   - Shorten
-  - lpac
   - AC3
-  - AAC
+  - MP4 (AAC, ALAC)
   - WMA & RealAudio (all formats that are supported by your mplayer)
   - Musepack (SV7 only)
 * supports playing Shoutcast streams (MP3 / Ogg Vorbis)
@@ -65,27 +59,16 @@ Requirements:
   - DBD::mysql
   - Compress::Zlib
   - TermReadKey (optional)
-  - FreeDB (optional)
+  - CDDB_get (optional)
 * programs for decoding the various sound formats:
-  - mp3: requires madplay (http://www.mars.org/home/rob/proj/mpeg/
-    version >= 0.15.0 required)
-  - wav: requires sox (http://sox.sourceforge.net/)
-  - lpac:
-    LPAC is a non-free lossless compression algorithm. You can get a linux
-    binary from http://www-ft.ee.tu-berlin.de/~liebchen/lpac.html at no cost.
-    The source is not available :-(.
-  - flac (>= 1.04 required):
-    Flac is a free lossless compression algorithm, available from
-    flac.sourceforge.net. It does not compress as well as lpac, but the
-    difference is marginal.
-  - Ogg-Vorbis
-    Get the libraries from http://www.xiph.org.
+  - mp3: madplay >= 0.15.0 (http://www.mars.org/home/rob/proj/mpeg/)
+  - midi/mod: TiMidity++ (http://www.goice.co.jp/member/mo/timidity/)
+  - wav, flac, ogg, ac3, aac, alac, shorten, ape: mplayer
   - CD/DA: requires cdparanoia (http://www.xiph.org/paranoia/)
-  - midi/mod: requires TiMidity++ (http://www.goice.co.jp/member/mo/timidity/)
-  - AC3: requires a52dec (http://liba52.sourceforge.net/)
   - Video: requires MPlayer (http://http://www.mplayerhq.hu/)
-  - Shorten: requires shorten (http://www.etree.org/shnutils/shorten/) 
-    and shntool (http://www.etree.org/shnutils/shntool/)
+* programs for tag reading/writing:
+  - flac: metaflac
+  - ogg: ogginfo, vorbiscomment
 
 The webinterface used to run under Apache using mod_perl, but I've switched
 to running as a separate webserver. The Apache method may still work, but is
@@ -96,24 +79,23 @@ Perl modules can be installed directly from CPAN by starting "perl -MCPAN
 the first time) and typing "install Some::Module".
 
 
-On a Debian system you can install all the necessary software with apt-get.
-You may have to use the unstable branch ("sid") in order to get the right
-versions.
+On a Debian or Ubuntu system you can install all the necessary software with
+apt-get.
 
 Package list:
-- flac                    (optional; for flac support; >= 1.04 required)
 - libcompress-zlib-perl
 - libdbd-mysql-perl
 - libmpeg-mp3info-perl or libmp3-info-perl
 - libterm-readkey-perl    (optional)
-- libvorbis-dev           (for Ogg-Vorbis support)
-- madplay                 (for mp3 support)
 - mysql-server
-- sox                     (optional; for wav support)
+- madplay                 (for mp3 support)
+- mplayer
+- flac                    (for flac support; >= 1.04)
+- vorbis-tools            (for Ogg-Vorbis support)
 - libwww-perl
 - cdparanoia              (optional; for CD-DA support)
-- libfreedb-perl          (optional; for CD-DA support)
-- a52dec                  (optional; for AC3 support)
+- libcddb-get-perl        (optional; for CD-DA support)
+
 
 Installation:
 -------------
@@ -174,13 +156,12 @@ TODO:
 * CD-DA support: don't re-enter info into db every time you click "CD-DA"
   maybe use persistent info and cddb disc_id?
 
-$Id$
 
 
 
 Copyright:
 ----------
-soepkiptng is (c) copyright 2000 Eric Lammerts <eric@lammerts.org>
+soepkiptng is (c) copyright 2000-2010 Eric Lammerts <eric@lammerts.org>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License, version 2, as 
