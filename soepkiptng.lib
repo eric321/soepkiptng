@@ -449,7 +449,7 @@ sub get_nowplaying(;$) {
 	       $s->{track}, $s->{length}, $s->{encoding}) = <F>);
 	close F;
 
-	if($dbh) {
+	if($dbh && $s->{id}) {
 		my $sth = $dbh->prepare(
 			"SELECT artist.name as artist,album.name as album," .
 			" song.artist_id as arid,song.album_id as alid, song.*" .
