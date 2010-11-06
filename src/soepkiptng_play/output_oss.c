@@ -14,13 +14,20 @@
 #include "polllib.h"
 #include "output_oss.h"
 
-#define SAMPLEFREQ 44100
 #define BLKSIZE 4096
-#define BUFFER_MIN (SAMPLEFREQ * 4)
+
+#ifndef AFMT_S32_LE
+#define AFMT_S32_LE 0x00001000
+#endif
+#ifndef AFMT_S32_BE
+#define AFMT_S32_BE 0x00002000
+#endif
 
 static char *oss_dev;
 static int oss_fd;
 static int oss_do_init;
+static int oss_samplefreq;
+static int oss_fmt;
 int oss_intercept_resume;
 
 static int ischardev(int fd)
@@ -31,11 +38,13 @@ static int ischardev(int fd)
 	return S_ISCHR(st.st_mode);
 }
 
+static void output_oss_post(int fd, short events, long cookie);
+
 static void output_oss_pre(int fd, long cookie)
 {
 	DDEBUG("output_oss_pre: length=%d oss_do_init=%d\n", buffer_length, oss_do_init);
 	
-	if(buffer_length < (oss_do_init? BUFFER_MIN : 1)) {
+	if(buffer_length < (oss_do_init? oss_samplefreq * 4 : 1)) {
 		set_fd_mask(fd, 0);
 		return;
 	}
@@ -98,7 +107,7 @@ static void output_oss_post(int fd, short events, long cookie)
 	}
 }
 
-int output_oss_init(char *dev)
+int output_oss_init(char *dev, int samplefreq, int fmt_bits)
 {
 	DEBUG("output_oss_init: dev=%s\n", dev);
 
@@ -108,6 +117,12 @@ int output_oss_init(char *dev)
 		oss_dev = dev;
 	}
 	oss_fd = -1;
+	oss_samplefreq = samplefreq;
+	switch(fmt_bits) {
+		case 16: oss_fmt = AFMT_S16_LE; break;
+		case 32: oss_fmt = AFMT_S32_LE; break;
+		default: fprintf(stderr, "oss: %d bits not supported\n", fmt_bits); exit(1);
+	}
 	return 0;
 }
 
@@ -138,18 +153,19 @@ int output_oss_start()
 	}
 
 	retval = ioctl(oss_fd, SNDCTL_DSP_SYNC, 0);
-	i = AFMT_S16_LE;
+	i = oss_fmt;
 	if(retval != -1) retval = ioctl(oss_fd, SNDCTL_DSP_SETFMT, &i);
 	i = 1;
 	if(retval != -1) retval = ioctl(oss_fd, SNDCTL_DSP_STEREO, &i);
-	i = 44100;
+	i = oss_samplefreq;
 	if(retval != -1) retval = ioctl(oss_fd, SNDCTL_DSP_SPEED, &i);
 
 	if(retval == -1 && ischardev(oss_fd)) {
 		fprintf(stderr, "warning: sound ioctls failed\n");
 	}
-	
-	fcntl(oss_fd, F_SETFL, O_NONBLOCK);
+
+	if(i != oss_samplefreq)
+		fprintf(stderr, "WARNING: wanted samplefreq %d, got %d\n", oss_samplefreq, i);
 	
 	oss_do_init = 1;
 	

@@ -1,16 +1,16 @@
 
 #include "signals.h"
-#include "output_oss.h"
+#include "output.h"
 #include "polllib.h"
 #include "buffer.h"
 #include "input.h"
 
 static void sighup(int s)
 {
-	if(output_oss_running()) {
-		output_oss_stop();
+	if(output_running()) {
+		output_stop();
 	} else {
-		output_oss_start();
+		output_start();
 	}
 }
 
@@ -21,8 +21,8 @@ static void sigusr1(int s)
 
 static void sigusr2(int s)
 {
-	if(output_oss_running()) {
-		output_oss_stop();
+	if(output_running()) {
+		output_stop();
 	}
 }
 

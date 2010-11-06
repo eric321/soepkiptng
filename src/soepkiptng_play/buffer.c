@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "buffer.h"
+#include "output.h"
 
 char *buffer;
 int buffer_size;
@@ -23,7 +24,7 @@ void buffer_init()
 	}
 	
 	buffer_start = 0;
-	buffer_length = 44100 * 4;
+	buffer_length = SAMPLEFREQ * 4;
 
 	/* preload with 1s of silence */
 	memset(buffer, 0, buffer_length);

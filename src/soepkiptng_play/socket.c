@@ -14,6 +14,7 @@
 #include "debug.h"              
 #include "polllib.h"
 #include "socket.h"
+#include "output.h"
 #include "output_oss.h"
 
 
@@ -71,9 +72,9 @@ static void handle_cmd(int fd, struct socket_t *p, char *s)
 	}
 
 	else if(strcasecmp(cmd, "pause") == 0) {
-		if(output_oss_running()) {
+		if(output_running()) {
 			sockprintf(p, "+OK\n");
-			output_oss_stop();
+			output_stop();
 		} else {
 			sockprintf(p, "-Not running\n");
 		}
@@ -81,41 +82,41 @@ static void handle_cmd(int fd, struct socket_t *p, char *s)
 
 	else if(strcasecmp(cmd, "waitbufferempty") == 0) {
 		p->waitbufferempty = 1;
-		if(!output_oss_running()) {
+		if(!output_running()) {
 			buffer_length = 0;
 			oss_intercept_resume = 1;
 		}
 	}
 
 	else if(strcasecmp(cmd, "resume") == 0) {
-		if(output_oss_running()) {
+		if(output_running()) {
 			sockprintf(p, "-Already running\n");
 		} else {
-			output_oss_start();
+			output_start();
 			sockprintf(p, "+OK\n");
 		}
 	}
 
 	else if(strcasecmp(cmd, "pausetoggle") == 0) {
-		if(output_oss_running()) {
-			output_oss_stop();
+		if(output_running()) {
+			output_stop();
 		} else {
-			output_oss_start();
+			output_start();
 		}
 		sockprintf(p, "+OK\n");
 	}
 
 	else if(strcasecmp(cmd, "status") == 0) {
 		sockprintf(p, "+running=%d song=%d time=%d.%02d\n",
-		   output_oss_running(),
+		   output_running(),
 		   song_counter,
-		   byte_counter / 44100 / 4,
-		   (byte_counter * 100 / 44100 / 4) % 100);
+		   byte_counter / SAMPLEFREQ / 4,
+		   (byte_counter * 100 / SAMPLEFREQ / 4) % 100);
 	}
 
 	else if(strcasecmp(cmd, "dump") == 0) {
 		sockprintf(p, "+running=%d start=%d length=%d song_counter=%d byte_counter=%d byte_counter_resetcountdown=%d\n",
-		   output_oss_running(), buffer_start, buffer_length, song_counter, byte_counter, byte_counter_resetcountdown);
+		   output_running(), buffer_start, buffer_length, song_counter, byte_counter, byte_counter_resetcountdown);
 	}
 
 	else {
