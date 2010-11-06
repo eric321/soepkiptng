@@ -36,13 +36,15 @@ BEGIN {
 require "$progdir/soepkiptng.lib";
 $ENV{PATH} = "$progdir/bin:$ENV{PATH}";
 
+use strict;
 use DBI;
+use Encode;
 use Getopt::Std;
 use MP3::Tag;
 use MP3::Info;
 #use Data::Dumper;
 
-use vars qw/$opt_C $opt_d $opt_e $opt_f $opt_r $opt_q $opt_v $opt_c $opt_R $opt_p/;
+our ($opt_C, $opt_L, $opt_R, $opt_c, $opt_d, $opt_e, $opt_f, $opt_h, $opt_l, $opt_m, $opt_n, $opt_p, $opt_q, $opt_r, $opt_v);
 
 sub get_wav_params($\%;$);
 sub getinfo_mp3($\%);
@@ -54,7 +56,6 @@ sub getinfo_flac($\%);
 sub getinfo_shorten($\%);
 sub getinfo_musepack($\%);
 sub getinfo_raw($\%);
-sub getinfo_aac($\%);
 sub getinfo_mplayer($\%);
 sub getinfo_ac3($\%);
 sub getinfo_soepkip($\%);
@@ -63,11 +64,16 @@ sub extract_artist_title($\%);
 sub is_nfs($);
 
 $opt_R = 10000;
-getopts('Cfredqvhc:LR:p');
-$force = 1 if $opt_f;
+if(open F, ".soepkiptng_random_pref") {
+	$opt_R = 0 + <F>;
+	close F;
+}
+getopts('Cfredqvhc:LR:pmln');
+my $force = 1 if $opt_f;
 $| = 1;
-$do_delete = !$opt_d && !$opt_r;
+my $do_delete = !$opt_d && !$opt_r;
 if($opt_p && scalar @ARGV == 0) { push @ARGV, "."; }
+$opt_n = " (not)" if $opt_n;
 
 $opt_h and die <<EOF;
 usage: soepkiptng_update [-defhqrvCL] [-c configfile] [-R pref] [dir...]
@@ -84,10 +90,13 @@ options:
   -C            : don't fix artist/title/album upper/lowercase
   -L            : set last_played to current time
   -R pref       : set random_pref field
+  -m            : skip recent files
+  -n            : don't actually do anything to the database
 
 Directories containing the file ".nosoepkiptng" will be skipped.
 EOF
 
+my %conf;
 read_configfile(\%conf, $opt_c);
 
 
@@ -99,14 +108,17 @@ if($opt_q) {
 	$SIG{__WARN__} = sub { };
 }
 
-$dbh = DBI->connect("DBI:$conf{'db_type'}:$conf{'db_name'}:$conf{'db_host'}", $conf{'db_user'}, $conf{'db_pass'})
+my $dbh = DBI->connect("DBI:$conf{'db_type'}:$conf{'db_name'}:$conf{'db_host'}", $conf{'db_user'}, $conf{'db_pass'})
 	or die "can't connect to database";
 
+my (%track, %artist, %album, %tracknr);
 read_eric_files() unless $opt_e;
 
 # get existing filenames in database
+my $sth;
+my @paths;
 if(scalar @ARGV) {
-	@paths = grep { -d } map { abs_path $_; } @ARGV;
+	@paths = grep { length } map { abs_path $_; } @ARGV;
 	@paths or exit 1; # abs_path complains for us
 	$sth = $dbh->prepare("SELECT id,filename,unix_timestamp(last_played)," .
 		"unix_timestamp(time_added),present FROM song WHERE (0" .
@@ -117,7 +129,8 @@ if(scalar @ARGV) {
 	$sth->execute();
 	@paths = split /\s+/, $conf{'mp3dirs'};
 }
-while(($id, $f, $l, $t, $pres) = $sth->fetchrow_array) {
+my (%filename, %last_played, %time_added, %longname, %longname_id);
+while(my ($id, $f, $l, $t, $pres) = $sth->fetchrow_array) {
 	$filename{$f} = $id if $pres;
 	$last_played{$f} = $l;
 	$time_added{$f} = $t;
@@ -128,26 +141,36 @@ while(($id, $f, $l, $t, $pres) = $sth->fetchrow_array) {
 
 # scan music directories
 if(open(FILES, "-|") == 0) {
-	my @findargs = ('-type', 'f');
+	my @findargs;
 	$opt_r and push @findargs, '-maxdepth', 1;
-	exec 'find', @paths, @findargs, '-print0';
+	exec 'find', @paths, @findargs, '-type', 'f', '-print0';
 	die "find: $!\n";
 }
 
 $/ = "\0";
-while(<FILES>) {
-	chop;
+my ($num_added, $num_updated, $num_deleted, $num_moved, $num_skipped);
+my (%artistid_cache, %albumid_cache);
+while(defined(my $file = <FILES>)) {
+	chop $file;
 	# skip hidden files
-	next if m|/\.[^/]+$|;
+	next if $file =~ m|/\.[^/]+$|;
 	# skip zero-length files
-	next unless -s;
-	m|(.*?)[^/]*$|;
+	next unless -s $file;
+	$file =~ m|(.*?)[^/]*$|;
 	next if -e "$1/.nosoepkiptng";
+	if($opt_m) {
+		my ($mt, $ct) = (stat $file)[9,10];
+		if($ct > $mt) { $mt = $ct; }
+		if((time - $mt) < 30) {
+			warn "skipping $_ (too recent)\n";
+			next;
+		}
+	}
 
-	print "$_\n" if $opt_v;
+	print "$file\n" if $opt_v;
 
-	if(length($_) > 255) {
-		print STDERR "Skipping $_, filename >255 chars.\n" unless $opt_q;
+	if(length($file) > 255) {
+		print STDERR "Skipping $file, filename >255 chars.\n" unless $opt_q;
 		next;
 	}
 
@@ -156,26 +179,25 @@ while(<FILES>) {
 	# get file encoding; skip if unknown
 	my %info;
 	$/ = "\n";
-	getinfo_mp3($_, %info) ||
-	getinfo_ogg($_, %info) ||
-	getinfo_mid($_, %info) ||
-	getinfo_wav($_, %info) ||
-	getinfo_pac($_, %info) ||
-	getinfo_flac($_, %info) ||
-	getinfo_shorten($_, %info) ||
-	getinfo_musepack($_, %info) ||
-	getinfo_aac($_, %info) ||
-	getinfo_mplayer($_, %info) ||
-	getinfo_ac3($_, %info) ||
-	getinfo_raw($_, %info);
+	getinfo_mp3($file, %info) ||
+	getinfo_ogg($file, %info) ||
+	getinfo_mid($file, %info) ||
+	getinfo_wav($file, %info) ||
+	getinfo_pac($file, %info) ||
+	getinfo_flac($file, %info) ||
+	getinfo_shorten($file, %info) ||
+	getinfo_musepack($file, %info) ||
+	getinfo_mplayer($file, %info) ||
+	getinfo_ac3($file, %info) ||
+	getinfo_raw($file, %info);
 
-	getinfo_soepkip($_, %info);
+	getinfo_soepkip($file, %info);
 
 	$/ = "\0";
 
 	$info{len} = 0 + $info{len};
 	$info{encoding} or do {
-		print STDERR "Filetype of $_ unknown\n" unless $opt_q;
+		print STDERR "Filetype of $file unknown\n" unless $opt_q;
 		next;
 	};
 	if($info{freq} && ($info{freq} < 44090 || $info{freq} > 44110)) {
@@ -183,53 +205,58 @@ while(<FILES>) {
 		$s =~ s/\.?0+$//;
 		push @{$info{encoding_extra}}, "${s}kHz";
 	}
+	if($info{bps} && ($info{bps} != 16)) {
+		push @{$info{encoding_extra}}, sprintf "%dbit", $info{bps};
+	}
 	if($info{chan} == 1) {
 		push @{$info{encoding_extra}}, "mono";
 	}
-	if(@{$info{encoding_extra}}) {
+	if(exists $info{encoding_extra} && @{$info{encoding_extra}}) {
 		$info{encoding} .= sprintf " (%s)", join(", ", @{$info{encoding_extra}});
 	}
 
 	# check "nolocal" setting (only files on NFS are allowed)
-	if($conf{nolocal} && !is_nfs($_)) {
-		die "Error: file on local filesystem: $_\n";
+	if($conf{nolocal} && !is_nfs($file)) {
+		die "Error: file on local filesystem: $file\n";
 	}
 
 	# skip if already in database (unless "force" was given)
-	if($filename{$_}) {
+	if($filename{$file}) {
 		if($force) {
-			print "Updating $_:\n";
+			print "Updating $file:\n";
 			$num_updated++;
 		} else {
 			$num_skipped++;
-			delete $filename{$_};
+			delete $filename{$file};
 			next;
 		}
 	} else {
 		# check whether an old entry (ie. the file does not exist anymore)
 		# exists with the same filename (without path)
-		/([^\/]*)$/;
+		$file =~ /([^\/]*)$/;
 		my $oldname = $longname{$1};
-		if($oldname && ($oldname eq $_ || ! -e $oldname)) {
-			$dbh->do("DELETE FROM song WHERE present=0 AND id!=? AND " .
-				"binary filename=?", undef, $longname_id{$1}, $_)
-				or die "can't do sql command: " . $dbh->errstr . "\n";
-			$dbh->do("UPDATE song SET present=1, filename=?, " .
-				"length=?, encoding=? WHERE id=?", undef,
-				$_, $info{len}, $info{encoding}, $longname_id{$1})
-				or die "can't do sql command: " . $dbh->errstr . "\n";
+		if($oldname && ($oldname eq $file || ! -e $oldname)) {
+			if(!$opt_n) {
+				$dbh->do("DELETE FROM song WHERE present=0 AND id!=? AND " .
+					"binary filename=?", undef, $longname_id{$1}, $file)
+					or die "can't do sql command: " . $dbh->errstr . "\n";
+				$dbh->do("UPDATE song SET present=1, filename=?, " .
+					"length=?, encoding=? WHERE id=?", undef,
+					$file, $info{len}, $info{encoding}, $longname_id{$1})
+					or die "can't do sql command: " . $dbh->errstr . "\n";
+			}
 			delete $filename{$oldname};
 			$num_moved++;
 			$oldname =~ s|[^/]+$||;
-			print "Moving $_ (from $oldname)\n";
+			print "Moving $file (from $oldname)\n";
 			next;
 		}
 		$num_added++;
-		print "Adding $_:\n";
+		print "Adding $file:\n";
 	}
 
 	# get artist/title/track/album info
-	m|([^/]+/+[^/]+)\.\w+$|;
+	$file =~ m|([^/]+/+[^/]+)\.\w+$|;
 #print STDERR "1=$1\n";
 	if($track{$1}) {
 		$info{info_origin} = "ericfile";
@@ -238,16 +265,40 @@ while(<FILES>) {
 		$info{album} = $album{$1};
 		$info{track} = $tracknr{$1};
 	} elsif(!$info{info_origin}) {
-		extract_artist_title($_, %info);
+		extract_artist_title($file, %info);
 	} elsif(!$info{title}) {
 		my %i;
-		extract_artist_title($_, %i);
+		extract_artist_title($file, %i);
 		$info{title} = $i{title};
 	}
 
-	if(!$info{track} && m~(^|/)(\d\d+)[^/]+$~) {
+	$info{artist} =~ s/\s*\n\s*/ /g;
+	$info{album} =~ s/\s*\n\s*/ /g;
+	$info{title} =~ s/\s*\n\s*/ /g;
+
+	if(!$info{track} && $file =~ m~(^|/)(\d\d+)[^/]+$~) {
 		$info{track} = $2;
 		warn " (taking track ($2) from filename)\n";
+	}
+	if(!$info{lyrics}) {
+		my $lyrfile = $file;
+		if($lyrfile =~ s/\.[^.]+$/.txt/) {
+			if(open F, $lyrfile) {
+				warn " (taking lyrics from .txt)\n";
+				my $indent;
+				$info{lyrics} = <F>;
+				$info{lyrics} =~ s/\t/ /g;
+				$info{lyrics} =~ s/ +($)/\1/mg;
+				while($info{lyrics} =~ /^( *)\S/mg) {
+					if(length($1) < $indent || !defined($indent)) {
+						$indent = length($1);
+					}
+				}
+				$indent = " "x$indent;
+				$info{lyrics} =~ s/(^)$indent/\1/mg;
+				close F;
+			}
+		}
 	}
 
 	printf <<EOF,
@@ -267,31 +318,33 @@ EOF
 	$info{len} / 60, $info{len} % 60,
 	$info{encoding};
 
-	# insert song into database
-	if(!$artistid_cache{$info{artist}}) {
-		$artistid_cache{$info{artist}} = get_id($dbh, "artist", $info{artist}) or die;
-	}
-	if(!$albumid_cache{$info{album}}) {
-		$albumid_cache{$info{album}} = get_id($dbh, "album", $info{album});
-	}
-	$q = "REPLACE INTO song SET id=?, artist_id=?, title=?, album_id=?, " .
-		"track=?, present=1, filename=?, length=?, encoding=?, random_pref=?, " .
-		"last_played=from_unixtime(?), time_added=from_unixtime(?)";
+	if(!$opt_n) {
+		# insert song into database
+		if(!$artistid_cache{$info{artist}}) {
+			$artistid_cache{$info{artist}} = get_id($dbh, "artist", $info{artist}) or die;
+		}
+		if(!$albumid_cache{$info{album}}) {
+			$albumid_cache{$info{album}} = get_id($dbh, "album", $info{album});
+		}
+		my $q = "REPLACE INTO song SET id=?, artist_id=?, title=?, album_id=?, " .
+			"track=?, present=1, filename=?, length=?, encoding=?, random_pref=?, " .
+			"last_played=from_unixtime(?), time_added=from_unixtime(?)";
 
-	$dbh->do($q, undef, $filename{$_}, $artistid_cache{$info{artist}},
-		$info{title}, $albumid_cache{$info{album}}, $info{track} || 0,
-		$_, $info{len}, $info{encoding}, $opt_R,
-		$last_played{$_} || ($opt_L? time : 0),
-		$time_added{$_} || time)
-                or die "can't do sql command: " . $dbh->errstr . "\n";
-
-	if($info{lyrics}) {
-		$dbh->do("REPLACE INTO lyrics SET id=?, description=?, language=?, lyrics=?",
-			undef, $filename{$_} || $dbh->{'mysql_insertid'},
-			$info{description}, $info{language}, $info{lyrics})
+		$dbh->do($q, undef, $filename{$file}, $artistid_cache{$info{artist}},
+			$info{title}, $albumid_cache{$info{album}}, $info{track} || 0,
+			$file, $info{len}, $info{encoding}, $opt_R,
+			$last_played{$file} || ($opt_L? time : 0),
+			$time_added{$file} || time)
 	                or die "can't do sql command: " . $dbh->errstr . "\n";
+
+		if($info{lyrics}) {
+			$dbh->do("REPLACE INTO lyrics SET id=?, description=?, language=?, lyrics=?",
+				undef, $filename{$file} || $dbh->{'mysql_insertid'},
+				$info{description}, $info{language}, $info{lyrics})
+		                or die "can't do sql command: " . $dbh->errstr . "\n";
+		}
 	}
-	delete $filename{$_};
+	delete $filename{$file};
 }
 
 close FILES
@@ -300,7 +353,7 @@ close FILES
 		(($? & 0x7f)? ($? & 0x7f) : ($? >> 8));
 
 # delete all filenames in database what were not found on disk
-if($do_delete) {
+if($do_delete && !$opt_n) {
 	$sth = $dbh->prepare("UPDATE song SET present=0 WHERE binary filename=?");
 	foreach(keys %filename) {
 		$sth->execute($_);
@@ -310,10 +363,10 @@ if($do_delete) {
 }
 
 printf <<EOF,
-%4d songs added.
-%4d songs updated.
-%4d songs deleted.
-%4d songs moved.
+%4d songs added$opt_n.
+%4d songs updated$opt_n.
+%4d songs deleted$opt_n.
+%4d songs moved$opt_n.
 %4d songs skipped.
 EOF
 	$num_added, $num_updated, $num_deleted, $num_moved, $num_skipped
@@ -325,9 +378,18 @@ $dbh->do("optimize table song");
 $dbh->do("optimize table album");
 $dbh->do("optimize table artist");
 
+$sth->finish();
 $dbh->disconnect();
 
 
+sub utf16tolatin1(@) {
+	foreach my $s (@_) {
+		if($$s =~ s/^(\xff\xfe|\xfe\xff)//) {
+			# MP3::Tag already fucked it up, so it's not UTF-16 anymore...
+			$$s = pack "C*", map { $_ & 0xff } unpack "V*", "$$s---";
+		}
+	}
+}
 
 sub get_id3($\%) {
 	my ($file, $info) = @_;
@@ -337,6 +399,7 @@ sub get_id3($\%) {
 	my $id3 = MP3::Tag->new($file);
 	$id3->config("autoinfo", "ID3v2", "ID3v1");
 	my ($t, $tr, $a, $alb) = $id3->autoinfo();
+	utf16tolatin1(\$t, \$tr, \$a, \$alb);
 	
 	# read lyrics
 	my $tag = $id3->{ID3v2};
@@ -411,24 +474,23 @@ sub getinfo_mp3($\%) {
 		or return undef;
 
 	# open file to check Xing VBR tag
-	open F, $file or do {
+	open STDIN, $file or do {
 		print STDERR "$file: $!\n";
 		return "?";
 	};
 
 	# skip ID3 tag
 	my $buf;
-	read F, $buf, 10;
+	read STDIN, $buf, 10;
 	my ($tag, $ver1, $ver2, $flags, $s1, $s2, $s3, $s4) = unpack "a3CCCCCCC", $buf;
 	if($tag eq "ID3") {
-		$size = (((((($s1 << 7) | $s2) << 7) | $s3) << 7) | $s4) + 10;
-		seek F, $size, 1;
+		my $size = (((((($s1 << 7) | $s2) << 7) | $s3) << 7) | $s4) + 10;
+		seek STDIN, $size, 1;
 	}
 
 	# read Xing VBR tag
-	seek F, 26, 1;
-	read F, $buf, 12;
-	close F;
+	seek STDIN, 26, 1;
+	read STDIN, $buf, 12;
 
 	my ($xtag, $xflags, $xframes);
 	($xtag, $xflags, $xframes) = unpack("a4NN", $buf);
@@ -445,6 +507,19 @@ sub getinfo_mp3($\%) {
 			$info->{freq};
 		$bitrate = int(8 * (-s $file) / $info->{len} / 1000);
 	}
+	if($opt_l) {
+		seek STDIN, 0, 0;
+		open F, "mp3_check -|";
+		while(my $l = <F>) {
+			if($l =~ /^SONG_LENGTH\s+(\d+):(\d+)/) {
+				$info->{len} = $1 * 60 + $2;
+			}
+			if($l =~ /^VBR_AVERAGE\s+(\d+)/) {
+				$bitrate = $1;
+			}
+		}
+		close F;
+	}
 	if($mp3info->{LAYER} == 3) {
 		$info->{encoding} = "MP3";
 	} else {
@@ -456,6 +531,7 @@ sub getinfo_mp3($\%) {
 
 	get_id3($file, %$info);
 
+	close STDIN;
 	return 1;
 }
 
@@ -467,21 +543,34 @@ sub getinfo_ogg($\%) {
 		or return undef;
 
 	if(open(F, "-|") == 0) {
-		exec "ogg2raw", "-i", $file;
+		exec "ogginfo", $file;
 		die;
 	}
-
 	my $br;
-	my $infoline = <F>;
-	($info->{freq}, $info->{chan}, $info->{len}, $br) = split(/,/, $infoline);
+	while(<F>) {
+		s/\s+$//;
+		if(/^Rate:\s*(\d+)/i) {
+			$info->{freq} = $1;
+		} elsif(/^Channels:\s*(\d+)/) {
+			$info->{chan} = $1;
+		} elsif(/^\s+Playback length:\s*(\d+)m:(\d+)/i) {
+			$info->{len} = $1 * 60 + $2;
+		} elsif(/^\s+Average bitrate:\s*(\d+(\.\d+)?)/i) {
+			$br = int($1 + 0.5);
+		} elsif(/^\s+artist=(.*)/) {
+			$info->{artist} = $1;
+		} elsif(/^\s+title=(.*)/) {
+			$info->{title} = $1;
+		} elsif(/^\s+album=(.*)/) {
+			$info->{album} = $1;
+		} elsif(/^\s+tracknumber=(.*)/) {
+			$info->{track} = $1;
+		}
+	}
+	close F;
 	$info->{freq} or return undef;
 	$info->{encoding} = "Ogg-Vorbis";
-	push @{$info->{encoding_extra}}, sprintf("%dkb/s", ($br + 500) / 1000);
-
-	chop(($info->{artist}, $info->{title}, $info->{album},
-	 $info->{track}) = <F>);
-	close F;
-
+	push @{$info->{encoding_extra}}, sprintf("%dkb/s", $br);
 	$info->{info_origin} = "Ogg-Vorbis" if $info->{artist} && $info->{title};
 	return 1;
 }
@@ -550,7 +639,7 @@ sub getinfo_flac($\%) {
 		die;
 	}
 	my ($totsamp, $bps, @rest, @a);
-	($info->{freq}, $info->{chan}, $totsamp, $bps, @rest) = <F>;
+	($info->{freq}, $info->{chan}, $totsamp, $info->{bps}, @rest) = <F>;
 	foreach(@rest) {
 		if(s/^title=(.*\S)//i) { $info->{title} = $1; }
 		elsif(s/^tracknumber=(.*\S)//i) { $info->{track} = $1; }
@@ -559,7 +648,7 @@ sub getinfo_flac($\%) {
 	}
 	$info->{artist} = join " & ", @a;
 
-	my $totbytes = $totsamp * $info->{chan} * $bps / 8;
+	my $totbytes = $totsamp * $info->{chan} * $info->{bps} / 8;
 	$info->{encoding} = "flac" . ($totbytes? sprintf(" (%d%%)", 100 * $filesize / $totbytes) : "");
 	$info->{len} = $totsamp / $info->{freq};
 	$info->{info_origin} = "flac" if $info->{artist} && $info->{title};
@@ -633,7 +722,7 @@ sub getinfo_mplayer($\%) {
 	local $_;
 	my %prop;
 
-	$file =~ /\.(mpe?g|avi|asx|asf|vob|wmv|ra?m|ra|mov|m2v|wma)$/i
+	$file =~ /\.(mpe?g|avi|asx|asf|vob|wmv|ra?m|ra|mov|m2v|wma|aac|m4a|m4b|mp4|flv|ape)$/i
 		or return undef;
 
 	local *F;
@@ -646,8 +735,10 @@ sub getinfo_mplayer($\%) {
 	}
 	while(<F>) {
 		s/\s+$//;
-		/^\s+author:\s*(.*)/i and $info->{artist} = $1;
-		/^\s+name:\s*(.*)/i and $info->{title} = $1;
+		/^\s+author:\s*(.*)/i       and $info->{artist} = $1;
+		/^\s+(name|title):\s*(.*)/i and $info->{title} = $2;
+		/^\s+album:\s*(.*)/i        and $info->{album} = $1;
+		/^\s+track:\s*(\d+)/i       and $info->{track} = $1;
 		/^ID_(\w+)=(.*)/ and $prop{lc($1)} = $2;
 	}
 	close F;
@@ -660,53 +751,38 @@ sub getinfo_mplayer($\%) {
 	if($prop{video_width} && $prop{video_height}) {
 		$info->{encoding} .= " ($prop{video_width}x$prop{video_height})";
 	}
-	if(!$prop{video_codec}) {
+	if($prop{video_format}) {
+		push @{$info->{encoding_extra}}, sprintf("%s+%skb/s",
+			$prop{video_bitrate}? int(($prop{video_bitrate} + 500) / 1000) : "?",
+			$prop{audio_bitrate}? int(($prop{audio_bitrate} + 500) / 1000) : "?");
+		$info->{freq} = 0;
+		$info->{chan} = 0;
+	} else {
 		# audio only
 		if($prop{audio_format} >= 0x160 && $prop{audio_format} <= 0x163) {
 			$info->{encoding} = "WMA";
+		} elsif($prop{audio_format} eq "mp4a") {
+			$info->{encoding} = "AAC";
+		} elsif($prop{audio_format} eq "alac" || $prop{audio_format} eq "APE") {
+			$info->{encoding} = uc $prop{audio_format};
+			my $uncompbytes = $prop{length} * $prop{audio_rate} * $prop{audio_nch} * 2;
+			if($uncompbytes) {
+				$info->{encoding} .= sprintf " (%d%%)", 100 * (-s $file) / $uncompbytes;
+			}
 		}
 		push @{$info->{encoding_extra}}, sprintf("%dkb/s", ($prop{audio_bitrate} + 500) / 1000)
-			if exists $prop{audio_bitrate};
+			if $prop{audio_bitrate};
 		$info->{freq} = $prop{audio_freq};
 		$info->{chan} = $prop{audio_nch};
-	} else {
-		$info->{freq} = 0;
-		$info->{chan} = 0;
+	}
+	if(exists $info->{encoding_extra} && @{$info->{encoding_extra}} == 1 && ${$info->{encoding_extra}}[0] =~ m|115\d\+224kb/s|) {
+		if($info->{encoding} =~ s/mpg \(352x288\)/VCD (PAL)/ ||
+		   $info->{encoding} =~ s/mpg \(352x240\)/VCD (NTSC)/) {
+			delete $info->{encoding_extra};
+		}
 	}
 	$info->{len} = $prop{length};
 	return 1;
-}
-
-sub getinfo_aac($\%) {
-	my ($file, $info) = @_;
-	my $l;
-	local *F;
-
-	$file =~ /\.(aac|m4a)$/i
-		or return undef;
-
-	if(open(F, "-|") == 0) {
-		open STDERR, ">&STDOUT";
-		exec "faad", "-i", $file;
-		kill 'KILL', $$;
-	}
-	my $retval;
-	while($l = <F>) {
-		if($l =~ /(\w+)\s+([.\d]+)\s+secs,\s+(\d+)\s+ch,\s+(\d+)\s+Hz/) {
-			$info->{encoding} = $1;
-			push @{$info->{encoding_extra}}, sprintf("%dkb/s", (-s $file) / $2 * 8e-3) if $2;
-			$info->{freq} = $4;
-			$info->{chan} = $3;
-			$info->{len} = int($2 + 0.5);
-			$retval = 1;
-		}
-		if($l =~ /^(artist|title|album|track):\s*(.*\S)/i) {
-			$info->{lc $1} = $2;
-			$info->{info_origin} = "aac";
-		}
-	}
-	close F;
-	return $retval;
 }
 
 sub getinfo_ac3($\%) {
@@ -732,7 +808,7 @@ sub getinfo_soepkip($\%) {
 	open F, "$dir/.soepkiptng_info" or return undef;
 	local $_;
 	FILE: while(<F>) {
-		if(/^\[([^\]]+)\]/ && $1 eq $file) {
+		if(/^\[(.+)\]/ && $1 eq $file) {
 			$info->{info_origin} = ".soepkiptng_info";
 			while(<F>) {
 				last FILE if /^\[/;
@@ -803,7 +879,8 @@ sub get_wav_params($\%;$) {
 }
 
 sub read_eric_files() {
-	foreach $file (split /\s+/, $conf{'description_files'}) {
+	foreach my $file (split /\s+/, $conf{'description_files'}) {
+		my ($artist, $album, $dirname);
 		open ALB, $file or die "$file: $!\n";
 		while(<ALB>) {
 			/\S/ or do { $artist = $album = $dirname = ""; next; };
@@ -813,18 +890,18 @@ sub read_eric_files() {
 				my $realartist;
 	
 				$dirname = $1;
-				($artist_s = $dirname) =~ s/-.*//;
+				(my $artist_s = $dirname) =~ s/-.*//;
 				while(<ALB>) {
 					/^##\s*(.*\S)/ and do {
 						$realartist = $1;
 						next;
 					};
 					if(s/^track\s+(\S+)\.\w+\s*//) {
-						$a = $1;
-						$filename = $1;
+						my $a = $1;
+						my $filename = $1;
 						$a =~ s/^(\d+)-([^-]+)-.*/\2/;
 						$tracknr{"$dirname/$filename"} = $1;
-#print STDERR "a=$a artist_s=$artist_s artist=$artist realartist=$realartist\n";
+						#print STDERR "a=$a artist_s=$artist_s artist=$artist realartist=$realartist\n";
 						if($realartist) {
 							$artist{"$dirname/$filename"} = $realartist;
 							$realartist = undef;
@@ -843,10 +920,10 @@ sub read_eric_files() {
 							s/\b(\w)/\U\1/g; 
 						}
 						$track{"$dirname/$filename"} = $_;
-#print STDERR "{$dirname/$filename} = $_\n";
-	#print qq~\$track{"$dirname/$filename"} = $_;\n~ if /magic/i;
+						#print STDERR "{$dirname/$filename} = $_\n";
+						#print qq~\$track{"$dirname/$filename"} = $_;\n~ if /magic/i;
 						$album{"$dirname/$filename"} = $album;
-	#print STDERR "$dirname/$filename $album\n";
+						#print STDERR "$dirname/$filename $album\n";
 					}
 					last unless /\S/;
 				}
@@ -895,6 +972,15 @@ sub extract_artist_title($\%) {
 
 	$pp =~ s|/+$||;
 	$pp =~ s|.*/||;
+
+	if($file =~ /[\x80-\xff]{2,}/) {
+		my $dfile;
+		eval { $dfile = decode_utf8($file, Encode::FB_CROAK); };
+		if(!$@) {
+			$file = encode("iso-8859-1", $dfile);
+			$info->{info_origin} .= "(utf8)";
+		}
+	}
 
 	if($file =~ /[_\s]*-[_\s]*/) {
 		($a, $t) = ($`, $');
