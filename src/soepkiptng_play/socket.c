@@ -110,8 +110,8 @@ static void handle_cmd(int fd, struct socket_t *p, char *s)
 		sockprintf(p, "+running=%d song=%d time=%d.%02d\n",
 		   output_running(),
 		   song_counter,
-		   byte_counter / SAMPLEFREQ / 4,
-		   (byte_counter * 100 / SAMPLEFREQ / 4) % 100);
+		   byte_counter / output_bytespersample(),
+		   (byte_counter * 100 / output_bytespersample()) % 100);
 	}
 
 	else if(strcasecmp(cmd, "dump") == 0) {

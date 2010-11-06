@@ -190,3 +190,9 @@ int output_oss_running()
 {
 	return oss_fd != -1;
 }
+
+int output_oss_bytespersample()
+{
+	return oss_samplefreq * ((oss_fmt == AFMT_S32_LE)? 8 : 4);
+}
+

@@ -23,4 +23,4 @@ install: soepkiptng_play
 	install -o root -m 4755 soepkiptng_play $(DSTDIR)
 
 clean:
-	rm -f *.o soepkiptng_play
+	rm -rf obj soepkiptng_play
