@@ -41,7 +41,7 @@ use Encode;
 use Getopt::Std;
 use MP3::Tag;
 use MP3::Info;
-#use Data::Dumper;
+use Data::Dumper;
 
 our ($opt_C, $opt_L, $opt_R, $opt_c, $opt_d, $opt_e, $opt_f, $opt_h, $opt_l, $opt_m, $opt_n, $opt_p, $opt_q, $opt_r, $opt_v);
 
@@ -379,15 +379,6 @@ $sth->finish();
 $dbh->disconnect();
 
 
-sub utf16tolatin1(@) {
-	foreach my $s (@_) {
-		if($$s =~ s/^(\xff\xfe|\xfe\xff)//) {
-			# MP3::Tag already fucked it up, so it's not UTF-16 anymore...
-			$$s = pack "C*", map { $_ & 0xff } unpack "V*", "$$s---";
-		}
-	}
-}
-
 sub get_id3($\%) {
 	my ($file, $info) = @_;
 
@@ -396,7 +387,6 @@ sub get_id3($\%) {
 	my $id3 = MP3::Tag->new($file);
 	$id3->config("autoinfo", "ID3v2", "ID3v1");
 	my ($t, $tr, $a, $alb) = $id3->autoinfo();
-	utf16tolatin1(\$t, \$tr, \$a, \$alb);
 	
 	# read lyrics
 	my $tag = $id3->{ID3v2};
@@ -615,7 +605,7 @@ sub getinfo_flac($\%) {
 			/, $file;
 		die;
 	}
-	my ($totsamp, $bps, @rest, @a);
+	my ($totsamp, @rest, @a);
 	($info->{freq}, $info->{chan}, $totsamp, $info->{bps}, @rest) = <F>;
 	foreach(@rest) {
 		if(s/^title=(.*\S)//i) { $info->{title} = $1; }

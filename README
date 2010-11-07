@@ -56,6 +56,7 @@ Requirements:
 * mysql 3.22
   (3.23 recommended; 3.22 cannot do case-insensitive regexps)
 * perl modules:
+  - MP3::Tag
   - MPEG::MP3Info
   - CGI
   - DBI
@@ -88,6 +89,7 @@ apt-get.
 Package list:
 - libcompress-zlib-perl
 - libdbd-mysql-perl
+- libmp3-tag-perl
 - libmpeg-mp3info-perl or libmp3-info-perl
 - libterm-readkey-perl    (optional)
 - mysql-server

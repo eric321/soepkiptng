@@ -40,7 +40,6 @@ BEGIN {
 }
 use Getopt::Std;
 use DBI;
-use MP3::Tag;
 
 require "$progdir/soepkiptng.lib";
 
