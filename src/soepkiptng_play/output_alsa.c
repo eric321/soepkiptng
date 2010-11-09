@@ -91,6 +91,12 @@ int output_alsa_start()
 		fprintf(stderr, "cannot prepare audio interface for use (%s)\n", snd_strerror(err));
 		exit(1);
 	}
+
+#if 1
+	fprintf(stderr, "sorry, alsa support is incomplete...\n");
+	exit(1);
+#endif
+
 	return 0;
 }
 
