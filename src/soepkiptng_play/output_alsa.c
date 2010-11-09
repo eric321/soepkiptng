@@ -118,3 +118,8 @@ int output_alsa_bytespersample()
 {
 	return alsa_samplefreq * ((alsa_fmt == SND_PCM_FORMAT_S32_LE)? 8 : 4);
 }
+
+void output_alsa_reset()
+{
+}
+

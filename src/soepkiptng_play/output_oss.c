@@ -129,6 +129,7 @@ int output_oss_init(char *dev, int samplefreq, int fmt_bits)
 int output_oss_start()
 {
 	int i, retval;
+	audio_buf_info bi;
 
 	DEBUG("output_oss_start: oss_dev=%s\n", oss_dev);
 	
@@ -167,6 +168,11 @@ int output_oss_start()
 	if(i != oss_samplefreq)
 		fprintf(stderr, "WARNING: wanted samplefreq %d, got %d\n", oss_samplefreq, i);
 	
+	if(ioctl(oss_fd, SNDCTL_DSP_GETOSPACE, &bi) == 0) {
+		fprintf(stderr, "ospace: frags=%d fragstotal=%d fragsize=%d bytes=%d\n",
+			bi.fragments, bi.fragstotal, bi.fragsize, bi.bytes);
+	}
+
 	oss_do_init = 1;
 	
 	return register_fd(oss_fd, output_oss_pre, output_oss_post, 0);
@@ -194,5 +200,12 @@ int output_oss_running()
 int output_oss_bytespersample()
 {
 	return oss_samplefreq * ((oss_fmt == AFMT_S32_LE)? 8 : 4);
+}
+
+void output_oss_reset()
+{
+	if(ioctl(oss_fd, SNDCTL_DSP_RESET, NULL) < 0) {
+		perror("SNDCTL_DSP_RESET");
+	}
 }
 

@@ -17,6 +17,7 @@ static void sighup(int s)
 static void sigusr1(int s)
 {
 	input_flush();
+	output_reset();
 }
 
 static void sigusr2(int s)
