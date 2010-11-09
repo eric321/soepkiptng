@@ -443,10 +443,10 @@ sub start_play($) {
 	my $bits = $conf{bitspersample} || 16;
 	if($filename =~ /^cdda:[^:]*:(\d+)/) {
 		exec_prog ["$conf{cdda_prog} $1"];
-	} elsif($filename =~ /^\w+:/ || $ext =~ /^(wma|wav|m4a|ape|flac|aac|ac3|ogg|shn|mp[cp+])$/ || $song->{encoding} =~ /RealAudio/) {
-		play_mplayer($filename);
-	} elsif($ext eq "mp2" || $ext eq "mp3") {
+	} elsif(($ext eq "mp2" || $ext eq "mp3") && $samplefreq <= 65535) {
 		play_mp3($song);
+	} elsif($filename =~ /^\w+:/ || $ext =~ /^(wma|wav|m4a|ape|flac|aac|ac3|ogg|shn|mp[23cp+])$/ || $song->{encoding} =~ /RealAudio/) {
+		play_mplayer($filename);
 	} elsif($ext =~ /^(mid|rcp|r36|g18|g36|mod)$/) {
 		if($bits == 16) {
 			exec_prog ["timidity", "-s", $samplefreq, "-o", "-", "-Or1Ssl", $filename];
