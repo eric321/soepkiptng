@@ -399,9 +399,18 @@ sub play_mplayer(@) {
 
 	if($prog[$#prog] =~ /^http:/) { unshift @prog, "-cache", 512; }
 
+	if(exists $conf{fifofile}) {
+		if(! -p $conf{fifofile}) {
+			warn "### mkfifo -m 0777 $conf{fifofile}\n";
+			system "mkfifo", "-m", "0777", $conf{fifofile};
+		}
+		unshift @prog, "-input", "file=$conf{fifofile}";
+	}
+
 	my $samplefreq = $conf{samplefreq} || 44100;
 	my $bits = $conf{bitspersample} || 16;
 	unshift @prog, "mplayer", "-quiet", "-vc", "dummy", "-vo", "null",
+		"-noconsolecontrols",
 		"-af", "resample=$samplefreq,channels=2,format=s${bits}ne",
 		"-ao", "pcm:nowaveheader:file=/dev/fd/" . fileno(F);
 
@@ -443,7 +452,10 @@ sub start_play($) {
 	my $bits = $conf{bitspersample} || 16;
 	if($filename =~ /^cdda:[^:]*:(\d+)/) {
 		exec_prog ["$conf{cdda_prog} $1"];
-	} elsif(($ext eq "mp2" || $ext eq "mp3") && $samplefreq <= 65535) {
+
+	# if fifo support is enabled, leave long songs to mplayer so we can skip forward and backward
+	# madplay cannot resample to >65535Hz, so we need mplayer for that
+	} elsif(($ext eq "mp2" || $ext eq "mp3") && $samplefreq <= 65535 && ($song->{length} < 600 || !exists $conf{fifofile})) {
 		play_mp3($song);
 	} elsif($filename =~ /^\w+:/ || $ext =~ /^(wma|wav|m4a|ape|flac|aac|ac3|ogg|shn|mp[23cp+])$/ || $song->{encoding} =~ /RealAudio/) {
 		play_mplayer($filename);
