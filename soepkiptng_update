@@ -43,7 +43,7 @@ use MP3::Tag;
 use MP3::Info;
 use Data::Dumper;
 
-our ($opt_C, $opt_L, $opt_R, $opt_c, $opt_d, $opt_e, $opt_f, $opt_h, $opt_l, $opt_m, $opt_n, $opt_p, $opt_q, $opt_r, $opt_v);
+our ($opt_C, $opt_L, $opt_M, $opt_R, $opt_c, $opt_d, $opt_e, $opt_f, $opt_h, $opt_l, $opt_m, $opt_n, $opt_p, $opt_q, $opt_r, $opt_v);
 
 sub get_wav_params($\%;$);
 sub getinfo_mp3($\%);
@@ -66,7 +66,7 @@ if(open F, ".soepkiptng_random_pref") {
 	$opt_R = 0 + <F>;
 	close F;
 }
-getopts('Cfredqvhc:LR:pmln');
+getopts('Cfredqvhc:LM:R:pmln');
 my $force = 1 if $opt_f;
 $| = 1;
 my $do_delete = !$opt_d && !$opt_r;
@@ -246,6 +246,12 @@ while(defined(my $file = <FILES>)) {
 			$num_moved++;
 			$oldname =~ s|[^/]+$||;
 			print "Moving $file (from $oldname)\n";
+			next;
+		}
+		if(defined($opt_M) && $num_added >= $opt_M) {
+			print "Skipping $file (max $opt_M adds)\n";
+			$num_skipped++;
+			delete $filename{$file};
 			next;
 		}
 		$num_added++;
