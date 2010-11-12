@@ -167,6 +167,13 @@ while(defined(my $file = <FILES>)) {
 		}
 	}
 
+	# skip if already in database (unless "force" was given)
+	if($filename{$file} && !$force) {
+		$num_skipped++;
+		delete $filename{$file};
+		next;
+	}
+
 	print "$file\n" if $opt_v;
 
 	if(length($file) > 255) {
@@ -219,16 +226,9 @@ while(defined(my $file = <FILES>)) {
 		die "Error: file on local filesystem: $file\n";
 	}
 
-	# skip if already in database (unless "force" was given)
 	if($filename{$file}) {
-		if($force) {
-			print "Updating $file:\n";
-			$num_updated++;
-		} else {
-			$num_skipped++;
-			delete $filename{$file};
-			next;
-		}
+		print "Updating $file:\n";
+		$num_updated++;
 	} else {
 		# check whether an old entry (ie. the file does not exist anymore)
 		# exists with the same filename (without path)
