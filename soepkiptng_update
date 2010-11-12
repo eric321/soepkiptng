@@ -43,7 +43,7 @@ use MP3::Tag;
 use MP3::Info;
 use Data::Dumper;
 
-our ($opt_C, $opt_L, $opt_M, $opt_R, $opt_c, $opt_d, $opt_e, $opt_f, $opt_h, $opt_l, $opt_m, $opt_n, $opt_p, $opt_q, $opt_r, $opt_v);
+our ($opt_C, $opt_L, $opt_M, $opt_R, $opt_T, $opt_c, $opt_d, $opt_e, $opt_f, $opt_h, $opt_l, $opt_m, $opt_n, $opt_p, $opt_q, $opt_r, $opt_v);
 
 sub get_wav_params($\%;$);
 sub getinfo_mp3($\%);
@@ -66,7 +66,7 @@ if(open F, ".soepkiptng_random_pref") {
 	$opt_R = 0 + <F>;
 	close F;
 }
-getopts('Cfredqvhc:LM:R:pmln');
+getopts('Cfredqvhc:LM:R:Tpmln');
 my $force = 1 if $opt_f;
 $| = 1;
 my $do_delete = !$opt_d && !$opt_r;
@@ -77,19 +77,21 @@ $opt_h and die <<EOF;
 usage: soepkiptng_update [-defhqrvCL] [-c configfile] [-R pref] [dir...]
 
 options:
+  -C            : don't fix artist/title/album upper/lowercase
   -c configfile : override soepkiptng config file
   -d            : turn on debugging
   -e            : don't read "ericfiles"
   -f            : force updating of info even if song is already in database
   -h            : get this help
+  -L            : set last_played to current time
+  -m            : skip recent files
+  -M n          : add max N files
+  -n            : don't actually do anything to the database
   -q            : be quiet
   -r            : don't recurse subdirectories
-  -v            : be verbose
-  -C            : don't fix artist/title/album upper/lowercase
-  -L            : set last_played to current time
   -R pref       : set random_pref field
-  -m            : skip recent files
-  -n            : don't actually do anything to the database
+  -T            : test file integrity before adding
+  -v            : be verbose
 
 Directories containing the file ".nosoepkiptng" will be skipped.
 EOF
@@ -596,6 +598,14 @@ sub getinfo_flac($\%) {
 		or return undef;
 
 	my $filesize = -s $file or return undef;
+
+	if($opt_T) {
+		system "flac", "-t", $file;
+		if($?) {
+			warn "$file: integrity test failed, ignoring\n";
+			return undef;
+		}
+	}
 
 	if(open(F, "-|") == 0) {
 		open STDERR, ">/dev/null";
