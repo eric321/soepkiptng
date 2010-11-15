@@ -1,0 +1,114 @@
+#!/usr/bin/perl
+
+use Digest::MD5;
+use Getopt::Std;
+
+getopts('cv');
+
+$tabsel_123 = [
+   [ [0,32,64,96,128,160,192,224,256,288,320,352,384,416,448,0],
+     [0,32,48,56, 64, 80, 96,112,128,160,192,224,256,320,384,0],
+     [0,32,40,48, 56, 64, 80, 96,112,128,160,192,224,256,320,0] ],
+
+   [ [0,32,48,56,64,80,96,112,128,144,160,176,192,224,256,0],
+     [0,8,16,24,32,40,48,56,64,80,96,112,128,144,160,0],
+     [0,8,16,24,32,40,48,56,64,80,96,112,128,144,160,0] ]
+];
+
+$freqs = [ 44100, 48000, 32000,	 # MPEG 1.0
+	 22050, 24000, 16000,    # MPEG 2.0
+	 11025, 12000,  8000 ];  # MPEG 2.5
+
+sub getmd5($) {
+	my $file = shift @_;
+	local *F;
+	open F, $file or do {
+		warn "$file: $!\n";
+		return wantarray? () : undef;
+	};
+	my $head;
+	my $len = 0;
+	my $ctx = Digest::MD5->new;
+	while(read F, $_, 1) {
+		$head = ($head << 8) | ord($_);
+		next if ($head & 0xffe00000) != 0xffe00000;
+
+		my $layer = 4 - (($head >> 17) & 3);
+		if($layer == 4) {
+			warn "$file: invalid layer: 4\n";
+			next;
+		}
+		my $freqidx = (($head >> 10) & 0x3);  # valid: 0..2
+		if($freqidx == 3) {
+			warn "$file: invalid sample frequency\n";
+			next;
+		}
+		if(($head >> 20) & 1) {
+			# MPEG 1.0 (lsf==0) or MPEG 2.0 (lsf==1)
+			$lsf = (~$head >> 19) & 1;
+			$freqidx += lsf * 3;
+		} else {
+			# MPEG 2.5
+			$lsf = 1;
+			$freqidx += 6;
+		}
+		$bitrate_index = ($head >> 12) & 0xf;  # valid: 1..14
+		$padding = ($head >> 9) & 1;
+		$stereo = (($head >>6) & 0x3) == 3? 1 : 2;
+		$ssize = $lsf? ($stereo == 1? 9 : 17) : ($stereo == 1? 17 : 32);
+		if(!((newhead >> 16) & 1)) { $ssize += 2 }; # CRC
+		$bitrate = $tabsel_123->[$lsf]->[$layer - 1]->[$bitrate_index];
+		@mult = (12000, 144000, 144000);
+		$framesize = $bitrate * $mult[layer - 1];
+
+		if($framesize == 0) {
+			warn "$file: invalid framesize/bitrate_index\n";
+			next;
+		}
+
+		$divisor = $freqs->[$freqidx] << ($layer == 3? $lsf : 0);
+		$framesize = int($framesize / $divisor);
+		$framesize += $padding;
+		if($layer == 1) { $framesize *= 4 };
+		$spf = $layer == 1? 384 : $layer == 2? 1152 : $freqs->[$freqidx] < 32000? 576 : 1152;
+
+		printf STDERR "header at offset %8d fs=%4d br=%3d sfreq=%5d spf=%4d\n",
+			tell(F) - 4, $framesize, $bitrate, $freqs->[$freqidx], $spf
+			if $opt_v;
+		$len += $spf * (14112000 / $freqs->[$freqidx]);
+		seek F, -4, 1;
+		my $r = read(F, $_, $framesize);
+		if($r != $framesize) {
+			warn "$file: EOF in mp3 frame $r $framesize\n";
+			last;
+		}
+		$ctx->add($_);
+	}
+	my $digest = $ctx->hexdigest;
+	return wantarray? ($digest, $len / 14112000) : $digest;
+}
+
+foreach my $file (@ARGV) {
+	if($opt_c) {
+		open F, $file or do {
+			warn "$file: $!\n";
+			next;
+		};
+		while(<F>) {
+			/^([0-9a-f]{32}) .(.*\S)/ or next;
+			my $omd5 = $1;
+			my $f = $2;
+			my $nmd5 = getmd5($f);
+			if($omd5 eq $nmd5) {
+				printf STDERR "%s: OK\n", $f;
+			} else {
+				print "%s: MD5 check failed\n", $f;
+			}
+		}
+	} else {
+		my ($d, $l) = getmd5($file);
+		printf "# length %d:%02d\n", $l / 60, $l % 60;
+		printf "%s  %s\n", $d, $file;
+	}
+}
+
