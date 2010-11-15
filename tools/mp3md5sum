@@ -26,12 +26,36 @@ sub getmd5($) {
 		warn "$file: $!\n";
 		return wantarray? () : undef;
 	};
+	my $filesize = -s F;
 	my $head;
+	read F, $head, 10;
+	my ($tag, $ver1, $ver2, $flags, $s1, $s2, $s3, $s4) = unpack "a3CCCCCCC", $head;
+	if($tag eq "ID3" && $ver1 < 0xff && $s1 < 0x80 && $s2 < 0x80 && $s3 < 0x80 && $s4 < 0x80) {
+		my $size = (((((($s1 << 7) | $s2) << 7) | $s3) << 7) | $s4) + 10;
+		printf STDERR "skipping ID3v2 tag at start, %d bytes\n", $size;
+		seek F, $size, 0 or die;
+	} else {
+		seek F, 0, 0 or die;
+	}
+
+	$head = 0;
 	my $len = 0;
 	my $ctx = Digest::MD5->new;
+	my $bogus;
 	while(read F, $_, 1) {
+		my $oldbyte = $head >> 24;
 		$head = ($head << 8) | ord($_);
-		next if ($head & 0xffe00000) != 0xffe00000;
+		if($head == 0x00544147) { #TAG
+			my $remaining = $filesize - tell(F);
+			if($remaining == 125) {
+				print "skipping ID3 tag at end\n";
+				last;
+			}
+		}
+		if(($head & 0xffe00000) != 0xffe00000) {
+			printf "skipping bogus byte 0x%02x\n", $oldbyte if $oldbyte;
+			next;
+		}
 
 		my $layer = 4 - (($head >> 17) & 3);
 		if($layer == 4) {
@@ -83,6 +107,7 @@ sub getmd5($) {
 			last;
 		}
 		$ctx->add($_);
+		$head = 0;
 	}
 	my $digest = $ctx->hexdigest;
 	return wantarray? ($digest, $len / 14112000) : $digest;
