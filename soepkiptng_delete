@@ -17,6 +17,7 @@
 # Boston, MA 02111-1307, USA.
 ############################################################################
 
+use strict;
 use Cwd 'abs_path';
 use DBI;
 use Getopt::Std;
@@ -32,8 +33,10 @@ my $progdir = abs_path($1);
 
 require "$progdir/soepkiptng.lib";
 
-getopts('fqhxc:');
+our ($opt_f, $opt_q, $opt_h, $opt_x, $opt_c, $opt_n);
+getopts('fqhxc:n');
 
+my %conf;
 read_configfile(\%conf, $opt_c);
 
 $ENV{PATH} = "$progdir/bin:$ENV{PATH}";
@@ -47,22 +50,34 @@ anymore.
 
     -f : delete entries even if they still exist
     -q : quiet
+    -n : don't actually do anything to the database
     -x : permanently delete entries that are not present
 
 EOF
 	exit;
 }
 
-$dbh = DBI->connect("DBI:$conf{db_type}:$conf{db_name}:$conf{db_host}",
+my $dbh = DBI->connect("DBI:$conf{db_type}:$conf{db_name}:$conf{db_host}",
 	$conf{db_user}, $conf{db_pass}) or die "can't connect to database";
 
-$sth = $dbh->prepare("SELECT filename FROM song WHERE present AND filename like ?");
-$filename = ($ARGV[0]? abs_path($ARGV[0]) : "/") . "/%";
-$filename =~ s/\\/\\\\/g;
-$sth->execute($filename);
+my $sth = $dbh->prepare("SELECT filename FROM song WHERE present AND filename like ?");
+my $dir = "/%";
+if(@ARGV) {
+	$dir = abs_path($ARGV[0]) or die "$ARGV[0]: $!\n";
+	$dir .= "/%";
+} elsif($opt_f) {
+	die "-f not allowed without dir (to avoid accidents)\n";
+}
+$dir =~ s/\\/\\\\/g;
+$sth->execute($dir);
 
-while(($filename) = $sth->fetchrow_array) {
+while(my ($filename) = $sth->fetchrow_array) {
 	if(!$opt_f) { -s $filename and next; }
+	if($opt_n) {
+		my $p = "permanently " if $opt_x;
+		warn "Would ${p}delete $filename from database\n";
+		next;
+	}
 	warn "Deleting $filename from database.\n" unless $opt_q;
 	if($opt_x) {
 		$dbh->do("DELETE FROM song WHERE filename=?", undef, $filename);
@@ -70,6 +85,5 @@ while(($filename) = $sth->fetchrow_array) {
 		$dbh->do("UPDATE song SET present=0 WHERE filename=?", undef, $filename);
 	}
 }
-
 
 $dbh->disconnect();
