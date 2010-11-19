@@ -837,9 +837,13 @@ sub get_wav_params($\%;$) {
 			}
 		}
 		read(F, $buf, $len)  or last;
-		my ($fmt, $chan, $freq, $bytespersec, $align, $bitspersample) =
-			unpack("vvVVvv", $buf);
-#print STDERR "		my ($fmt, $chan, $freq, $bytespersec, $align, $bitspersample) =\n";
+		my ($fmt, $chan, $freq, $bytespersec, $align, $bitspersample, $cbsize, $validbitspersample, undef, $subfmt, $subguid) =
+			unpack("vvVVvvvvVva14", $buf);
+		print STDERR "fmt=$fmt ch=$chan f=$freq byps=$bytespersec al=$align bps=$bitspersample cb=$cbsize sfmt=$subfmt\n";
+		if($len >= 18 && $fmt == 0xfffe && $cbsize == 22 && $subguid eq "\x00\x00\x00\x00\x10\x00\x80\x00\x00\xAA\x00\x38\x9B\x71") {
+			$bitspersample = $validbitspersample;
+			$fmt = $subfmt;
+		}
 		last if $fmt != 1;
 
 		# find 'data' chunk
@@ -857,6 +861,7 @@ sub get_wav_params($\%;$) {
 		$info->{len} = int($len / $bytespersec + 0.5);
 		$info->{freq} = $freq;
 		$info->{chan} = $chan;
+		$info->{bps} = $bitspersample;
 		return 1;
 	}
 	close F;
