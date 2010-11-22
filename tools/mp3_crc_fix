@@ -1,0 +1,173 @@
+#!/usr/bin/perl
+
+use strict;
+use Digest::CRC;
+use Getopt::Std;
+
+our ($opt_d, $opt_h, $opt_q, $opt_u);
+getopts('dhqu');
+
+$opt_h || @ARGV == 0 and die <<EOF;
+Usage: mp3_crc_fix [-hqu] file...
+
+Fraunhofer's mp3enc V3.00 (from 1998) has a CRC calculation bug. This
+results in files with all frames having CRC errors. This tool checks for
+this condition, and corrects the CRCs if option -u was used.
+
+Options:
+  -d      : debug printfs
+  -h      : this help
+  -q      : quiet
+  -u      : fix crcs
+EOF
+
+my $tabsel_123 = [
+   [ [0,32,64,96,128,160,192,224,256,288,320,352,384,416,448,0],
+     [0,32,48,56, 64, 80, 96,112,128,160,192,224,256,320,384,0],
+     [0,32,40,48, 56, 64, 80, 96,112,128,160,192,224,256,320,0] ],
+
+   [ [0,32,48,56,64,80,96,112,128,144,160,176,192,224,256,0],
+     [0,8,16,24,32,40,48,56,64,80,96,112,128,144,160,0],
+     [0,8,16,24,32,40,48,56,64,80,96,112,128,144,160,0] ]
+];
+
+my $freqs = [ 44100, 48000, 32000,	 # MPEG 1.0
+	 22050, 24000, 16000,    # MPEG 2.0
+	 11025, 12000,  8000 ];  # MPEG 2.5
+
+sub checkfile($) {
+	my $file = shift;
+
+	local *F;
+	open F, "+<", $file or die "$file: $!\n";
+	my $filesize = -s F;
+
+	for(my $fix = 0; $fix < 2; $fix++) {
+		my $head;
+		read F, $head, 10;
+		my ($tag, $ver1, $ver2, $flags, $s1, $s2, $s3, $s4) = unpack "a3CCCCCCC", $head;
+		if($tag eq "ID3" && $ver1 < 0xff && $s1 < 0x80 && $s2 < 0x80 && $s3 < 0x80 && $s4 < 0x80) {
+			my $size = (((((($s1 << 7) | $s2) << 7) | $s3) << 7) | $s4) + 10;
+			printf STDERR "skipping ID3v2 tag at start, %d bytes\n", $size if $opt_d;
+			seek F, $size, 0 or die;
+		} else {
+			seek F, 0, 0 or die;
+		}
+
+		$head = 0;
+		my $len = 0;
+		my $bogus;
+		my ($crcok, $crcok2, $crcerr, $crcframes);
+		while(read F, $_, 1) {
+			my $oldbyte = $head >> 24;
+			$head = ($head << 8) | ord($_);
+			if($head == 0x00544147) { #TAG
+				my $remaining = $filesize - tell(F);
+				if($remaining == 125) {
+					print STDERR "skipping ID3 tag at end\n" if $opt_d;
+					last;
+				}
+			}
+			if(($head & 0xffe00000) != 0xffe00000) {
+				printf STDERR "skipping bogus byte 0x%02x\n", $oldbyte if $oldbyte;
+				next;
+			}
+
+			my $layer = 4 - (($head >> 17) & 3);
+			if($layer == 4) {
+				die "$file: invalid layer: 4\n";
+			}
+			if($layer != 3) {
+				die "$file: cannot handle layer 1 and 2 (fixme)\n";
+				next;
+			}
+			my $freqidx = (($head >> 10) & 0x3);  # valid: 0..2
+			if($freqidx == 3) {
+				die "$file: invalid sample frequency\n";
+			}
+			my $lsf;
+			if(($head >> 20) & 1) {
+				# MPEG 1.0 (lsf==0) or MPEG 2.0 (lsf==1)
+				$lsf = (~$head >> 19) & 1;
+				$freqidx += $lsf * 3;
+			} else {
+				# MPEG 2.5
+				$lsf = 1;
+				$freqidx += 6;
+			}
+			my $bitrate_index = ($head >> 12) & 0xf;  # valid: 1..14
+			my $padding = ($head >> 9) & 1;
+			my $stereo = (($head >>6) & 0x3) == 3? 1 : 2;
+			my $ssize = $lsf? ($stereo == 1? 9 : 17) : ($stereo == 1? 17 : 32);
+			my $havecrc = !(($head >> 16) & 1);
+			my $bitrate = $tabsel_123->[$lsf]->[$layer - 1]->[$bitrate_index];
+			my @mult = (12000, 144000, 144000);
+			my $framesize = $bitrate * $mult[$layer - 1];
+
+			if($framesize == 0) {
+				die "$file: invalid framesize/bitrate_index\n";
+			}
+
+			my $divisor = $freqs->[$freqidx] << ($layer == 3? $lsf : 0);
+			$framesize = int($framesize / $divisor);
+			$framesize += $padding;
+			if($layer == 1) { $framesize *= 4 };
+			my $spf = $layer == 1? 384 : $layer == 2? 1152 : $freqs->[$freqidx] < 32000? 576 : 1152;
+
+			printf STDERR "header at offset %8d fs=%4d br=%3d sfreq=%5d spf=%4d\n",
+				tell(F) - 4, $framesize, $bitrate, $freqs->[$freqidx], $spf
+				if $opt_d;
+			$len += $spf * (14112000 / $freqs->[$freqidx]);
+			seek F, -4, 1;
+			my $r = read(F, $_, $framesize);
+			if($r != $framesize) {
+				die "$file: EOF in mp3 frame $r $framesize\n";
+			}
+			if($havecrc) {
+				my $crctarget = unpack "x4n", $_;
+				my $crc  = Digest::CRC::crc(substr($_, 2, 2) . substr($_, 6, $ssize),16,0xffff,0,undef,0x8005,undef);
+				my $crc2 = Digest::CRC::crc(substr($_, 0, 4) . substr($_, 6, $ssize),16,0xffff,0,undef,0x8005,undef);
+				if($crc2 == $crctarget) {
+					if($fix) {
+						seek F, (-$framesize + 4), 1;
+						print F pack("n", $crc);
+						seek F, ($framesize - 6), 1;
+						$crcok++;
+					} else {
+						$crcok2++;
+					}
+				} elsif($crc == $crctarget) {
+					$crcok++;
+				} else {
+					$crcerr++;
+				}
+				$crcframes++;
+			}
+			$head = 0;
+		}
+		my $fixit = 1 if $opt_u && $crcframes > 0 && $crcok2 == $crcframes;
+		if($crcok == $crcframes) {
+			printf "%s: OK\n", $file unless $opt_q;
+		} else {
+			printf "%s: %d frames, %d CRCs OK, %d CRCs OK according to mp3enc algorithm, %d CRCs wrong%s\n",
+				$file, $crcframes, $crcok, $crcok2, $crcerr, $fixit? ", fixing in-place" : "";
+		}
+		$fixit or return 0;
+		seek F, 0, 0;
+	}
+	return 1;
+}
+
+my ($files, $fixed, $errors);
+foreach my $file (@ARGV) {
+	eval {
+		$files++;
+		checkfile($file) and $fixed++;
+	};
+	if($@) {
+		warn $@;
+		$errors++;
+	}
+}
+printf STDERR "%d files checked, %d fixed, %d errors.\n", $files, $fixed, $errors;
+exit !!$errors;
