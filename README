@@ -27,6 +27,7 @@ Features:
   - WMA & RealAudio (all formats that are supported by your mplayer)
   - Musepack (SV7 only)
 * supports playing Shoutcast streams (MP3 / Ogg Vorbis)
+* supports playing back in 32-bit mode
 * player uses real-time scheduling and memory locking for uninterrupted music
   playback; zero silence period between two songs (very nice for consecutive
   songs of a live cd).
@@ -68,6 +69,7 @@ Requirements:
   - mp3: madplay >= 0.15.0 (http://www.mars.org/home/rob/proj/mpeg/)
   - midi/mod: TiMidity++ (http://www.goice.co.jp/member/mo/timidity/)
   - wav, flac, ogg, ac3, aac, alac, shorten, ape: mplayer
+  - wav, flac, ogg, m4a: sox (optional)
   - CD/DA: requires cdparanoia (http://www.xiph.org/paranoia/)
   - Video: requires MPlayer (http://http://www.mplayerhq.hu/)
 * programs for tag reading/writing:

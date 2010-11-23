@@ -50,6 +50,8 @@ my $progdir = abs_path($1);
 
 require "$progdir/soepkiptng.lib";
 
+my %soxformats;
+
 
 sub rotatelog(;$) {
 	if($_[0] or -s STDERR > 65000) {
@@ -426,9 +428,10 @@ sub play_mp3($) {
 
 	my $samplefreq = $conf{samplefreq} || 44100;
 	my $bits = $conf{bitspersample} || 16;
-	my @madplay = qw"madplay --ignore-crc -SQoraw:-";
+	my @madplay = qw"madplay --ignore-crc -Soraw:-";
 	push @madplay, "-R$samplefreq";
 	push @madplay, "-b$bits" if $bits != 16;
+	push @madplay, "--replay-gain=$conf{replaygain}", "-a0" if exists $conf{replaygain};
 	if($dbh) {
 		my $gainrec = $dbh->selectrow_hashref("SELECT gain FROM song WHERE id=$song->{id}");
 		if($gainrec->{gain}) {
@@ -437,6 +440,16 @@ sub play_mp3($) {
 	}
 	push @madplay, $song->{filename};
 	exec_prog \@madplay;
+}
+
+
+sub play_sox($) {
+	my ($song) = @_;
+
+	my $samplefreq = $conf{samplefreq} || 44100;
+	my $bits = $conf{bitspersample} || 16;
+	my @sox = ("sox", "-V3", $song->{filename}, "-traw", "-b$bits", "-esigned-integer", "-", "rate", "-v", $samplefreq);
+	exec_prog \@sox;
 }
 
 
@@ -450,12 +463,16 @@ sub start_play($) {
 
 	my $samplefreq = $conf{samplefreq} || 44100;
 	my $bits = $conf{bitspersample} || 16;
-	if($filename =~ /^cdda:[^:]*:(\d+)/) {
-		exec_prog ["$conf{cdda_prog} $1"];
 
 	# if fifo support is enabled, leave long songs to mplayer so we can skip forward and backward
-	# madplay cannot resample to >65535Hz, so we need mplayer for that
-	} elsif(($ext eq "mp2" || $ext eq "mp3") && $samplefreq <= 65535 && ($song->{length} < 600 || !exists $conf{fifofile})) {
+	my $prefer_mplayer = exists $conf{fifofile} && $song->{length} > 600;
+
+	if($filename =~ /^cdda:[^:]*:(\d+)/) {
+		exec_prog ["$conf{cdda_prog} $1"];
+	} elsif($ext =~ /^(wav|flac)$/ && exists $soxformats{$ext} && !$prefer_mplayer) {
+		play_sox($song);
+	} elsif($ext =~ /^mp[123]$/ && $samplefreq <= 65535 && !$prefer_mplayer) {
+		# madplay cannot resample to >65535Hz, so we need mplayer for that
 		play_mp3($song);
 	} elsif($filename =~ /^\w+:/ || $ext =~ /^(wma|wav|m4a|ape|flac|aac|ac3|ogg|shn|mp[23cp+])$/ || $song->{encoding} =~ /RealAudio/) {
 		play_mplayer($filename);
@@ -669,6 +686,14 @@ if($opt_r) {
 
 # we might have missed the exiting of cdrplay, so reap once now
 child_reaper();
+
+
+open F, "sox --help-format all|";
+while(<F>) {
+	/^Format:\s*(\S+)/ and $soxformats{$1} = 1;
+}
+close F;
+
 
 srand;
 
