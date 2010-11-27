@@ -704,7 +704,7 @@ sub getinfo_mplayer($\%) {
 	local $_;
 	my %prop;
 
-	$file =~ /\.(mpe?g|avi|asx|asf|vob|wmv|ra?m|ra|mov|m2v|wma|aac|m4a|m4b|mp4|flv|ape)$/i
+	$file =~ /\.(mpe?g|avi|asx|asf|vob|wmv|ra?m|ra|mov|m2v|wma|aac|m4a|m4b|mp4|flv|ape|aiff)$/i
 		or return undef;
 
 	local *F;
@@ -747,6 +747,9 @@ sub getinfo_mplayer($\%) {
 			$info->{encoding} = "WMA$wma";
 		} elsif($prop{audio_format} eq "mp4a") {
 			$info->{encoding} = "AAC";
+		} elsif($prop{audio_format} eq "twos" && $file =~ /\.aiff$/i) {
+			$info->{encoding} = "AIFF";
+			delete $prop{audio_bitrate};
 		} elsif($prop{audio_format} eq "alac" || $prop{audio_format} eq "APE") {
 			$info->{encoding} = uc $prop{audio_format};
 			my $uncompbytes = $prop{length} * $prop{audio_rate} * $prop{audio_nch} * 2;

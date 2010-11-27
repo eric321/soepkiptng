@@ -474,7 +474,7 @@ sub start_play($) {
 	} elsif($ext =~ /^mp[123]$/ && $samplefreq <= 65535 && !$prefer_mplayer) {
 		# madplay cannot resample to >65535Hz, so we need mplayer for that
 		play_mp3($song);
-	} elsif($filename =~ /^\w+:/ || $ext =~ /^(wma|wav|m4a|ape|flac|aac|ac3|ogg|shn|mp[23cp+])$/ || $song->{encoding} =~ /RealAudio/) {
+	} elsif($filename =~ /^\w+:/ || $ext =~ /^(wma|wav|m4a|ape|aiff|flac|aac|ac3|ogg|shn|mp[23cp+])$/ || $song->{encoding} =~ /RealAudio/) {
 		play_mplayer($filename);
 	} elsif($ext =~ /^(mid|rcp|r36|g18|g36|mod)$/) {
 		if($bits == 16) {
