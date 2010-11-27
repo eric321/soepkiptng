@@ -180,12 +180,14 @@ int output_oss_start()
 
 void output_oss_stop()
 {
-	char buf[4] = { 0, 0, 0, 0 };
+	static char buf[8];
 
 	DEBUG("output_oss_stop\n");
+	
+	output_oss_reset();
 
-	/* write 1 sample to prevent badly designed cards to keep the DC value of the last sample */
-	write(oss_fd, buf, 4);
+	/* write 1 or 2 samples to prevent badly designed cards to keep the DC value of the last sample */
+	write(oss_fd, buf, sizeof(buf));
 	close(oss_fd);
 
 	unregister_fd(oss_fd);
@@ -197,7 +199,7 @@ int output_oss_running()
 	return oss_fd != -1;
 }
 
-int output_oss_bytespersample()
+int output_oss_bytespersecond()
 {
 	return oss_samplefreq * ((oss_fmt == AFMT_S32_LE)? 8 : 4);
 }
@@ -209,3 +211,8 @@ void output_oss_reset()
 	}
 }
 
+int output_oss_get_odelay()
+{
+	int delay;
+	return ioctl(oss_fd, SNDCTL_DSP_GETODELAY, &delay) == 0? delay : 0;
+}

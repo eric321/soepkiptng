@@ -107,11 +107,13 @@ static void handle_cmd(int fd, struct socket_t *p, char *s)
 	}
 
 	else if(strcasecmp(cmd, "status") == 0) {
+		int b = byte_counter - output_get_odelay();
+		if(b < 0) b = 0;
+		int s100 = (100LL * b) / output_bytespersecond();
 		sockprintf(p, "+running=%d song=%d time=%d.%02d\n",
 		   output_running(),
 		   song_counter,
-		   byte_counter / output_bytespersample(),
-		   (byte_counter * 100 / output_bytespersample()) % 100);
+		   s100 / 100, s100 % 100);
 	}
 
 	else if(strcasecmp(cmd, "dump") == 0) {

@@ -8,7 +8,8 @@ int output_oss_start();
 void output_oss_stop();
 void output_oss_reset();
 int output_oss_running();
-int output_oss_bytespersample();
+int output_oss_bytespersecond();
+int output_oss_get_odelay();
 
 int oss_intercept_resume;
 

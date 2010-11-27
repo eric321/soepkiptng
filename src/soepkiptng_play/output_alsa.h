@@ -8,7 +8,8 @@ int output_alsa_start();
 void output_alsa_stop();
 void output_alsa_reset();
 int output_alsa_running();
-int output_alsa_bytespersample();
+int output_alsa_bytespersecond();
+int output_alsa_get_odelay();
 
 #endif /*_OUTPUT_ALSA_H*/
 

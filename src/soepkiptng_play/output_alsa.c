@@ -114,7 +114,7 @@ int output_alsa_running()
 	return alsa_handle != NULL;
 }
 
-int output_alsa_bytespersample()
+int output_alsa_bytespersecond()
 {
 	return alsa_samplefreq * ((alsa_fmt == SND_PCM_FORMAT_S32_LE)? 8 : 4);
 }
@@ -123,3 +123,7 @@ void output_alsa_reset()
 {
 }
 
+int output_alsa_get_odelay()
+{
+	return 0;
+}
