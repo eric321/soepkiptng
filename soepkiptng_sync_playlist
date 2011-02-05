@@ -1,0 +1,205 @@
+#!/usr/bin/perl
+############################################################################
+# soepkiptng (c) copyright 2000 Eric Lammerts <eric@lammerts.org>.
+############################################################################
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License, version 2, as 
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# A copy of the GNU General Public License is available on the World Wide Web
+# at `http://www.gnu.org/copyleft/gpl.html'.  You can also obtain it by
+# writing to the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+# Boston, MA 02111-1307, USA.
+############################################################################
+
+use Cwd 'abs_path';
+use DBI;
+use File::Copy;
+use File::Path;
+
+my $mp3bitrate = 128;
+my $maxbitrate = 170;
+
+# find program directory
+$_ = $0;
+while(-l) {
+	my $l = readlink or die "readlink $_: $!\n";
+	if($l =~ m|^/|) { $_ = $l; } else { s|[^/]*$|/$l|; }
+}
+m|(.*)/|;
+my $progdir = abs_path($1);
+
+require "$progdir/soepkiptng.lib";
+
+sub mystring_to_filename($;$) {
+	my ($a, $lang) = @_;
+
+	my $ampr = $lang eq "dut"? "en" : "and";
+
+	$a =~ s/[ _]?&[_ ]?/_${ampr}_/g;
+	$a =~ s/([\x80-\xff])/lc($latin9_to_ascii{ord($1)}) || $1/ge;
+	$a =~ s/[^- !_()',&A-Za-z0-9]+/_/g;
+	$a =~ s/[^-A-Za-z0-9]+/_/g;
+	$a =~ s/_$//;
+	return $a;
+}
+
+sub sysordie(@) {
+	printf STDERR "### %s\n", join(" ", @_);
+	printf LOG "### %s\n", join(" ", @_);
+	system @_;
+	die "$_[0] failed\n" if $?;
+}
+
+sub renameordie($$) {
+	printf LOG "*** rename %s -> %s\n", $_[0], $_[1];
+	rename $_[0], $_[1] or die "Error renaming $_[0] -> $_[1]: $!\n";
+}
+
+read_configfile(\%conf, $opt_c);
+
+$| = 1;
+
+$dbh = DBI->connect("DBI:$conf{db_type}:$conf{db_name}:$conf{db_host}",
+	$conf{db_user}, $conf{db_pass}) or die "can't connect to database";
+
+$ARGV[0] or die <<EOF;
+Usage: $0 <playlistname> [<dir>]
+
+Iif dir is omitted, only print the space needed.
+
+EOF
+
+my $sth = $dbh->prepare("SELECT id FROM list WHERE name=?");
+my $rv = $sth->execute($ARGV[0])
+		or die "can't do sql command: " . $dbh->errstr;
+my ($lid) = $sth->fetchrow_array;
+
+$sth = $dbh->prepare(<<EOF);
+	SELECT title,filename,track,artist.name as artist,album.name as album,length,encoding
+	FROM list_contents
+	LEFT JOIN song ON list_contents.song_id=song.id
+	LEFT JOIN album ON album.id=song.album_id
+	LEFT JOIN artist ON artist.id=song.artist_id
+	WHERE list_id=? AND present
+	ORDER BY artist,album,track,title,filename;
+EOF
+$sth->execute($lid);
+
+if($ARGV[1] ne "") {
+	open LOG, ">$ARGV[1]/sync.txt";
+
+	if(open(F, "-|") == 0) {
+		exec "find", $ARGV[1], "-iname", "*.mp3", "-print0";
+		die "find";
+	}
+	$/ = "\0";
+	while(<F>) {
+		chop;
+		$deletefile{lc $_} = 1;
+	}
+	printf "%d existing files found in $ARGV[1]\n", scalar keys %deletefile;
+} else {
+	open LOG, ">/dev/null";
+}
+
+my %copy;
+my $num;
+my $totlen;
+my $totblocks;
+my $trans;
+while($_ = $sth->fetchrow_hashref) {
+	#print "$_->{filename}\n";
+
+	$num++;
+	$totlen += $_->{length};
+	my $sz;
+	if($_->{filename} =~ /\.mp3$/i && !($_->{encoding} =~ m!(\d+)kb/s! && $1 > $maxbitrate)) {
+		$sz = -s $_->{filename};
+	} else {
+		$sz = $_->{length} * $mp3bitrate * 1000 / 8;
+		$trans++;
+		$_->{needtranscode} = 1;
+	}
+	$totblocks += int(($sz + 4095) / 4096);
+	next if $ARGV[1] eq "";
+
+	my $newname = "$ARGV[1]/";
+	if($_->{artist} =~ /^([a-z])/i) {
+		$newname .= lc($1);
+	} else {
+		$newname .= "a";
+	}
+#	$newname .= uc substr($_->{artist} || "_", 0, 1);
+	mkpath($newname);
+	$newname .= "/";
+	my @n;
+	push @n, mystring_to_filename($_->{artist}) if $_->{artist} ne "";
+	push @n, mystring_to_filename($_->{album}) if $_->{album} ne "";
+	push @n, sprintf("%02d", $_->{track}) if $_->{track};
+	push @n, mystring_to_filename($_->{title}) if $_->{title} ne "";
+	$newname .= join("-", @n);
+	$_->{filename} =~ /([^.]*)$/;
+	$newname .= "." . lc($1);
+
+	if(-e $newname) {
+		print "skipping $newname\n";
+		print LOG "skipping $newname\n";
+	} else {
+		$copy{$newname} = $_;
+	}
+	delete $deletefile{lc $newname};
+}
+
+printf "total %d songs, time %d:%02d:%02d, size %dkb, avg bitrate %dkb/s, transcode %dx\n",
+	$num, $totlen / 3600, ($totlen % 3600) / 60, $totlen % 60,
+	$totblocks * 4,
+	$totblocks * 4096 * 8e-3 / $totlen,
+	$trans;
+
+exit if $ARGV[1] eq "";
+
+foreach(keys %deletefile) {
+	print "deleting $_\n";
+	print LOG "deleting $_\n";
+	unlink $_ or do {
+		print "delete $_: $!\n";
+		print LOG "delete $_: $!\n";
+	};
+}
+
+my $copied;
+my $tmpfile = "/tmp/soepkiptng_sync_playlist";
+foreach my $newname (sort { $a cmp $b } keys %copy) {
+	my $origfile = $copy{$newname}->{filename};
+	if($copy{$newname}->{needtranscode}) {
+		unlink "$tmpfile.wav", "$tmpfile.mp3";
+		my $lameinput = "$tmpfile.wav";
+		$newname =~ /([^.]+)$/ or die;
+		if($1 eq "ogg") {
+			sysordie "oggdec", "-o", "$tmpfile.wav", $copy{$newname}->{filename};
+		} elsif($1 eq "flac") {
+			sysordie "flac", "-d", "-o", "$tmpfile.wav", $copy{$newname}->{filename};
+		} elsif($1 eq "mp3") {
+			$lameinput = $copy{$newname}->{filename};
+		} else {
+			die "no support for $1\n";
+		}
+		sysordie "lame", "-h", "--abr", $mp3bitrate,
+			"--tt", $copy{$newname}->{title},
+			"--ta", $copy{$newname}->{artist},
+			"--tl", $copy{$newname}->{album},
+			"--tn", $copy{$newname}->{track},
+			$lameinput, "$tmpfile.mp3";
+		$origfile = "$tmpfile.mp3";
+	}
+	sysordie "cp", $origfile, $newname;
+	$copied++;
+}
+print "$copied files copied\n";
+
