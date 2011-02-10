@@ -1727,17 +1727,17 @@ EOF
 		push @qw, "filename LIKE ?";
 		push @qwa, $filename_restriction;
 
-		if(!$s && $args{qlist}) {
+		if($args{qlist}) {
 			push @qw, "qlist.list_id";
 			$cap = $args{cap};
-			$s = "qlist.song_order";
+			$s = "qlist.song_order" if !$s;
 		}
 		if($s) {
 			$s =~ s/^r_(.*)/\1 DESC/;
 			if($s eq "encoding") { $s = "substring_index(encoding, '(', 1)"; }
 			my $q = sprintf "SELECT %s FROM song %s WHERE %s ORDER BY %s",
 				join(",", @qs), join(" ", @qj), join(" AND ", @qw),
-				"$s,album.name,track,artist.name,title,time_added";
+				"$s,album.name,track,artist.name,title,time_added,encoding";
 			print_alllist_table($req, \%session, $cap, $q, $limit, (@qja, @qwa));
 		} else {
 			print "Error: No search terms specified.\n";
