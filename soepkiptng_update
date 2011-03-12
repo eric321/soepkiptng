@@ -162,7 +162,7 @@ while(defined(my $file = <FILES>)) {
 		my ($mt, $ct) = (stat $file)[9,10];
 		if($ct > $mt) { $mt = $ct; }
 		if((time - $mt) < 30) {
-			warn "skipping $_ (too recent)\n";
+			warn "skipping $file (too recent)\n";
 			next;
 		}
 	}
@@ -196,6 +196,8 @@ while(defined(my $file = <FILES>)) {
 	getinfo_mplayer($file, %info) ||
 	getinfo_ac3($file, %info) ||
 	getinfo_raw($file, %info);
+
+	next if $info{skip};
 
 	getinfo_soepkip($file, %info);
 
@@ -471,6 +473,7 @@ sub getinfo_mp3($\%) {
 	# open file to check Xing VBR tag
 	open STDIN, $file or do {
 		print STDERR "$file: $!\n";
+		$info->{skip} = 1;
 		return "?";
 	};
 
@@ -599,10 +602,27 @@ sub getinfo_flac($\%) {
 	my $filesize = -s $file or return undef;
 
 	if($opt_T) {
-		system "flac", "-t", $file;
+		my $output;
+		if(open(F, "-|") == 0) {
+			open STDERR, ">&STDOUT";
+			exec "flac", "-st", $file;
+			die "flac: $!\n";
+		}
+		my $last;
+		while(<F>) {
+			next if $_ eq $last;
+			$output .= $_;
+			$last = $_;
+		}
+		close F;
 		if($?) {
-			warn "$file: integrity test failed, ignoring\n";
-			return undef;
+			if($output =~ /^(.*error.*)$/im) {
+				warn "$file: integrity test failed, ignoring ($1)\n";
+			} else {
+				print STDERR $output;
+				warn "$file: integrity test failed, ignoring\n";
+			}
+			return $info->{skip} = 1;
 		}
 	}
 
