@@ -1,0 +1,8 @@
+
+use soepkiptng;
+
+CREATE TABLE settings (
+  name varchar(255) not null primary key,
+  value varchar(255)
+);
+INSERT INTO settings (name,value) VALUES ("play_random", 1);

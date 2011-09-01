@@ -455,6 +455,14 @@ sub play_sox($) {
 
 sub start_play($) {
 	my ($song) = @_;
+
+	if($song->{type} eq 'I') {
+		warn "pausing output\n";
+		player_cmd("waitbufferempty", "pause") or warn "error pausing output\n";
+		$pid = -1;
+		return;
+	}
+
 	my $filename = $song->{filename};
 
 	# get file type
@@ -728,18 +736,34 @@ for(;;) {
 	}
 
 	if($dbh) {
-		$song = get_song_jingle() || get_song_queued() || get_song_random_recent() or do {
-			$randsong = validate_song_random($randsong);
-			if($randsong) {
-				$song = $randsong;
-				$randsong = undef;
-			} else {
-				$song = select_song_random() or do {
-					$num_errors++;
-					next;
+		$song = get_song_jingle() || get_song_queued();
+		if(!$song) {
+			my ($play_random) = $dbh->selectrow_array("SELECT value FROM settings WHERE name='play_random'");
+			if($play_random) {
+				$song = get_song_random_recent();
+				if(!$song) {
+					$randsong = validate_song_random($randsong);
+					if($randsong) {
+						$song = $randsong;
+						$randsong = undef;
+					} else {
+						$song = select_song_random();
+					}
 				}
+			} else {
+				warn "not playing random\n";
+				$song = {
+					id => -1,
+					type => 'I',
+					artist => "*idle*",
+					encoding => "idle",
+				};
 			}
-		};
+		}
+		if(!$song) {
+			$num_errors++;
+			next;
+		}
 
 		# random lookup can take a few sec; maybe a jingle/queued song
 		# has been added in the meantime (these lookups are very fast)
@@ -832,6 +856,7 @@ EOF
 	my ($rin, $rout);
 	vec($rin = '', $killsock->fileno(), 1) = 1;
 	vec($rin, $mpdsock->fileno(), 1) = 1 if $mpdsock;
+	my $dbcheckcounter;
 	for(;;) {
 		child_reaper();
 		last if $pid == 0;
@@ -864,6 +889,24 @@ EOF
 				mpd_accept($mpdsock);
 			}
 		}
+		if($song->{type} eq 'I' && ++$dbcheckcounter >= 30) {
+			$dbcheckcounter = 0;
+			my ($play_random) = $dbh->selectrow_array("SELECT value FROM settings WHERE name='play_random'");
+			if($play_random) {
+				warn "resuming random play\n";
+				$pid = 0;
+			} else {
+				my ($numq) = $dbh->selectrow_array("SELECT count(*) FROM queue");
+				if($numq) {
+					warn "detected queued song\n";
+					$pid = 0;
+				}
+			}
+		}
+	}
+	if($song->{type} eq 'I') {
+		warn "resuming output\n";
+		player_cmd("resume") or warn "error resuming output\n";
 	}
 
 	if(($pid_status || $pid_signal) && !$killsock_conn) {

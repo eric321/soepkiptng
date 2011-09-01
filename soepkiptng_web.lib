@@ -357,6 +357,7 @@ EOF
 	}
 
 	my $ids = ids_encode(@ids);
+	my ($play_random) = $dbh->selectrow_array("SELECT value FROM settings WHERE name='play_random'");
 	printf <<EOF,
 <table border=0 cellspacing=0>
  <tr>
@@ -371,7 +372,8 @@ EOF
  </tr>
  <tr><td colspan=7></td></tr>
 %s%s
-<tr><td colspan=7>%d song%s, total time: %d:%02d</td></tr>
+<tr><td colspan=7>%d song%s, total time: %d:%02d<br>
+play random: <a href="$req->{self}?cmd=play_random_toggle">%s</a></td></tr>
 </table>
 EOF
 		$conf{th_left}, @ids? sprintf(qq|<a id=a href="%s?cmd=del&ids=%s">| .
@@ -389,7 +391,8 @@ EOF
 			undef, $_->{f} eq '/'? $ids : "",
 			($conf{show_user} && $_->{user})? "<td>&nbsp;(".$_->{user}.")</td>":"")
 			} @records),
-		scalar @ids, @ids != 1? "s":"", $totaltime / 60, $totaltime % 60;
+		scalar @ids, @ids != 1? "s":"", $totaltime / 60, $totaltime % 60,
+		$play_random? "yes" : "no";
 }
 
 sub print_artistlist_table($$$@) {
@@ -1426,6 +1429,11 @@ sub handle_request($) {
 	}
 	elsif($cmd eq 'down') {
 		foreach(reverse split /,/, $args{id}) { move_song_to_bottom($req->{dbh}, "queue", $_); }
+	 	printredir($req, 'playlist', undef);
+		return;
+	}
+	elsif($cmd eq 'play_random_toggle') {
+		$req->{dbh}->do("UPDATE settings SET value = NOT value WHERE name='play_random'");
 	 	printredir($req, 'playlist', undef);
 		return;
 	}
