@@ -50,6 +50,7 @@ my $progdir = abs_path($1);
 
 require "$progdir/soepkiptng.lib";
 
+my %soxopt;
 my %soxformats;
 
 
@@ -448,7 +449,10 @@ sub play_sox($) {
 
 	my $samplefreq = $conf{samplefreq} || 44100;
 	my $bits = $conf{bitspersample} || 16;
-	my @sox = ("sox", "-V3", $song->{filename}, "-traw", "-b$bits", "-esigned-integer", "-", "rate", "-v", $samplefreq);
+	# --replay-gain track|album|off
+	my @sox = ("sox", "--replay-gain", "off", "-V3", $song->{filename},
+		"-traw", "-c2", "-b$bits", "-esigned-integer", "-",
+		"rate", "-v", $samplefreq);
 	exec_prog \@sox;
 }
 
@@ -477,12 +481,12 @@ sub start_play($) {
 
 	if($filename =~ /^cdda:[^:]*:(\d+)/) {
 		exec_prog ["$conf{cdda_prog} $1"];
-	} elsif($ext =~ /^(wav|flac)$/ && exists $soxformats{$ext} && !$prefer_mplayer) {
+	} elsif($ext =~ /^(wav|m4a|flac|ogg)$/ && exists $soxformats{$ext} && !$prefer_mplayer) {
 		play_sox($song);
 	} elsif($ext =~ /^mp[123]$/ && $samplefreq <= 65535 && !$prefer_mplayer) {
 		# madplay cannot resample to >65535Hz, so we need mplayer for that
 		play_mp3($song);
-	} elsif($filename =~ /^\w+:/ || $ext =~ /^(wma|wav|m4a|ape|aiff|flac|aac|ac3|ogg|shn|mp[23cp+])$/ || $song->{encoding} =~ /RealAudio/) {
+	} elsif($filename =~ /^\w+:/ || $ext =~ /^(wma|wav|m4a|ape|aiff?|flac|aac|ac3|ogg|shn|mp[23cp+])$/ || $song->{encoding} =~ /RealAudio/) {
 		play_mplayer($filename);
 	} elsif($ext =~ /^(mid|rcp|r36|g18|g36|mod)$/) {
 		if($bits == 16) {
@@ -696,9 +700,10 @@ if($opt_r) {
 child_reaper();
 
 
-open F, "sox --help-format all|";
+open F, "sox --help|";
 while(<F>) {
-	/^Format:\s*(\S+)/ and $soxformats{$1} = 1;
+	/^(-\S+)/ and $soxopt{$1} = 1;
+	s/^AUDIO FILE FORMATS:\s*// and %soxformats = map { $_ => 1 } split /\s+/, $_;
 }
 close F;
 
