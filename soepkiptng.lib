@@ -25,6 +25,8 @@ setlocale(LC_CTYPE, "en_US.ISO-8859-1");
 my @globalconfigfiles = ($ENV{SOEPKIPTNG_CONFIGFILE},
    "$ENV{HOME}/.soepkiptng.conf", "/etc/soepkiptng.conf");
 
+our @playmodes = ("all", "requested", "recent", "never played");
+
 sub read_configfile1($$);
 
 sub read_configfile1($$) {

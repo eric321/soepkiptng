@@ -213,12 +213,13 @@ sub get_song_random_recent() {
 	return $s;
 }
 
-sub select_song_random() {
+sub select_song_random(;$) {
+	my $extrawhere = shift @_;
 	my $s = undef;
 
 	my $min = $conf{min_random_time};
 	my $where = "present AND filename LIKE '/%' AND " .
-	            "unix_timestamp(now()) - unix_timestamp(last_played) > ?";
+	            "unix_timestamp(now()) - unix_timestamp(last_played) > ? " . $extrawhere;
 
 	my $ordermult = $conf{ignore_random_pref}? "" : "*pow(random_pref/?,1/?)";
 	if($conf{random_boost_by_years_since_last_play}) {
@@ -743,8 +744,8 @@ for(;;) {
 	if($dbh) {
 		$song = get_song_jingle() || get_song_queued();
 		if(!$song) {
-			my ($play_random) = $dbh->selectrow_array("SELECT value FROM settings WHERE name='play_random'");
-			if($play_random) {
+			my ($playmode) = $dbh->selectrow_array("SELECT value FROM settings WHERE name='playmode'");
+			if($playmode == 0) {
 				$song = get_song_random_recent();
 				if(!$song) {
 					$randsong = validate_song_random($randsong);
@@ -755,7 +756,12 @@ for(;;) {
 						$song = select_song_random();
 					}
 				}
-			} else {
+			} elsif($playmode == 2) {
+				$song = get_song_random_recent();
+			} elsif($playmode == 3) {
+				$song = select_song_random(" AND unix_timestamp(last_played) = 0");
+			}
+			if(!$song && $playmode > 0) {
 				warn "not playing random\n";
 				$song = {
 					id => -1,
