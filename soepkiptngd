@@ -249,6 +249,8 @@ sub select_song_random(;$) {
 	$s or return undef;
 
 	warn "selecting random $s->{filename} (pref $s->{random_pref}) (last played $s->{last_played})\n";
+	$s->{type} = 'R';
+	$s->{user} = '';
 	return $s;
 }
 
@@ -902,14 +904,27 @@ EOF
 		}
 		if($song->{type} eq 'I' && ++$dbcheckcounter >= 30) {
 			$dbcheckcounter = 0;
-			my ($play_random) = $dbh->selectrow_array("SELECT value FROM settings WHERE name='play_random'");
-			if($play_random) {
+			my ($playmode) = $dbh->selectrow_array("SELECT value FROM settings WHERE name='playmode'");
+			if($playmode == 0) {
 				warn "resuming random play\n";
 				$pid = 0;
-			} else {
+			} elsif($playmode == 1) {
 				my ($numq) = $dbh->selectrow_array("SELECT count(*) FROM queue");
 				if($numq) {
 					warn "detected queued song\n";
+					$pid = 0;
+				}
+			} elsif($playmode == 2) {
+				$song = get_song_random_recent();
+				if($song) {
+					warn "detected recent song\n";
+					$pid = 0;
+				}
+			} elsif($playmode == 3) {
+				my ($numq) = $dbh->selectrow_array("SELECT count(*) FROM song WHERE present AND " .
+					"filename LIKE '/%' AND unix_timestamp(last_played) = 0");
+				if($numq) {
+					warn "detected never-played song\n";
 					$pid = 0;
 				}
 			}
