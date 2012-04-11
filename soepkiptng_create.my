@@ -26,11 +26,13 @@ CREATE TABLE song (
   random_pref INT DEFAULT 10000 NOT NULL,
   uuid char(36),
   gain mediumint,
+  trimstart int,
+  trimlength int,
   PRIMARY KEY (id),
   KEY artist_id (artist_id),
   KEY title (title(4)),
   KEY album_id (album_id),
-  UNIQUE (filename)
+  INDEX (filename)
 );
 
 CREATE TABLE artist (

@@ -456,6 +456,12 @@ sub play_sox($) {
 	my @sox = ("sox", "--replay-gain", "off", "-V3", $song->{filename},
 		"-traw", "-c2", "-b$bits", "-esigned-integer", "-",
 		"rate", "-v", $samplefreq);
+	if(defined($song->{trimstart}) || defined($song->{trimlength})) {
+		push @sox, "trim", sprintf("%ds", $song->{trimstart});
+		if(defined($song->{trimlength})) {
+			push @sox, sprintf("%ds", $song->{trimlength});
+		}
+	}
 	exec_prog \@sox;
 }
 

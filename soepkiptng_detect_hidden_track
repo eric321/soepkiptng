@@ -1,0 +1,147 @@
+#!/usr/bin/perl
+############################################################################
+# soepkiptng (c) copyright 2000 Eric Lammerts <eric@lammerts.org>.
+############################################################################
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License, version 2, as 
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# A copy of the GNU General Public License is available on the World Wide Web
+# at `http://www.gnu.org/copyleft/gpl.html'.  You can also obtain it by
+# writing to the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+# Boston, MA 02111-1307, USA.
+############################################################################
+
+my $progdir;
+BEGIN {
+	use Cwd qw'abs_path cwd';
+
+	# find program directory
+	$_ = $0;
+	while(-l) {
+		my $l = readlink or die "readlink $_: $!\n";
+		if($l =~ m|^/|) { $_ = $l; } else { s|[^/]*$|/$l|; }
+	}
+	m|(.*)/|;
+	$progdir = abs_path($1);
+
+	unshift @INC, "$progdir/lib";
+}
+require "$progdir/soepkiptng.lib";
+$ENV{PATH} = "$progdir/bin:$ENV{PATH}";
+
+use strict;
+use Data::Dumper;
+use DBI;
+use Getopt::Std;
+
+our ($opt_c, $opt_d, $opt_h, $opt_t);
+
+getopts('c:dht:');
+
+$opt_h and die <<EOF;
+usage: soepkiptng_detect_hidden_track [-h] [-c configfile] [-t threshold]
+EOF
+
+my %conf;
+read_configfile(\%conf, $opt_c);
+
+my $dbh = DBI->connect("DBI:$conf{'db_type'}:$conf{'db_name'}:$conf{'db_host'}", $conf{'db_user'}, $conf{'db_pass'})
+	or die "can't connect to database";
+
+foreach my $file (@ARGV) {
+	my $path = abs_path($file);
+	my $song = $dbh->selectrow_hashref("SELECT * FROM song WHERE filename = ?", undef, $path);
+
+	if(open(F, "-|") == 0) {
+		open STDERR, ">&STDOUT";
+		open STDOUT, ">/dev/null";
+		exec "sox", "-V3", $path, "-";
+		die "sox: $!\n";
+	}
+	my %prop;
+	while(<F>) {
+		/^([^:]+[^:\s])\s+:\s*(.*\S)/ and $prop{$1} = $2;
+	}
+	close F;
+	print Dumper(\%prop) if $opt_d;
+	my $ch = $prop{Channels}
+		or die "$file: number of channels not found\n";
+	my $srate = $prop{"Sample Rate"}
+		or die "$file: sample rate not found\n";
+
+	open F, "-|", "sox", $path, "-c2", "-traw", "-b16", "-esigned-integer", "-";
+	my ($buf, $off, $start, $len, %sil);
+	while(read F, $buf, 4096) {
+		foreach(unpack("s*", $buf)) {
+			if(abs($_) <= $opt_t) {
+				if(defined($start)) {
+					$len++;
+				} else {
+					$start = $off;
+					$len = 1;
+				}
+			} else {
+				$sil{$start} = $len if defined($start) && $len > 44100;
+				$start = undef;
+			}
+			$off++;
+		}
+	}
+	close F;
+	#if(defined($start)) { $sil{$start} = $len; }
+	print Dumper(\%sil) if $opt_d;
+
+	my ($max, $max2) = sort { $sil{$b} <=> $sil{$a} } keys %sil;
+	if($sil{$max} < $sil{max2} * 2) {
+		print "no clear gap\n" . Dumper(\%sil);
+	}
+	my $siloff = $max;
+	my $sillen = $sil{$max};
+	if($ch > 1) {
+		$siloff = int($siloff / $ch);
+		my $p = $max % $ch;
+		if($p) {
+			$siloff++;
+			$sillen -= ($ch - $p) % $ch;
+		}
+		$sillen = int($sillen / $ch);
+	}
+
+	printf <<EOF,
+%s:
+Gap from %d (%d:%02d.%03d) length %d (%d:%02d.%03d)
+EOF
+		$file,
+		$siloff, $siloff / $srate / 60, ($siloff / $srate) % 60, ($siloff / $srate * 1000) % 1000,
+		$sillen, $sillen / $srate / 60, ($sillen / $srate) % 60, ($sillen / $srate * 1000) % 1000;
+	print STDERR "split song? ";
+	$_ = <STDIN>;
+	next if !/y/i;
+
+	$dbh->do("UPDATE song SET length=?,trimstart=NULL,trimlength=? WHERE id=?", undef,
+		int($siloff / $srate), $siloff, $song->{id})
+		or die "can't do sql command: " . $dbh->errstr . "\n";
+
+	delete $song->{id};
+	delete $song->{last_played};
+	delete $song->{mtime};
+	delete $song->{time_added};
+	delete $song->{trimlength};
+	delete $song->{uuid};
+	$song->{title} = "(Bonus Track)";
+	$song->{track}++;
+	$song->{trimstart} = $siloff + $sillen;
+	$song->{length} = int((($off / $ch) - ($siloff + $sillen)) / $srate);
+
+	my @k = sort keys %$song;
+	$dbh->do(sprintf("INSERT INTO song (%s) VALUES (%s)",
+			join(",", @k), join(",", map { "?" } @k)), undef,
+		map { $song->{$_} } @k)
+		or die "can't do sql command: " . $dbh->errstr . "\n";
+}

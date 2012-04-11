@@ -1,0 +1,6 @@
+
+use soepkiptng;
+
+ALTER TABLE song add (trimstart INT, trimlength INT);
+ALTER TABLE song drop INDEX filename;
+ALTER TABLE song add INDEX(filename);
