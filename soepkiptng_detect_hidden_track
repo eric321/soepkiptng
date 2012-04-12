@@ -95,11 +95,11 @@ FILE: foreach my $file (@ARGV) {
 	}
 	close F;
 
+	if(defined($start)) { $sil{$start} = $len; }
 	if(!%sil) {
 		print "$file: no gaps detected\n";
 		next;
 	}
-	#if(defined($start)) { $sil{$start} = $len; }
 	printf "%d %s", $off, Dumper(\%sil) if $opt_d;
 
 	my ($max, $max2) = sort { $sil{$b} <=> $sil{$a} } keys %sil;
@@ -108,6 +108,7 @@ FILE: foreach my $file (@ARGV) {
 	}
 	my $siloff = $max;
 	my $sillen = $sil{$max};
+	my $trailing = $siloff + $sillen == $off;
 	if($ch > 1) {
 		$siloff = int($siloff / $ch);
 		my $p = $max % $ch;
@@ -120,11 +121,13 @@ FILE: foreach my $file (@ARGV) {
 
 	printf <<EOF,
 %s:
-Gap from %d (%d:%02d.%03d) length %d (%d:%02d.%03d)
+Gap from %d length %d (%d:%02d.%03d - %d:%02d.%03d), trailing %ss
 EOF
 		$file,
-		$siloff, $siloff / $srate / 60, ($siloff / $srate) % 60, ($siloff / $srate * 1000) % 1000,
-		$sillen, $sillen / $srate / 60, ($sillen / $srate) % 60, ($sillen / $srate * 1000) % 1000;
+		$siloff, $sillen,
+		$siloff / $srate / 60, ($siloff / $srate) % 60, ($siloff / $srate * 1000) % 1000,
+		($siloff + $sillen) / $srate / 60, (($siloff + $sillen) / $srate) % 60, (($siloff + $sillen) / $srate * 1000) % 1000,
+		($trailing? "n/a " : int(($off / $ch - ($siloff + $sillen)) / $srate));
 
 	next if $opt_n;
 
@@ -146,20 +149,22 @@ EOF
 		int($siloff / $srate), $siloff, $song->{id})
 		or die "can't do sql command: " . $dbh->errstr . "\n";
 
-	delete $song->{id};
-	delete $song->{last_played};
-	delete $song->{mtime};
-	delete $song->{time_added};
-	delete $song->{trimlength};
-	delete $song->{uuid};
-	$song->{title} = "(Bonus Track)";
-	$song->{track}++;
-	$song->{trimstart} = $siloff + $sillen;
-	$song->{length} = int((($off / $ch) - ($siloff + $sillen)) / $srate);
+	if(!$trailing) {
+		delete $song->{id};
+		delete $song->{last_played};
+		delete $song->{mtime};
+		delete $song->{time_added};
+		delete $song->{trimlength};
+		delete $song->{uuid};
+		$song->{title} = "(Bonus Track)";
+		$song->{track}++;
+		$song->{trimstart} = $siloff + $sillen;
+		$song->{length} = int((($off / $ch) - ($siloff + $sillen)) / $srate);
 
-	my @k = sort keys %$song;
-	$dbh->do(sprintf("INSERT INTO song (%s,time_added) VALUES (%s,now())",
-			join(",", @k), join(",", map { "?" } @k)), undef,
-		map { $song->{$_} } @k)
-		or die "can't do sql command: " . $dbh->errstr . "\n";
+		my @k = sort keys %$song;
+		$dbh->do(sprintf("INSERT INTO song (%s,time_added) VALUES (%s,now())",
+				join(",", @k), join(",", map { "?" } @k)), undef,
+			map { $song->{$_} } @k)
+			or die "can't do sql command: " . $dbh->errstr . "\n";
+	}
 }
