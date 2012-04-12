@@ -631,18 +631,19 @@ sub getinfo_flac($\%) {
 
 	if($opt_T) {
 		my $output;
-		if(open(F, "-|") == 0) {
+		local *FL;
+		if(open(FL, "-|") == 0) {
 			open STDERR, ">&STDOUT";
 			exec "flac", "-st", $file;
 			die "flac: $!\n";
 		}
 		my $last;
-		while(<F>) {
+		while(<FL>) {
 			next if $_ eq $last;
 			$output .= $_;
 			$last = $_;
 		}
-		close F;
+		close FL;
 		if($?) {
 			if($output =~ /^(.*error.*)$/im) {
 				warn "$file: integrity test failed, ignoring ($1)\n";
