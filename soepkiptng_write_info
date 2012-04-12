@@ -138,7 +138,7 @@ sub do_file($$) {
 		"LEFT JOIN album ON album.id=song.album_id " .
 		"LEFT JOIN artist ON artist.id=song.artist_id " . 
 		"LEFT JOIN lyrics ON lyrics.id=song.id " .
-		"WHERE present AND filename LIKE ?");
+		"WHERE present AND filename LIKE ? ORDER BY track");
 
 	my $partial = 0;
 	for(;;) {
