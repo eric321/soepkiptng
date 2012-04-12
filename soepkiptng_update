@@ -768,7 +768,7 @@ sub getinfo_mplayer($\%) {
 	}
 	while(<F>) {
 		s/\s+$//;
-		/^\s+author:\s*(.*)/i       and $info->{artist} = $1;
+		/^\s+(artist|author):\s*(.*)/i and $info->{artist} = $2;
 		/^\s+(name|title):\s*(.*)/i and $info->{title} = $2;
 		/^\s+album:\s*(.*)/i        and $info->{album} = $1;
 		/^\s+track:\s*(\d+)/i       and $info->{track} = $1;
