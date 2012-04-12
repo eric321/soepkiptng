@@ -148,9 +148,10 @@ if(open(FILES, "-|") == 0) {
 }
 
 $/ = "\0";
-my ($num_added, $num_updated, $num_deleted, $num_moved, $num_skipped);
+my ($num_added, $num_updated, $num_deleted, $num_moved, $num_skipped, $endmsg);
 my (%artistid_cache, %albumid_cache);
-while(defined(my $file = <FILES>)) {
+my @files = sort <FILES>;
+foreach my $file (@files) {
 	chop $file;
 	# skip hidden files
 	next if $file =~ m|/\.[^/]+$|;
@@ -379,6 +380,7 @@ EOF
 	$num_added, $num_updated, $num_deleted, $num_moved, $num_skipped
 		unless $opt_q && $num_added == 0 && $num_updated == 0
 			&& $num_deleted == 0 && $num_moved == 0;
+print $endmsg;
 
 print "Optimizing Tables.\n" unless $opt_q;
 $dbh->do("optimize table song");
@@ -593,6 +595,31 @@ sub getinfo_mid($\%) {
 	return 1;
 }
 
+sub check_gap_flac($$) {
+	my ($file, $bitspersample) = @_;
+	local *F;
+	if(open(F, "-|") == 0) {
+		open STDERR, ">/dev/null";
+		exec "metaflac", "--list", $file;
+		die;
+	}
+	my ($lastoff, $lastbyteoff);
+	while(<F>) {
+		my ($off, $byteoff) = /\s+point \d+: sample_number=(\d+), stream_offset=(\d+)/
+			or next;
+		if(defined($lastoff)) {
+			last if $byteoff == 0;
+			my $comp = ($byteoff - $lastbyteoff) / ($off - $lastoff) * 8 / $bitspersample;
+			if($comp < 0.01) {
+				$endmsg .= "$file seems to have gaps!\n";
+				last;
+			}
+		}
+		($lastoff, $lastbyteoff) = ($off, $byteoff);
+	}
+	close F;
+}
+
 sub getinfo_flac($\%) {
 	my ($file, $info) = @_;
 
@@ -642,6 +669,7 @@ sub getinfo_flac($\%) {
 	}
 	my ($totsamp, @rest, @a);
 	($info->{freq}, $info->{chan}, $totsamp, $info->{bps}, @rest) = <F>;
+	close F;
 	foreach(@rest) {
 		if(s/^title=(.*\S)//i) { $info->{title} = $1; }
 		elsif(s/^tracknumber=(.*\S)//i) { $info->{track} = $1; }
@@ -654,6 +682,7 @@ sub getinfo_flac($\%) {
 	$info->{encoding} = "flac" . ($totbytes? sprintf(" (%d%%)", 100 * $filesize / $totbytes) : "");
 	$info->{len} = $info->{freq}? $totsamp / $info->{freq} : 0;
 	$info->{info_origin} = "flac" if $info->{artist} && $info->{title};
+	check_gap_flac($file, $info->{chan} * $info->{bps});
 	return 1;
 }
 
