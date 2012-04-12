@@ -737,6 +737,8 @@ function closethis() {
      <input type=submit name=action_setrpall value="Set entire list." onClick="return verifyall();"></td></tr>
   <tr><td valign=bottom colspan=2>Directory:</td>       <td valign=bottom>%s</td></tr>
   <tr><td valign=bottom colspan=2>Filename:</td>        <td valign=bottom>%s</td></tr>
+  <tr><td valign=bottom colspan=2>Trim Start:</td>      <td valign=bottom>%s</td></tr>
+  <tr><td valign=bottom colspan=2>Trim Length:</td>     <td valign=bottom>%s</td></tr>
   <tr><td valign=bottom colspan=2>Size:</td>            <td valign=bottom>%dk</td></tr>
   <tr><td valign=bottom colspan=2>Volume correction:</td><td valign=bottom>%s</td></tr>
   <tr>
@@ -768,6 +770,7 @@ EOF
 		$_->{lp}? " <font size=-1><input type=submit name=action_clearlp value=Reset> " .
 			"<input type=submit name=action_clearlpall value=\"Reset entire list\"></font>":"",
 		$_->{random_pref}, $dir, $file,
+		$_->{trimstart}, $_->{trimlength},
 		((-s $_->{filename}) + 512) / 1024,
 		defined($_->{gain})? sprintf("%.3fdB", $_->{gain} / 1000) : "-",
 		$prev, $next,
