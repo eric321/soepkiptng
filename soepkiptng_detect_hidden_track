@@ -40,9 +40,9 @@ use Data::Dumper;
 use DBI;
 use Getopt::Std;
 
-our ($opt_c, $opt_d, $opt_h, $opt_t);
+our ($opt_c, $opt_d, $opt_h, $opt_n, $opt_t);
 
-getopts('c:dht:');
+getopts('c:dhnt:');
 
 $opt_h and die <<EOF;
 usage: soepkiptng_detect_hidden_track [-h] [-c configfile] [-t threshold]
@@ -54,7 +54,7 @@ read_configfile(\%conf, $opt_c);
 my $dbh = DBI->connect("DBI:$conf{'db_type'}:$conf{'db_name'}:$conf{'db_host'}", $conf{'db_user'}, $conf{'db_pass'})
 	or die "can't connect to database";
 
-foreach my $file (@ARGV) {
+FILE: foreach my $file (@ARGV) {
 	my $path = abs_path($file);
 	my $song = $dbh->selectrow_hashref("SELECT * FROM song WHERE filename = ?", undef, $path);
 
@@ -94,8 +94,13 @@ foreach my $file (@ARGV) {
 		}
 	}
 	close F;
+
+	if(!%sil) {
+		print "$file: no gaps detected\n";
+		next;
+	}
 	#if(defined($start)) { $sil{$start} = $len; }
-	print Dumper(\%sil) if $opt_d;
+	printf "%d %s", $off, Dumper(\%sil) if $opt_d;
 
 	my ($max, $max2) = sort { $sil{$b} <=> $sil{$a} } keys %sil;
 	if($sil{$max} < $sil{max2} * 2) {
@@ -120,9 +125,22 @@ EOF
 		$file,
 		$siloff, $siloff / $srate / 60, ($siloff / $srate) % 60, ($siloff / $srate * 1000) % 1000,
 		$sillen, $sillen / $srate / 60, ($sillen / $srate) % 60, ($sillen / $srate * 1000) % 1000;
-	print STDERR "split song? ";
-	$_ = <STDIN>;
-	next if !/y/i;
+
+	next if $opt_n;
+
+	for(;;) {
+		print STDERR "y) split b) play last 10 sec before a) play after : ";
+		$_ = <STDIN>;
+		if(/b/i) {
+			system "play", "-V3", $path, "trim", sprintf("%ds", $siloff - 10 * $srate), 10;
+		} elsif(/a/i) {
+			system "play", "-V3", $path, "trim", sprintf("%ds", $siloff + $sillen);
+		} elsif(/y/i) {
+			last;
+		} else {
+			next FILE;
+		}
+	}
 
 	$dbh->do("UPDATE song SET length=?,trimstart=NULL,trimlength=? WHERE id=?", undef,
 		int($siloff / $srate), $siloff, $song->{id})
@@ -140,7 +158,7 @@ EOF
 	$song->{length} = int((($off / $ch) - ($siloff + $sillen)) / $srate);
 
 	my @k = sort keys %$song;
-	$dbh->do(sprintf("INSERT INTO song (%s) VALUES (%s)",
+	$dbh->do(sprintf("INSERT INTO song (%s,time_added) VALUES (%s,now())",
 			join(",", @k), join(",", map { "?" } @k)), undef,
 		map { $song->{$_} } @k)
 		or die "can't do sql command: " . $dbh->errstr . "\n";
