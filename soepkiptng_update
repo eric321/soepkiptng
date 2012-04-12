@@ -43,7 +43,8 @@ use MP3::Tag;
 use MP3::Info;
 use Data::Dumper;
 
-our ($opt_C, $opt_L, $opt_M, $opt_R, $opt_T, $opt_c, $opt_d, $opt_e, $opt_f, $opt_h, $opt_l, $opt_m, $opt_n, $opt_p, $opt_q, $opt_r, $opt_v);
+our $opt_T = 1;
+our ($opt_C, $opt_L, $opt_M, $opt_R, $opt_c, $opt_d, $opt_e, $opt_f, $opt_h, $opt_l, $opt_m, $opt_n, $opt_p, $opt_q, $opt_r, $opt_v);
 
 sub get_wav_params($\%;$);
 sub getinfo_mp3($\%);
