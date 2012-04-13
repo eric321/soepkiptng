@@ -453,7 +453,7 @@ sub play_sox($) {
 	my $samplefreq = $conf{samplefreq} || 44100;
 	my $bits = $conf{bitspersample} || 16;
 	# --replay-gain track|album|off
-	my @sox = ("sox", "--replay-gain", "off", "-V3", $song->{filename},
+	my @sox = ("sox", "--ignore-length", "--replay-gain", "off", "-V3", $song->{filename},
 		"-traw", "-c2", "-b$bits", "-esigned-integer", "-",
 		"rate", "-v", $samplefreq);
 	if(defined($song->{trimstart}) || defined($song->{trimlength})) {
