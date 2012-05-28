@@ -38,8 +38,7 @@ getopts('c:');
 
 read_configfile(\%conf, $opt_c);
 
-$dbh = DBI->connect("DBI:$conf{db_type}:$conf{db_name}:$conf{db_host}",
-	$conf{db_user}, $conf{db_pass}) or die "can't connect to database";
+$dbh = connect_to_db(\%conf);
 
 $files = $dbh->selectcol_arrayref("SELECT filename FROM song WHERE present AND filesize IS NULL AND filename LIKE '/%'");
 $num = 0;

@@ -147,6 +147,7 @@ sub get_song_queued() {
 	my $s = undef;
 
 	# get queued song
+	$dbh->ping;
 	$dbh->do("LOCK TABLES queue WRITE, song READ, artist READ, album READ");
 	for(;;) {
 		my $sth = $dbh->prepare(
@@ -743,10 +744,9 @@ for(;;) {
 
 	# (re)open database connection if necessary
 	if(!$dbh || !$dbh->ping) {
-		$dbh = DBI->connect("DBI:mysql:$conf{db_name}:$conf{db_host}",
-			$conf{db_user}, $conf{db_pass}) or warn
-				"Can't connect to database $conf{db_name}" .
-				"\@$conf{db_host} as user $conf{db_user}\n";
+		warn "reconnecting to database\n";
+		$dbh = eval { connect_to_db(\%conf) };
+		warn $@ if $@;
 	}
 
 	if($dbh) {

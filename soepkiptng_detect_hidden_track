@@ -51,8 +51,7 @@ EOF
 my %conf;
 read_configfile(\%conf, $opt_c);
 
-my $dbh = DBI->connect("DBI:$conf{'db_type'}:$conf{'db_name'}:$conf{'db_host'}", $conf{'db_user'}, $conf{'db_pass'})
-	or die "can't connect to database";
+my $dbh = connect_to_db(\%conf);
 
 FILE: foreach my $file (@ARGV) {
 	my $path = abs_path($file);

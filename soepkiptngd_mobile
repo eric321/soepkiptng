@@ -159,6 +159,7 @@ sub killsong() {
 
 	say("kill song $keypadvalue") if $debug;
 	if($keypadvalue && open_db()) {
+		$dbh->ping;
 		$dbh->do("LOCK TABLES queue WRITE, song READ");
 		my $res = $dbh->selectall_arrayref(
 			"SELECT song_id,song.track FROM queue " .

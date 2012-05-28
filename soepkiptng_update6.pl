@@ -64,8 +64,7 @@ sub uuid_ascii($)
 
 $| = 1;
 
-$dbh = DBI->connect("DBI:$conf{db_type}:$conf{db_name}:$conf{db_host}",
-	$conf{db_user}, $conf{db_pass}) or die "can't connect to database";
+$dbh = connect_to_db(\%conf);
 
 $ids = $dbh->selectcol_arrayref("SELECT id FROM song WHERE present AND filename LIKE '/%' AND uuid IS NULL");
 

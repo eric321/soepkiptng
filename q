@@ -103,8 +103,7 @@ sub killit($) {
 
 $| = 1;
 
-$dbh = DBI->connect("DBI:$conf{db_type}:$conf{db_name}:$conf{db_host}",
-	$conf{db_user}, $conf{db_pass}) or die "can't connect to database";
+$dbh = connect_to_db(\%conf);
 
 if($opt_n) {
 	open F, $conf{statusfile} or exit;

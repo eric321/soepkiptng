@@ -67,9 +67,7 @@ $flacd_stdin = 'flac -sdc --endian=little --sign=signed --force-raw-format -';
 sub convert_dir($);
 sub convert_raw($);
 
-$dbh = DBI->connect("DBI:$conf{db_type}:$conf{db_name}:$conf{db_host}",
-	$conf{db_user}, $conf{db_pass})
-	or die "can't connect to database";
+$dbh = connect_to_db(\%conf);
 
 sub cleanup {
 	unlink $tmpfile or warn "$tmpfile: $!\n";

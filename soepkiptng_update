@@ -109,8 +109,7 @@ if($opt_q) {
 	$SIG{__WARN__} = sub { };
 }
 
-my $dbh = DBI->connect("DBI:$conf{'db_type'}:$conf{'db_name'}:$conf{'db_host'}", $conf{'db_user'}, $conf{'db_pass'})
-	or die "can't connect to database";
+my $dbh = connect_to_db(\%conf);
 
 my (%track, %artist, %album, %tracknr);
 read_eric_files() unless $opt_e;

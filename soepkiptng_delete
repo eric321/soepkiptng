@@ -57,8 +57,7 @@ EOF
 	exit;
 }
 
-my $dbh = DBI->connect("DBI:$conf{db_type}:$conf{db_name}:$conf{db_host}",
-	$conf{db_user}, $conf{db_pass}) or die "can't connect to database";
+my $dbh = connect_to_db(\%conf);
 
 my $sth = $dbh->prepare("SELECT filename FROM song WHERE present AND filename like ?");
 my $dir = "/%";

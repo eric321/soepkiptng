@@ -68,9 +68,7 @@ sub latin1_to_utf($) {
 	return $s;
 }
 
-$dbh = DBI->connect("DBI:$conf{db_type}:$conf{db_name}:$conf{db_host}",
-	$conf{db_user}, $conf{db_pass})
-	or die "can't connect to database";
+$dbh = connect_to_db(\%conf);
 
 foreach $rawfile (@ARGV) {
 	next if -d $rawfile;

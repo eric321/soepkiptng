@@ -67,6 +67,14 @@ sub read_configfile($;@) {
 		join(" ", @extraconfigfiles, @globalconfigfiles);
 }
 
+sub connect_to_db($) {
+	my ($conf) = @_;
+	my $dbh = DBI->connect("DBI:$conf->{db_type}:$conf->{db_name}:$conf->{db_host}", $conf->{db_user}, $conf->{db_pass})
+		or die "can't connect to database";
+	$dbh->{mysql_auto_reconnect} = 1;
+	return $dbh;
+}
+
 %latin9_to_ascii = (
 	128 => '_', 129 => '_', 130 => '_', 131 => '_',
 	132 => '_', 133 => '_', 134 => '_', 135 => '_',
@@ -240,6 +248,7 @@ sub get_table_ids($$$) {
 sub add_song($$$@) {
 	my ($db, $tbl, $user, @ids) = @_;
 
+	$db->ping;
 	$db->do("LOCK TABLES $tbl WRITE");
 	del_song($db, $tbl, @ids);
 	my ($order) = $db->selectrow_array("SELECT MAX(song_order) FROM $tbl");
@@ -261,6 +270,7 @@ sub reorder_table($$$@) {
 sub move_song_to_top($$@) {
 	my ($db, $tbl, @ids) = @_;
 
+	$db->ping;
 	$db->do("LOCK TABLES $tbl WRITE");
 	reorder_table($db, $tbl, $#ids + 2, get_table_ids($db, $tbl, "ORDER BY song_order"));
 	reorder_table($db, $tbl, 1, @ids);
@@ -272,6 +282,7 @@ sub move_song_to_bottom($$@) {
 	my %ids;
 
 	foreach(@ids) { $ids{$_} = 1; };
+	$db->ping;
 	$db->do("LOCK TABLES $tbl WRITE");
 	my @q = get_table_ids($db, $tbl, "ORDER BY song_order");
 	my (@q1, @q2);
@@ -285,6 +296,7 @@ sub move_song_to_bottom($$@) {
 sub shuffle_table($$) {
 	my ($db, $tbl) = @_;
 
+	$db->ping;
 	$db->do("LOCK TABLES $tbl WRITE");
 	reorder_table($db, $tbl, 1, get_table_ids($db, $tbl, "ORDER BY rand()"));
 	$db->do("UNLOCK TABLES");
