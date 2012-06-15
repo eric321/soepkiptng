@@ -1,0 +1,889 @@
+#!/usr/bin/perl -w
+############################################################################
+# soepkiptngd (Soepkip The Next Generation daemon)
+#
+# (c) copyright 2000 Eric Lammerts <eric@lammerts.org>
+#
+# loosely based on `mymusic' by "caffiend" <caffiend@atdot.org>
+# and `Radio Soepkip' by Andre Pool <andre@scintilla.utwente.nl>
+#
+############################################################################
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License, version 2, as 
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# A copy of the GNU General Public License is available on the World Wide Web
+# at `http://www.gnu.org/copyleft/gpl.html'.  You can also obtain it by
+# writing to the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+# Boston, MA 02111-1307, USA.
+############################################################################
+
+use Cwd 'abs_path';
+use DBI;
+use Errno;
+use Fcntl;
+use Getopt::Std;
+use IO::Handle;
+use IO::Socket;
+use POSIX ":sys_wait_h";
+use Sys::Hostname;
+no warnings 'qw';
+
+use integer;
+use strict;
+use vars qw(%conf $dbh $restart $opt_d $opt_r $opt_s $opt_c $cdrplaypid
+	$pid_status $pid_signal $pid @preload $paused $randsong);
+
+# find program directory
+$_ = $0;
+while(-l) {
+	my $l = readlink or die "readlink $_: $!\n";
+	if($l =~ m|^/|) { $_ = $l; } else { s|[^/]*$|/$l|; }
+}
+m|(.*)/|;
+my $progdir = abs_path($1);
+
+require "$progdir/soepkiptng.lib";
+
+
+sub rotatelog(;$) {
+	if($_[0] or -s STDERR > 65000) {
+		rename $conf{errfile}, "$conf{errfile}.old" or do {
+			warn "rename $conf{errfile} -> $conf{errfile}.old: $!\n";
+			return;
+		};
+		close STDERR;
+		open STDERR, ">$conf{errfile}";
+		STDERR->autoflush(1);
+	}
+}
+
+sub warnrotate {
+	printf STDERR "%s %s", scalar localtime, $_[0];
+	rotatelog();
+}
+
+sub dierotate {
+	printf STDERR "%s %s", scalar localtime, $_[0];
+	rotatelog();
+	exit 1;
+}
+
+sub child_reaper {
+	for(;;) {
+		my $p = waitpid(-1, &WNOHANG);
+		return if $p < 1;
+		warn sprintf "reaped child %d, sig=%d status=%d\n",
+			$p, $? & 0x7f, $? >> 8;
+		if($p == $cdrplaypid) {
+			unlink $conf{statusfile};
+			die "exiting because '$conf{playercmd}' died.\n";
+		} elsif($p == $pid) {
+			$pid = 0;
+			$pid_status = $? >> 8;
+			$pid_signal = $? & 0x7f;
+			warn "player finished ($p)\n";
+			if($paused) {
+				warn "resuming output\n";
+				player_cmd("resume") or warn "error resuming output\n";
+				$paused = 0;
+			}
+		}
+	}
+};
+
+BEGIN {
+	my %delete;
+
+	sub get_song_jingle() {
+		my $s = undef;
+		local *JINGLEDIR;
+
+		if($conf{jingledir} && opendir JINGLEDIR, $conf{jingledir}) {
+			foreach(sort readdir JINGLEDIR) {
+				next if /^\./;
+				next if $delete{"$conf{jingledir}/$_"};
+
+				warn "playing jingle $conf{jingledir}/$_\n";
+
+				$s->{id} = -1;
+				$s->{type} = 'J';
+				$s->{filename} = "$conf{jingledir}/$_";
+				$s->{artist} = '** Jingle **';
+				$s->{album} = '';
+				$s->{track} = 0;
+				$s->{title} = $_;
+				$s->{user} = '';
+				$s->{length} = 0;
+				$s->{encoding} = '';
+				last;
+			}
+			closedir JINGLEDIR;
+		}
+		$delete{$s->{filename}} = 1 if $s;
+		return $s;
+	}
+
+	sub delete_jingles() {
+		foreach(keys %delete) {
+			if(unlink $_ or $!{ENOENT}) {
+				delete $delete{$_};
+			} else {
+				warn "unlink $_: $!\n";
+			}
+		}
+	}
+}
+
+sub get_song_queued() {
+	my $s = undef;
+
+	# get queued song
+	$dbh->do("LOCK TABLES queue WRITE, song READ, artist READ, album READ");
+	for(;;) {
+		my $sth = $dbh->prepare(
+			"SELECT queue.song_id as id,queue.song_order as song_order,".
+			"       queue.user as user, artist.name as artist,".
+			"       album.name as album, song.* FROM queue".
+			" LEFT JOIN song ON song.id=queue.song_id" .
+			" LEFT JOIN artist ON artist.id=song.artist_id" .
+			" LEFT JOIN album ON album.id=song.album_id" .
+			" ORDER BY queue.song_order" .
+			" LIMIT 1"
+		);
+		$sth->execute or last;
+		$s = $sth->fetchrow_hashref or last;
+		if($s->{present}) {
+			warn "playing queued $s->{filename}\n";
+			$s->{type} = 'Q';
+
+			# delete it from the queue
+			$dbh->do("DELETE FROM queue WHERE song_id = $s->{id}");
+			$dbh->do("UPDATE queue SET song_order = song_order - $s->{song_order} - 1");
+			last;
+		}
+
+		warn "deleting non-present song $s->{id} ($s->{filename})\n";
+		$dbh->do("DELETE FROM queue WHERE song_id = $s->{id}");
+		$s = undef;
+	}
+	$dbh->do("UNLOCK TABLES");
+	return $s;
+}
+
+sub get_song_random_recent() {
+	no integer;
+	my $s = undef;
+
+	my $r = rand();
+	warn "recent rand $r $conf{recent_prob}\n";
+	$r < $conf{recent_prob} or return undef;
+
+	my $sth = $dbh->prepare(
+		"SELECT artist.name as artist, album.name as album,song.*,".
+		" (unix_timestamp(now()) - unix_timestamp(time_added) < ?) as r".
+		" FROM song".
+		" LEFT JOIN artist ON artist.id=song.artist_id" .
+		" LEFT JOIN album ON album.id=song.album_id" .
+		" WHERE present AND filename LIKE '/%' AND" .
+		" (unix_timestamp(now()) - unix_timestamp(time_added) < ?" .
+		"  OR (last_played=0 AND unix_timestamp(now()) - unix_timestamp(time_added) < ?))" .
+		" AND unix_timestamp(now()) - unix_timestamp(last_played) > ? AND" .
+		" random_pref > 0" .
+		" ORDER BY r desc, rand() LIMIT 1"
+	);
+	$sth->execute($conf{recent_age} * 86400,
+		$conf{recent_age} * 86400,
+		$conf{recent_age_never_played} * 86400,
+		$conf{min_random_time})
+		or return undef;
+	$s = $sth->fetchrow_hashref or return undef;
+
+	warn "playing recent $s->{filename}\n";
+	$s->{type} = 'r';
+	$s->{user} = '';
+	return $s;
+}
+
+sub select_song_random() {
+	my $s = undef;
+
+	my $min = $conf{min_random_time};
+	my $where = "present AND filename LIKE '/%' AND " .
+	            "unix_timestamp(now()) - unix_timestamp(last_played) > ?";
+
+	my $ordermult = $conf{ignore_random_pref}? "" : "*pow(random_pref/?,1/?)";
+	if($conf{random_boost_by_years_since_last_play}) {
+		$ordermult .= "* if(last_played, round((unix_timestamp(now()) - unix_timestamp(last_played)) / 86400 / 365 + 0.5), 1)";
+	}
+	my $sth = $dbh->prepare(
+		"SELECT artist.name as artist, album.name as album,song.* FROM song " .
+		"LEFT JOIN artist ON artist.id=song.artist_id " .
+		"LEFT JOIN album ON album.id=song.album_id " .
+		"WHERE $where AND random_pref > 0 " .
+		"ORDER BY rand() $ordermult DESC LIMIT 1");
+
+	for(; $min > 0; $min >>= 1, warn "no random song found, retrying with min_random_time=$min\n") {
+		if($conf{ignore_random_pref}) {
+			$sth->execute($min)
+				or next;
+		} else {
+			my ($sum_pref, $count) = $dbh->selectrow_array(
+				"SELECT sum(random_pref),count(*) FROM song WHERE $where", undef, $min)
+				or next;
+			$sth->execute($min, $sum_pref, $count)
+				or next;
+		}
+		$s = $sth->fetchrow_hashref
+			and last;
+	}
+	$s or return undef;
+
+	warn "selecting random $s->{filename} (pref $s->{random_pref}) (last played $s->{last_played})\n";
+	return $s;
+}
+
+sub validate_song_random($) {
+	my ($song) = @_;
+	my $s = undef;
+
+	$song or return undef;
+	my $min = $conf{min_random_time};
+	my $where = "song.id=? AND present AND filename LIKE '/%' AND " .
+	            "unix_timestamp(now()) - unix_timestamp(last_played) > ?";
+
+	my $sth = $dbh->prepare(
+		"SELECT artist.name as artist, album.name as album,song.* FROM song " .
+		"LEFT JOIN artist ON artist.id=song.artist_id " .
+		"LEFT JOIN album ON album.id=song.album_id " .
+		"WHERE $where");
+
+	$sth->execute($song->{id}, $min)
+		or return undef;
+	$s = $sth->fetchrow_hashref
+		or return undef;
+
+	warn "playing random $s->{filename} (pref $s->{random_pref}, last_played $s->{last_played})\n";
+	$s->{type} = 'R';
+	$s->{user} = '';
+
+	return $s;
+}
+
+sub update_preload() {
+	local *PRELOAD;
+
+	$conf{preloadfile} or return;
+
+	my $sth = $dbh->prepare(
+		"SELECT song.id, song.filename, artist.name, album.name," .
+		"       song.track, song.title, song.length, song.encoding" .
+		" FROM song" .
+		" LEFT JOIN artist ON artist.id=song.artist_id" .
+		" LEFT JOIN album ON album.id=song.album_id" .
+		" WHERE present AND filename LIKE '/%' AND" .
+		" unix_timestamp(now()) - unix_timestamp(last_played) > $conf{min_random_time}" .
+		" ORDER BY rand()*random_pref DESC LIMIT 10"
+	);
+
+	$sth->execute() or return;
+	open PRELOAD, ">$conf{preloadfile}" or return;
+	my (@s);
+	while(@s = $sth->fetchrow_array) {
+		printf PRELOAD "%s\n", join("\t", @s);
+		warn "add to preload: $s[1]\n";
+	}
+	close PRELOAD;
+
+	warn "update preload $conf{preloadfile}\n";
+	delete $conf{preloadfile};
+}
+
+sub get_song_preload() {
+	my $s = undef;
+
+	@preload or do {
+		warn "no preloads available\n";
+		return undef;
+	};
+
+	($s->{id}, $s->{filename}, $s->{artist}, $s->{album}, $s->{track},
+	 $s->{title}, $s->{length}, $s->{encoding}) = split /\t+/, shift @preload;
+	$s->{type} = "P";
+	$s->{user} = '';
+
+	warn "playing preload $s->{filename}\n";
+
+	return $s;
+}
+
+sub logprintf($@) {
+	my ($fmt, @args) = @_;
+
+	# write to log file
+	if(open LOG, ">>$conf{logfile}") {
+		printf LOG "%s $fmt\n", scalar localtime, @args;
+		close LOG;
+	} else {
+		warn "cannot open logfile $conf{logfile}: $!\n";
+	}
+}
+
+sub update_log($$;$$$) {
+	my ($id, $time, $reason, $result, $prevplaytime) = @_;
+
+	my $q = "REPLACE INTO log SET id=?, playtime=from_unixtime(?)";
+	my @q = ($id, $time);
+	if(defined $reason) { $q .= ", reason=?"; push @q, $reason; }
+	if(defined $result) { $q .= ", result=?"; push @q, $result; }
+	if(defined $prevplaytime) { $q .= ", prevplaytime=?"; push @q, $prevplaytime; }
+	$dbh->do($q, undef, @q);
+}
+
+sub exec_prog(;$$$) {
+	my ($prog, $pause, $convert24to32) = @_;
+
+	if($pause) {
+		$paused = 1;
+	}
+	if(($pid = fork) == 0) {
+		# get our own program group so our parent can kill us easily
+		setpgrp;
+
+		# restore broken pipe behavior
+		$SIG{'PIPE'} = 'DEFAULT';
+
+		if($convert24to32) {
+			if(open(STDOUT, "|-") == 0) {
+				$| = 0;
+				while(read STDIN, $_, 3) {
+					print "\0$_";
+				}
+				exit;
+			}
+		}
+
+		if($pause) {
+			warn "pausing output\n";
+			player_cmd("waitbufferempty", "pause") or warn "error pausing output\n";
+		}
+
+		if(defined $prog) {
+			exec @$prog;
+			die "exec $prog->[0] failed: $!\n";
+		}
+	}
+	return $pid;
+}
+
+sub play_mplayer(@) {
+	my @prog = @_;
+	local *F;
+
+	exec_prog and return;
+
+	# open duplicate of stdout
+	open F, ">&STDOUT";
+	# no close-on-exec
+	fcntl F, F_SETFD, 0;
+
+	open STDIN, "/dev/null";
+#	open STDERR, ">/dev/null";
+	open STDOUT, ">&STDERR";
+	delete $ENV{http_proxy};
+
+	if($prog[$#prog] =~ /^http:/) { unshift @prog, "-cache", 512; }
+
+	if(exists $conf{fifofile}) {
+		if(! -p $conf{fifofile}) {
+			warn "### mkfifo -m 0777 $conf{fifofile}\n";
+			system "mkfifo", "-m", "0777", $conf{fifofile};
+		}
+		unshift @prog, "-input", "file=$conf{fifofile}";
+	}
+
+	my $samplefreq = $conf{samplefreq} || 44100;
+	my $bits = $conf{bitspersample} || 16;
+	unshift @prog, "mplayer", "-quiet", "-vc", "dummy", "-vo", "null",
+		"-noconsolecontrols",
+		"-ac", "mad,",
+		"-af", "resample=$samplefreq,channels=2,format=s${bits}ne",
+		"-ao", "pcm:nowaveheader:file=/dev/fd/" . fileno(F);
+
+	warn "running: " . join(" ", @prog) . "\n";
+	exec @prog;
+	die "$prog[0]: $!\n";
+}
+
+
+sub play_mp3($) {
+	no integer;
+	my ($song) = @_;
+
+	my $samplefreq = $conf{samplefreq} || 44100;
+	my $bits = $conf{bitspersample} || 16;
+	my @madplay = qw"madplay --ignore-crc -Soraw:-";
+	push @madplay, "-R$samplefreq";
+	push @madplay, "-b$bits" if $bits != 16;
+	push @madplay, "--replay-gain=$conf{replaygain}", "-a0" if exists $conf{replaygain};
+	if($dbh) {
+		my $gainrec = $dbh->selectrow_hashref("SELECT gain FROM song WHERE id=$song->{id}");
+		if($gainrec->{gain}) {
+			push @madplay, "-a", ($gainrec->{gain} / 1000);
+		}
+	}
+	push @madplay, $song->{filename};
+	exec_prog \@madplay;
+}
+
+
+sub play_sox($) {
+	no integer;
+	my ($song) = @_;
+
+	my $samplefreq = $conf{samplefreq} || 44100;
+	my $bits = $conf{bitspersample} || 16;
+	my @sox = ("sox", "-V3", $song->{filename}, "-traw", "-b$bits", "-esigned-integer", "-", "rate", "-v", $samplefreq);
+#--ignore-crc -Soraw:-";
+	exec_prog \@sox;
+}
+
+
+sub start_play($) {
+	my ($song) = @_;
+	my $filename = $song->{filename};
+
+	# get file type
+	$filename =~ /([^.]*)$/;
+	my $ext = lc($1);
+
+	my $samplefreq = $conf{samplefreq} || 44100;
+	my $bits = $conf{bitspersample} || 16;
+
+	# if fifo support is enabled, leave long songs to mplayer so we can skip forward and backward
+	my $prefer_mplayer = exists $conf{fifofile} && $song->{length} > 600;
+
+	if($filename =~ /^cdda:[^:]*:(\d+)/) {
+		exec_prog ["$conf{cdda_prog} $1"];
+	} elsif($ext eq "flac" && !$prefer_mplayer) {
+		play_sox($song);
+	} elsif($ext =~ /^mp[123]$/ && $samplefreq <= 65535 && !$prefer_mplayer) {
+		# madplay cannot resample to >65535Hz, so we need mplayer for that
+		play_mp3($song);
+	} elsif($filename =~ /^\w+:/ || $ext =~ /^(wma|wav|m4a|ape|flac|aac|ac3|ogg|shn|mp[23cp+])$/ || $song->{encoding} =~ /RealAudio/) {
+		play_mplayer($filename);
+	} elsif($ext =~ /^(mid|rcp|r36|g18|g36|mod)$/) {
+		if($bits == 16) {
+			exec_prog ["timidity", "-s", $samplefreq, "-o", "-", "-Or1Ssl", $filename];
+		} else {
+			exec_prog ["timidity", "-s", $samplefreq, "-o", "-", "-Or2Ssl", $filename], undef, 1;
+		}
+	} elsif($ext eq "raw") {
+		# assume that 'raw' means: 44100Hz, 16-bit, stereo
+		play_mplayer("-demuxer", "rawaudio", "-rawaudio", "channels=2:rate=44100:samplesize=2", $filename);
+	} elsif($ext =~ /^(mpe?g|m2v|avi|asx|asf|vob|wmv|ra?m|ra|mov|mp4|flv)$/) {
+		exec_prog ["soepkiptng_video", $filename], 1;
+	} else {
+		warn "no player for .$ext files.\n";
+	}
+}
+
+sub get_statusfile {
+	open F, $conf{statusfile} or return;
+	chop(my @f = <F>);
+	close F;
+	return @f;
+}
+
+sub mpd_get_status($) {
+	my $host = shift @_;
+
+	my $s = IO::Socket::INET->new("$host:2222") or return;
+	$_ = <$s>;
+	$s->print("status\n");
+	$_ = <$s>;
+	$s->close;
+	/\brunning=(\d+)\b.*\bsong=(\d+)\b.*\btime=(\d+)\b/ or return;
+	return ($1, $2, $3);
+}
+
+sub mpd_soepkip_status {
+	my (undef, $filename, undef, undef, $host, undef, undef, undef, $ar, $t, $al, $tr, $len) = get_statusfile();
+	my ($running, $songno, $time) = mpd_get_status($host);
+	$running = $running? "play" : "pause";
+	return <<EOF;
+repeat: 0   
+random: 0   
+single: 0   
+consume: 0  
+playlist: 0
+playlistlength: 1
+xfade: 0    
+state: $running
+time: $time:$len
+EOF
+}
+
+sub mpd_soepkip_currentsong {
+	my (undef, $filename, undef, undef, $host, undef, undef, undef, $ar, $t, $al, $tr, $len) = get_statusfile();
+	$filename =~ s|.*/||;
+	$ar =~ s/\s+$//;
+	$t =~ s/\s+$//;
+	$al =~ s/\s+$//;
+	if(length("$ar $t $al") > 65) {
+		if(length($al) > 21) {
+			$al = substr($al, 0, 20) . "\\";
+		}
+		if(length("$ar $t $al") > 65) {
+			if(length($ar) > 21) {
+				$ar = substr($ar, 0, 20) . "\\";
+			}
+			if(length("$ar $t $al") > 65) {
+				if(length($t) > 21) {
+					$t = substr($t, 0, 20) . "\\";
+				}
+			}
+		}
+	}
+	return <<EOF;
+file: $filename
+Time: $len
+Artist: $ar
+Title: $t
+Album: $al
+Track: $tr
+EOF
+}
+
+sub mpd_accept($) {
+	my ($lsock) = @_;
+	if(fork == 0) {
+		alarm 10;
+		my ($sock, $paddr) = $lsock->accept or die "accept mpdsock: $!\n";
+		$lsock = undef; # prevent "address already in use" if parent is restarted
+		my ($port, $iaddr) = sockaddr_in($paddr);
+		my $name = inet_ntoa($iaddr);
+		warn "pid $$ got MPD connection from $name:$port\n";
+		$sock->print("OK MPD 0.1.0\n");
+		alarm 0;
+		while(<$sock>) {
+			if(/^status/) {
+				$sock->print(mpd_soepkip_status());
+				$sock->print("OK\n");
+			} elsif(/^currentsong/) {
+				$sock->print(mpd_soepkip_currentsong());
+				$sock->print("OK\n");
+			} else {
+				$sock->print("ACK [5\@0] {} unknown command \"bla\"\n");
+			}
+		}
+		exit;
+	}
+}
+
+sub perish {
+	my ($sig) = @_;
+
+	unlink $conf{statusfile};
+	$dbh and $dbh->disconnect;
+	warn "got SIG$sig, kill -KILL -$pid and $cdrplaypid, exiting\n";
+	kill 'KILL', -$pid, $cdrplaypid;
+	exit;
+};
+
+getopts('dr:s:c:');
+my $debug = 1 if $opt_d;
+
+read_configfile(\%conf, $opt_c);
+
+$ENV{PATH} = "$progdir/bin:$ENV{PATH}";
+
+if(open ST, $conf{statusfile}) {
+	my ($s, $f, $pid) = <ST>;
+	close ST;
+	$pid = 0 + $pid;
+	if($pid) {
+		kill 0, $pid
+			and die "Another copy of soepkiptngd is already running! (pid $pid)\n";
+	}
+}
+
+my $killsock = IO::Socket::INET->new(Listen => 5)
+	or die "cannot create listening TCP socket: $!\n";
+my $killhost = hostname;
+my $killport = $killsock->sockport();
+
+my $mpdport = $conf{mpd_port} || 6600;
+my $mpdsock;
+if($mpdport) {
+	$mpdsock = IO::Socket::INET->new(Proto => "tcp", LocalPort =>$mpdport, ReuseAddr => 1, Listen => 5)
+		or die "cannot open listening socket on port $mpdport: $!\n";
+}
+
+unless($debug) {
+	if(!$opt_r) {
+		fork && exit;
+		chdir "/";
+		setpgrp();
+	}
+	open STDIN, "</dev/null";
+	open STDERR, ">>$conf{errfile}" or do {
+		rotatelog(1);
+		open STDERR, ">$conf{errfile}" or die "$conf{errfile}: $!\n";
+		warn "logs rotated prematurely because of permission problems.\n";
+	};
+	STDERR->autoflush(1);
+	$SIG{__DIE__} = \&dierotate;
+	$SIG{__WARN__} = \&warnrotate;
+}
+sleep $opt_s if $opt_s;
+
+warn sprintf "*** starting soepkiptngd (pid=$$) %s ***\n", '$Id$';
+warn "PATH=$ENV{'PATH'}\n";
+
+$SIG{'TERM'} = \&perish;
+$SIG{'INT'} = \&perish;
+
+$SIG{'USR1'} = sub {
+	warn "setting restart flag\n";
+	$restart = 1;
+};
+
+$SIG{'PIPE'} = 'IGNORE';
+
+if($conf{preloadfile}) {
+	local *PRELOAD;
+
+	if(open PRELOAD, $conf{preloadfile}) {
+		chop(@preload = <PRELOAD>);
+		close PRELOAD;
+		warn "preload: added " . scalar @preload . " songs.\n";
+	} else {
+		warn "$conf{preloadfile}: $!\n";
+	}
+}
+
+if($opt_r) {
+	$cdrplaypid = $opt_r;
+	warn "cdrplaypid=$cdrplaypid (from -r)\n";
+} else {
+	# just to be sure to avoid sending pcm data to the terminal
+	open STDOUT, ">/dev/null";
+
+	# when $playercmd fails instantly, we might get SIGCHLD
+	# before $cdrplaypid is set !!!
+	$cdrplaypid = open STDOUT, "|$conf{playercmd}"
+		or die "failed to start $conf{playercmd}: $!\n";
+	warn "cdrplaypid=$cdrplaypid\n";
+
+	# play 2 sec. of silence to get my external DAC going
+	print "\0"x352800;
+}
+
+# we might have missed the exiting of cdrplay, so reap once now
+child_reaper();
+
+srand;
+
+my $num_errors = 0;
+my ($killsock_conn);
+for(;;) {
+	my ($song, $childtime);
+
+	if($restart) {
+		# close-on-exec apparently doesn't work
+#		$dbh->disconnect;
+		$killsock_conn and $killsock_conn->close();
+		$killsock->close();
+		unlink $conf{statusfile};
+
+		warn "execing myself\n";
+		exec "$progdir/soepkiptngd", '-r', $cdrplaypid;
+		die "$progdir/soepkiptngd: $!\n";
+	}
+
+	if($num_errors > 1) {
+		# exponential backoff in retries, max 1024 sec. (17 min 4 s)
+		sleep 1 << ($num_errors < 10? $num_errors : 10);
+	}
+
+	# (re)open database connection if necessary
+	if(!$dbh || !$dbh->ping) {
+		$dbh = DBI->connect("DBI:mysql:$conf{db_name}:$conf{db_host}",
+			$conf{db_user}, $conf{db_pass}) or warn
+				"Can't connect to database $conf{db_name}" .
+				"\@$conf{db_host} as user $conf{db_user}\n";
+	}
+
+	if($dbh) {
+		$song = get_song_jingle() || get_song_queued() || get_song_random_recent() or do {
+			$randsong = validate_song_random($randsong);
+			if($randsong) {
+				$song = $randsong;
+				$randsong = undef;
+			} else {
+				$song = select_song_random() or do {
+					$num_errors++;
+					next;
+				}
+			}
+		};
+
+		# random lookup can take a few sec; maybe a jingle/queued song
+		# has been added in the meantime (these lookups are very fast)
+		if($song->{type} =~ /r/i) {
+			my $s = get_song_jingle() || get_song_queued();
+			$song = $s if $s;
+		}
+
+		if($song->{id}) {
+			# update database
+			$dbh->do("UPDATE song set last_played=NULL where id=$song->{id}");
+
+			update_preload();
+		} else {
+			warn "no song found.\n";
+			$dbh->disconnect;
+			$dbh = undef;
+			$num_errors++;
+			next;
+		}
+	} else {
+		$song = get_song_preload() or do {
+			$num_errors++;
+			next;
+		};
+	}
+
+	# write to log file
+	logprintf("%s %6d %s", $song->{type}, $song->{id}, $song->{filename});
+
+	# write to log table
+	$song->{playtime} = time;
+	update_log($song->{id}, $song->{playtime}, $song->{type}, undef, $song->{last_played});
+
+	# write status file
+	my $status = <<EOF;
+$song->{id}
+$song->{filename}
+$$
+$cdrplaypid
+$killhost
+$killport
+$song->{type}
+$song->{user}
+$song->{artist}
+$song->{title}
+$song->{album}
+$song->{track}
+$song->{length}
+$song->{encoding}
+EOF
+	if(open ST, ">$conf{statusfile}.tmp") {
+		print ST $status;
+		close ST;
+		rename "$conf{statusfile}.tmp", $conf{statusfile}
+			or warn "cannot rename $conf{statusfile}.tmp -> $conf{statusfile}: $!\n";
+	} else {
+		warn "cannot open statusfile $conf{statusfile}: $!\n";
+	}
+
+	# close accepted socket after statusfile was updated
+	if($killsock_conn) {
+		print $killsock_conn $status;
+		$killsock_conn->shutdown(2); # in case a child process still has it open
+		$killsock_conn->close();
+		undef $killsock_conn;
+	}
+
+	# reset time counter
+	warn "kill -ALRM $cdrplaypid\n";
+	kill 'SIGALRM', $cdrplaypid
+		or warn "kill -ALRM $cdrplaypid: $!\n";
+
+	# launch player
+	my $starttime = time;
+	if($debug) {
+		my ($a, $b, $c, $d) = times;
+		$childtime = $c + $d;
+	}
+	start_play($song);
+	warn "pid=$pid\n";
+
+	# update random song cache
+	if(!$randsong) {
+		warn "selecting random song cache\n";
+		$randsong = select_song_random();
+	}
+
+	# wait until player is done or we get a connect on $killsock
+	my ($rin, $rout);
+	vec($rin = '', $killsock->fileno(), 1) = 1;
+	vec($rin, $mpdsock->fileno(), 1) = 1 if $mpdsock;
+	for(;;) {
+		child_reaper();
+		last if $pid == 0;
+		if(select($rout = $rin, undef, undef, 0.1) > 0) {
+			if(vec($rout, $killsock->fileno(), 1)) {
+				warn "got connection\n";
+				$song->{result} = "killed";
+
+				# kill player
+				my $p = $pid;
+				if($p) {
+					warn "kill -KILL -$p\n";
+					kill 'KILL', -$p
+						or warn "kill -KILL -$p: $!\n";
+				}
+
+				# tell cdrplay to flush its buffers
+				warn "kill -USR1 $cdrplaypid\n";
+				kill 'SIGUSR1', $cdrplaypid
+					or warn "kill -USR1 $cdrplaypid: $!\n";
+
+				# accept the tcp connection; we close it later,
+				# after a new song has been selected
+				$killsock_conn = $killsock->accept();
+
+				# write to log file
+				logprintf("K %6d", $song->{id});
+			}
+			if($mpdsock && vec($rout, $mpdsock->fileno(), 1)) {
+				mpd_accept($mpdsock);
+			}
+		}
+	}
+
+	if(($pid_status || $pid_signal) && !$killsock_conn) {
+		# write to log file
+		logprintf("E %6d status=%d signal=%d", $song->{id}, $pid_status, $pid_signal);
+
+		$song->{result} = sprintf("error: status=%d signal=%d", $pid_status, $pid_signal)
+			unless $song->{result};
+		$num_errors++;
+	} else {
+		$song->{result} = "finished" unless $song->{result};
+		$num_errors = 0;
+	}
+
+	# write to log table
+	update_log($song->{id}, $song->{playtime}, $song->{type}, $song->{result}, $song->{last_played});
+
+	if($debug) {
+		my ($a, $b, $c, $d) = times;
+		$childtime = $c + $d - $childtime;
+		warn "song finished, time=$childtime\n";
+	}
+
+	# delete jingle files
+	delete_jingles();
+
+	# prevent us from eating 100% cpu time in case of misconfiguration
+	time == $starttime and $num_errors++;
+}
+

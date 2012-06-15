@@ -1,0 +1,93 @@
+#!/usr/bin/perl
+############################################################################
+# soepkiptng (c) copyright 2000 Eric Lammerts <eric@lammerts.org>.
+############################################################################
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License, version 2, as 
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# A copy of the GNU General Public License is available on the World Wide Web
+# at `http://www.gnu.org/copyleft/gpl.html'.  You can also obtain it by
+# writing to the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+# Boston, MA 02111-1307, USA.
+############################################################################
+
+my $progdir;
+BEGIN {
+	use Cwd qw'abs_path cwd';
+
+	# find program directory
+	$_ = $0;
+	while(-l) {
+		my $l = readlink or die "readlink $_: $!\n";
+		if($l =~ m|^/|) { $_ = $l; } else { s|[^/]*$|/$l|; }
+	}
+	m|(.*)/|;
+	$progdir = abs_path($1);
+
+	unshift @INC, "$progdir/lib";
+}
+require "$progdir/soepkiptng.lib";
+$ENV{PATH} = "$progdir/bin:$ENV{PATH}";
+
+use strict;
+use DBI;
+use Getopt::Std;
+use Data::Dumper;
+
+our ($opt_c, $opt_h, $opt_n);
+getopts('c:hn');
+$| = 1;
+
+if($opt_h || @ARGV < 2) { die <<EOF; }
+usage: soepkiptng_mv [-n] [-c configfile] <fromdir> <todir>
+
+With this command you can rename a directory, and all entries in the
+database will have their paths renamed accordingly.
+
+options:
+  -c configfile : override soepkiptng config file
+  -n            : test mode, don't change anything
+EOF
+
+my %conf;
+read_configfile(\%conf, $opt_c);
+
+my $dbh = connect_to_db(\%conf);
+
+my ($from, $to) = @ARGV;
+
+if(-e $to) {
+	die "$to exists, quitting\n";
+}
+
+my $absfrom = abs_path($from);
+my $absto = abs_path($to);
+
+if($opt_n) {
+	warn "would rename $absfrom to\n             $absto\n";
+} else {
+	rename $from, $to
+		or die "rename $from -> $to: $!\n";
+}
+
+my $f = $dbh->selectall_hashref("SELECT id,filename FROM song WHERE filename LIKE ? AND present",
+	"id", undef, "$absfrom/%");
+foreach my $id (sort { $f->{$a}->{filename} cmp $f->{$a}->{filename} } keys %{$f}) {
+	my $name = $f->{$id}->{filename};
+	if(substr($name, 0, length("$absfrom/")) ne "$absfrom/") {
+		die "filename\n$name does not match\n$absfrom/% ???\n";
+	}
+	substr($name, 0, length("$absfrom")) = $absto;
+	if($opt_n) {
+		warn "db: $f->{$id}->{filename}\n -> $name\n";
+	} else {
+		$dbh->do("UPDATE song SET filename=? WHERE id=?", undef, $name, $id)
+			or die "can't do sql command: " . $dbh->errstr . "\n";
+	}
+}
