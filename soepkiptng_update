@@ -793,8 +793,8 @@ sub getinfo_mplayer($\%) {
 		# audio only
 		if($prop{audio_format} >= 0x160 && $prop{audio_format} <= 0x163) {
 			my $wma = $prop{audio_format} - 0x160 + 1;
-			$wma = 3 if $wma == 4;
 			$info->{encoding} = "WMA$wma";
+			$info->{encoding} = "WMA3/Lossless" if $wma == 4;
 		} elsif($prop{audio_format} eq "mp4a") {
 			$info->{encoding} = "AAC";
 		} elsif($prop{audio_format} eq "twos" && $file =~ /\.aiff?$/i) {
