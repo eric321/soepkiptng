@@ -119,7 +119,7 @@ sub do_dir($$) {
 
 sub do_file($$) {
 	my ($dbh, $f) = @_;
-	my ($id, $ti, $ar, $al, $tr, $len, $lyrics, $description, $language, $uuid);
+	my (@id, $ti, $ar, $al, $tr, $len, $lyrics, $description, $language, $uuid, $trimlength);
 
 	$f =~ s|^\./+||;
 
@@ -134,17 +134,17 @@ sub do_file($$) {
 
 	my $sth = $dbh->prepare(
 		"SELECT song.id,title,artist.name,album.name,track,length," .
-		"lyrics,language,description,uuid FROM song " .
+		"lyrics,language,description,uuid,trimlength FROM song " .
 		"LEFT JOIN album ON album.id=song.album_id " .
 		"LEFT JOIN artist ON artist.id=song.artist_id " . 
 		"LEFT JOIN lyrics ON lyrics.id=song.id " .
-		"WHERE present AND filename LIKE ? ORDER BY track");
+		"WHERE present AND filename LIKE ? ORDER BY track, trimstart");
 
 	my $partial = 0;
 	for(;;) {
 		$sth->execute($filename_noext)
 			or die "can't do sql command: " . $dbh->errstr;
-		($id, $ti, $ar, $al, $tr, $len, $lyrics, $language, $description, $uuid) =
+		($id[0], $ti, $ar, $al, $tr, $len, $lyrics, $language, $description, $uuid, $trimlength) =
 			$sth->fetchrow_array and last;
 
 		$partial++;
@@ -157,6 +157,14 @@ sub do_file($$) {
 				warn "$f: not found in dbase\n" unless $opt_q;
 				return 1;
 			};
+		}
+	}
+	if($trimlength) {
+		# split song
+		my ($id2, $ti2);
+		while(($id2, $ti2) = $sth->fetchrow_array) {
+			push @id, $id2;
+			$ti .= " / $ti2";
 		}
 	}
 	$sth->finish;
@@ -209,9 +217,11 @@ sub do_file($$) {
 						$dbh->do("DELETE FROM song WHERE filename=?",
 							undef, $newname)
 							or die "can't do sql command: " . $dbh->errstr;
-						$dbh->do("UPDATE song SET filename=? WHERE id=?",
-							undef, $newname, $id)
-							or die "can't do sql command: " . $dbh->errstr;
+						foreach my $id (@id) {
+							$dbh->do("UPDATE song SET filename=? WHERE id=?",
+								undef, $newname, $id)
+								or die "can't do sql command: " . $dbh->errstr;
+						}
 					}
 				} else {
 					warn "rename $full_filename -> $newname: $!\n";
