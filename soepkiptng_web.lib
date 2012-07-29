@@ -579,7 +579,7 @@ EOF
 	my $ids;
 	if(@ids) {
 		$ids = ids_encode(@ids);
-		$addall = qq|<a id=a href="$req->{self}?cmd=add&ids=$ids" target=tframe>$conf{addalltext}</a>|
+		$addall = qq|<a id=a href="$req->{self}?cmd=add&ids=$ids&skipfirstifplaying=1" target=tframe>$conf{addalltext}</a>|
 	}
 
 	my %revsort;
@@ -1418,7 +1418,18 @@ sub handle_request($) {
 	}
 
 	if($cmd eq 'add') {
-		add_song($req->{dbh}, "queue", get_user($req->{host}), ids_decode($args{ids}));
+		my @ids = ids_decode($args{ids});
+		if($args{skipfirstifplaying}) {
+			my $current = get_nowplaying();
+			if($current->{id} == $ids[0]) {
+				my ($num) = $req->{dbh}->selectrow_array("SELECT count(*) FROM queue" .
+					" LEFT JOIN song ON song.id = queue.song_id WHERE present");
+				if($num == 0) {
+					shift @ids;
+				}
+			}
+		}
+		add_song($req->{dbh}, "queue", get_user($req->{host}), @ids);
 	 	printredir($req, 'playlist', undef);
 		return;
 	}
