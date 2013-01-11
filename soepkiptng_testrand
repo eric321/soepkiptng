@@ -1,0 +1,90 @@
+#!/usr/bin/python
+
+import MySQLdb, math, os, random, sys, time
+
+os.nice(10)
+
+rdiv = int(sys.argv[1])
+
+dbh = MySQLdb.connect('10.20.30.16', 'soepkiptng', 'soepkiptng', 'soepkiptng');
+
+cur = dbh.cursor()
+cur.execute("SELECT length FROM song WHERE random_pref > 0 AND present AND filename LIKE '/%'")
+rows = cur.fetchall()
+
+totlen = 0
+for row in rows:
+	totlen += row[0]
+
+print "%d songs, length %ds (%d days)" % (cur.rowcount, totlen, totlen / 86400)
+
+t = int(time.time())
+tstart = t
+tdot = t
+tstat = t
+
+lp = [t - int(random.random() * 86400 * 365.25) for x in range(cur.rowcount)]
+np = [0 for x in range(cur.rowcount)]
+while 1:
+	# select song
+	sel = -1
+	maxr = 0
+	len = 0
+	for i, row in enumerate(rows):
+		secs = t - lp[i]
+		if secs < 286400:
+			continue
+		r = random.random()
+		if rdiv and lp[i]:
+			r *= 1 + int(secs / 86400) / rdiv
+		if r > maxr:
+			sel = i
+			maxr = r
+			len = row[0]
+	#print sel, maxr
+	lp[sel] = t
+	np[sel] += 1
+
+#	print "%s %6d %4d" % (time.ctime(t), sel, len)
+
+	t += len
+
+	if t > tdot + 86400:
+		sys.stderr.write(".")
+		tdot = t
+
+	if t > tstat + 86400 * 30:
+		sys.stderr.write("\n")
+
+		mean = 0.0
+		meansq = 0.0
+		c = 0
+		for x in np:
+			mean += x
+			meansq += x * x
+			c += 1
+		mean /= c
+		meansq /= c
+		print "%s: after %d days: mean %f, stddev %f" % (time.ctime(t), (t - tstart) / 86400, mean, math.sqrt(meansq - mean * mean))
+
+		lru = 0
+		for i, row in enumerate(rows):
+			if lp[i]:
+				x = int((t - lp[i]) / 86400)
+				if x > lru:
+					lru = x
+		div = 1 + int(lru / 50)
+		stats = [0 for x in range(50)]
+		maxstats = 0
+		for i, row in enumerate(rows):
+			if lp[i]:
+				x = int((t - lp[i]) / 86400) / div
+				stats[x] += 1
+				if stats[x] > maxstats:
+					maxstats = stats[x]
+		for i, x in enumerate(stats):
+			bar = int(x * 100 / maxstats)
+			print "%4d days: %6d songs: %s" % (i * div, x, "*" * bar)
+
+		tstat = t
+		sys.stdout.flush()
