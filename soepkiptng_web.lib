@@ -291,12 +291,12 @@ sub print_albumlist($$$$) {
 	foreach(@$albumlist) {
 		next if $_->{al_len} == -1;
 		print $sep if $_ != $albumlist->[0];
-		$_->{album} =~ /^(I+\b|IJ|.?)(.*)/;
+		$_->{album} =~ /^([^\$\w]*)(I+\b|IJ|.?)(.*)/;
 		printf(qq|<a id=a href="%s?cmd=alllist| .
-			qq|&artist_id=%d&album_id=%d&cap=%s"><b>%s</b>%s</a> (%d)|,
+			qq|&artist_id=%d&album_id=%d&cap=%s">%s<b>%s</b>%s</a> (%d)|,
 			$req->{self}, $_->{arid}, $_->{alid},
 			encurl("Artist: $_->{artist}; Album: $_->{album}"),
-			enchtml($1 || "?"), enchtml($2), $_->{c});
+			enchtml($1), enchtml($2 || "?"), enchtml($3), $_->{c});
 	}
 	if($more) {
 		printf <<EOF,
