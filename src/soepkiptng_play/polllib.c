@@ -1,5 +1,6 @@
 
 #include <assert.h>
+#include <errno.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <sys/poll.h>
@@ -130,7 +131,9 @@ int mainloop()
 			}
 		}
 		reorder_fds();
-		num = poll(pollfds, fd_num, 1000);
+		do {
+			num = poll(pollfds, fd_num, 1000);
+		} while(num < 0 && errno == EINTR);
 		if(num == 0) DEBUG("poll: 0\n");
 
 		for(i = 0; i < fd_num; i++) {
