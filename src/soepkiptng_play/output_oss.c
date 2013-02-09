@@ -12,6 +12,7 @@
 #include "debug.h"
 #include "buffer.h"
 #include "polllib.h"
+#include "output.h"
 #include "output_oss.h"
 
 #define BLKSIZE 4096
@@ -28,7 +29,11 @@ static int oss_fd;
 static int oss_do_init;
 static int oss_samplefreq;
 static int oss_fmt;
+static int oss_chans;
+static int oss_output_channel_offset;
 int oss_intercept_resume;
+char *channelbuf;
+int channelbufalloc;
 
 static int ischardev(int fd)
 {
@@ -66,9 +71,11 @@ static void output_oss_pre(int fd, long cookie)
 static void output_oss_post(int fd, short events, long cookie)
 {
 	int l;
+	int bs = BLKSIZE;
 
+	if(oss_chans > 2) bs /= oss_chans / 2;
 	l = buffer_length;
-	if(l > BLKSIZE) l = BLKSIZE;
+	if(l > bs) l = bs;
 	if(l + buffer_start > buffer_size) {
 		l = buffer_size - buffer_start;
 	}
@@ -76,11 +83,42 @@ static void output_oss_post(int fd, short events, long cookie)
 	DDEBUG("output_oss_post: start=%6d lenght=%d, writing %d bytes\n", buffer_start, buffer_length, l);
 
 	if(l > 0) {
-		if((l = write(fd, buffer + buffer_start, l)) == -1) {
+		char *b = buffer + buffer_start;
+		if(oss_chans > 2) {
+			if(channelbufalloc < l * oss_chans / 2) {
+				channelbufalloc = l * oss_chans / 2;
+				channelbuf = realloc(channelbuf, channelbufalloc);
+				memset(channelbuf, 0, channelbufalloc);
+			}
+			if(oss_output_channel_offset != output_channel_offset) {
+				// offset changed
+				if(output_channel_offset >= oss_chans) {
+					output_channel_offset = 0;
+				}
+				memset(channelbuf, 0, channelbufalloc);
+				oss_output_channel_offset = output_channel_offset;
+			}
+			int srcstride = (oss_fmt == AFMT_S32_LE)? 8 : 4;
+			int dststride = srcstride * oss_chans / 2;
+			int i, n = l / srcstride;
+			DDEBUG("oss_chans=%d l=%d n=%d channelbufalloc=%d srcstride=%d dststride=%d oss_output_channel_offset=%d\n",
+				oss_chans, l, n, channelbufalloc, srcstride, dststride, oss_output_channel_offset);
+			for(i = 0; i < n; i++) {
+				memcpy(channelbuf + i * dststride + output_channel_offset * srcstride,
+					b + i * srcstride, srcstride);
+			}
+			b = channelbuf;
+			l = n * dststride;
+		}
+		if((l = write(fd, b, l)) == -1) {
 			if(errno == EINTR || errno == EAGAIN) return;
 			perror("write");
 			exit(1);
 		}
+		if(l % (oss_chans / 2)) {
+			fprintf(stderr, "write() returned %d, not a multiple of %d\n", l, oss_chans / 2);
+		}
+		l /= oss_chans / 2;
 
 		buffer_length -= l;
 		buffer_start += l;
@@ -107,7 +145,7 @@ static void output_oss_post(int fd, short events, long cookie)
 	}
 }
 
-int output_oss_init(char *dev, int samplefreq, int fmt_bits)
+int output_oss_init(char *dev, int samplefreq, int fmt_bits, int chans)
 {
 	DEBUG("output_oss_init: dev=%s\n", dev);
 
@@ -123,6 +161,7 @@ int output_oss_init(char *dev, int samplefreq, int fmt_bits)
 		case 32: oss_fmt = AFMT_S32_LE; break;
 		default: fprintf(stderr, "oss: %d bits not supported\n", fmt_bits); exit(1);
 	}
+	oss_chans = chans;
 	return 0;
 }
 
@@ -156,8 +195,7 @@ int output_oss_start()
 	retval = ioctl(oss_fd, SNDCTL_DSP_SYNC, 0);
 	i = oss_fmt;
 	if(retval != -1) retval = ioctl(oss_fd, SNDCTL_DSP_SETFMT, &i);
-	i = 1;
-	if(retval != -1) retval = ioctl(oss_fd, SNDCTL_DSP_STEREO, &i);
+	if(retval != -1) retval = ioctl(oss_fd, SNDCTL_DSP_CHANNELS, &oss_chans);
 	i = oss_samplefreq;
 	if(retval != -1) retval = ioctl(oss_fd, SNDCTL_DSP_SPEED, &i);
 
@@ -180,7 +218,8 @@ int output_oss_start()
 
 void output_oss_stop()
 {
-	static char buf[8];
+	/* max 8 channels * 32 bits/sample */
+	static char buf[32];
 
 	DEBUG("output_oss_stop\n");
 	

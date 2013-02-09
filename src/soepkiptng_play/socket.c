@@ -71,6 +71,11 @@ static void handle_cmd(int fd, struct socket_t *p, char *s)
 		closesock(fd, p);
 	}
 
+	if(strcasecmp(cmd, "output") == 0) {
+		output_channel_offset = atoi(strtok(NULL, " \t"));
+		sockprintf(p, "+OK\n");
+	}
+
 	else if(strcasecmp(cmd, "pause") == 0) {
 		if(output_running()) {
 			sockprintf(p, "+OK\n");

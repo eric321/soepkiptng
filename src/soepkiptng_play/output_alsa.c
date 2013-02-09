@@ -21,7 +21,7 @@ static int alsa_samplefreq;
 static int alsa_fmt;
 static snd_pcm_t *alsa_handle;
 
-int output_alsa_init(char *dev, int samplefreq, int fmt_bits)
+int output_alsa_init(char *dev, int samplefreq, int fmt_bits, int chans)
 {
 	DEBUG("output_alsa_init: dev=%s\n", dev);
 

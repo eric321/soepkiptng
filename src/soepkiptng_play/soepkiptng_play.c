@@ -1,9 +1,12 @@
 
 #include <getopt.h>
+#include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/mman.h>
 #include <unistd.h>
+#include <sys/mman.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 
 #include "debug.h"
 #include "polllib.h"
@@ -37,11 +40,11 @@ int playing = 1;
 
 int main(int argc, char **argv)
 {
-	int c, port = 2222, samplefreq = SAMPLEFREQ;
+	int c, port = 2222, samplefreq = SAMPLEFREQ, chans = 2;
 	int fmt_bits = 16;
 	char *dev = "/dev/dsp";
 	
-	while((c = getopt(argc, argv, "+b:B:dhp:s:D:")) != EOF) {
+	while((c = getopt(argc, argv, "+b:B:c:dhp:s:D:")) != EOF) {
 		switch(c) {
 			case 'b':
 				buffer_size = atoi(optarg) * 1024;
@@ -49,6 +52,9 @@ int main(int argc, char **argv)
 					fprintf(stderr, "ERROR: buffer_size < 16\n");
 					exit(1);
 				}
+				break;
+			case 'c':
+				chans = atoi(optarg);
 				break;
 			case 'd':
 				debug++;
@@ -73,16 +79,31 @@ int main(int argc, char **argv)
 		}
 	}
 
-	/* lock memory */
-	if(mlockall(MCL_CURRENT | MCL_FUTURE) == -1) {
-		perror("warning: mlockall");
-	}
-
 	buffer_init();
 	input_start();
-	output_init(dev, samplefreq, fmt_bits);
+	output_init(dev, samplefreq, fmt_bits, chans);
 	signals_init();
 	socket_init(port);
+
+	/* lock memory (limits for non-root can be raised in /etc/security/limits.conf) */
+	if(mlockall(MCL_CURRENT | MCL_FUTURE) == -1) {
+		struct rlimit rl;
+		if(getrlimit(RLIMIT_MEMLOCK, &rl) == 0) {
+			rl.rlim_cur = rl.rlim_max;
+			if(setrlimit(RLIMIT_MEMLOCK, &rl) == -1) {
+				perror("setrlimit RLIMIT_MEMLOCK");
+			}
+		}
+		if(mlockall(MCL_CURRENT | MCL_FUTURE) == -1) {
+			perror("warning: mlockall");
+		}
+	}
+
+	/* realtime priority (limits for non-root can be raised in /etc/security/limits.conf) */
+	struct sched_param sp;
+	sp.sched_priority = 1;
+	if(sched_setscheduler(getpid(), SCHED_FIFO, &sp) < 0)
+		perror("sched_setscheduler");
 
 	output_start();
 	mainloop();

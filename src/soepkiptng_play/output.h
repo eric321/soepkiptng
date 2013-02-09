@@ -4,7 +4,9 @@
 
 #define SAMPLEFREQ 44100
 
-int output_init(char *dev, int samplefreq, int fmt_bits);
+int output_channel_offset;
+
+int output_init(char *dev, int samplefreq, int fmt_bits, int chans);
 
 extern int (*output_start)();
 extern void (*output_stop)();

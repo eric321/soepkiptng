@@ -14,7 +14,7 @@ int (*output_running)();
 int (*output_bytespersecond)();
 int (*output_get_odelay)();
 
-int output_init(char *dev, int samplefreq, int fmt_bits)
+int output_init(char *dev, int samplefreq, int fmt_bits, int chans)
 {
 #ifndef NO_ALSA
 	if(memcmp(dev, "alsa:", 5) == 0) {
@@ -24,7 +24,7 @@ int output_init(char *dev, int samplefreq, int fmt_bits)
 		output_running = output_alsa_running;
 		output_bytespersecond = output_alsa_bytespersecond;
 		output_get_odelay = output_alsa_get_odelay;
-		return output_alsa_init(dev + 5, samplefreq, fmt_bits);
+		return output_alsa_init(dev + 5, samplefreq, fmt_bits, chans);
 	}
 #endif
 	output_start = output_oss_start;
@@ -33,5 +33,5 @@ int output_init(char *dev, int samplefreq, int fmt_bits)
 	output_running = output_oss_running;
 	output_bytespersecond = output_oss_bytespersecond;
 	output_get_odelay = output_oss_get_odelay;
-	return output_oss_init(dev, samplefreq, fmt_bits);
+	return output_oss_init(dev, samplefreq, fmt_bits, chans);
 }
