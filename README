@@ -63,6 +63,7 @@ Requirements:
   - DBI
   - DBD::mysql
   - Compress::Zlib
+  - BSD::Resource (optional)
   - TermReadKey (optional)
   - CDDB_get (optional)
 * programs for decoding the various sound formats:

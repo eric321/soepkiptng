@@ -624,6 +624,8 @@ read_configfile(\%conf, $opt_c);
 
 $ENV{PATH} = "$progdir/bin:$ENV{PATH}";
 
+eval "use BSD::Resource; setpriority 0, 0, -20";
+
 if(open ST, $conf{statusfile}) {
 	my ($s, $f, $pid) = <ST>;
 	close ST;
