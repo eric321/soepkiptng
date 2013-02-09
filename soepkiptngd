@@ -53,6 +53,8 @@ require "$progdir/soepkiptng.lib";
 my %soxopt;
 my %soxformats;
 
+my $daemonstart = time;
+
 
 sub rotatelog(;$) {
 	if($_[0] or -s STDERR > 65000) {
@@ -525,6 +527,7 @@ sub mpd_get_status($) {
 	my $host = shift @_;
 
 	my $s = IO::Socket::INET->new("$host:2222") or return;
+	$s->sockopt(SO_RCVTIMEO, pack('LL', 15, 0));
 	$_ = <$s>;
 	$s->print("status\n");
 	$_ = <$s>;
@@ -535,7 +538,8 @@ sub mpd_get_status($) {
 
 sub mpd_soepkip_status {
 	my (undef, $filename, undef, undef, $host, undef, undef, undef, $ar, $t, $al, $tr, $len) = get_statusfile();
-	my ($running, $songno, $time) = mpd_get_status($host);
+	my ($running, $songno, $time) = mpd_get_status($host)
+		or return;
 	$running = $running? "play" : "pause";
 	return <<EOF;
 repeat: 0   
@@ -581,12 +585,43 @@ Track: $tr
 EOF
 }
 
+sub mpd_soepkip_stats {
+	my $x = $dbh->selectcol_arrayref("SELECT artist.id FROM artist " .
+		"LEFT JOIN song ON song.artist_id=artist.id " .
+		"WHERE present AND filename LIKE '/%' GROUP BY artist.id");
+	my $numar = scalar @{$x};
+	$x = $dbh->selectcol_arrayref("SELECT album.id FROM album " .
+		"LEFT JOIN song ON song.album_id=album.id " .
+		"WHERE present AND filename LIKE '/%' GROUP BY album.id");
+	my $numal = scalar @{$x};
+	$x = $dbh->selectcol_arrayref("SELECT SUM(song.length) FROM song " .
+		"WHERE present AND filename LIKE '/%'");
+	my $totlen = $x->[0];
+	my $t = time - $daemonstart;
+	$x = $dbh->selectcol_arrayref("SELECT unix_timestamp(mtime) FROM song " .
+		"WHERE present AND filename LIKE '/%' ORDER BY mtime DESC LIMIT 1");
+	my $upd = $x->[0];
+	return <<EOF;
+artists: $numar
+songs: $numal
+uptime: $t
+db_playtime: $totlen
+db_update: $upd
+playtime: 1000
+EOF
+}
+
 sub mpd_accept($) {
 	my ($lsock) = @_;
-	if(fork == 0) {
+	my $pid = fork;
+	if(!defined($pid)) {
+		warn "mpd_accept: fork: $!\n";
+		return;
+	}
+	if($pid == 0) {
 		alarm 10;
 		my ($sock, $paddr) = $lsock->accept or die "accept mpdsock: $!\n";
-		$lsock = undef; # prevent "address already in use" if parent is restarted
+		$lsock->close; # prevent "address already in use" if parent is restarted
 		my ($port, $iaddr) = sockaddr_in($paddr);
 		my $name = inet_ntoa($iaddr);
 		warn "pid $$ got MPD connection from $name:$port\n";
@@ -598,6 +633,11 @@ sub mpd_accept($) {
 				$sock->print("OK\n");
 			} elsif(/^currentsong/) {
 				$sock->print(mpd_soepkip_currentsong());
+				$sock->print("OK\n");
+			} elsif(/^stats/) {
+				$sock->print(mpd_soepkip_stats());
+				$sock->print("OK\n");
+			} elsif(/^lsinfo/) {
 				$sock->print("OK\n");
 			} else {
 				$sock->print("ACK [5\@0] {} unknown command \"bla\"\n");
