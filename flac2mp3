@@ -21,8 +21,6 @@
 
 # CONFIG
 
-$bitrate = 192;
-
 my $progdir;
 BEGIN {
 	use Cwd qw'cwd abs_path';
@@ -46,21 +44,22 @@ require "$progdir/soepkiptng.lib";
 $ENV{PATH} = "$progdir/bin:$ENV{PATH}";
 use lib "$progdir/lib";
 
-getopts('dc:p:b:ho:');
+getopts('dc:p:b:ho:O:');
 
 $opt_h and die <<EOF;
 
 Usage: flac2mp3 [-d] [-p flac_binary] [-b bitrate] [-c configfile] file...
 
 -d            : delete original after successful conversion
--b bitrate    : kbitrate to encode to (default 192)
+-b bitrate    : kbitrate to encode to (default v0)
 -c configfile : override soepkiptng config file
+-O outputfile : specify output file
 
 EOF
 
 read_configfile(\%conf, $opt_c);
 
-$bitrate = $opt_b || 192;
+$bitrate = $opt_b || "v0";
 $flac = $opt_p || "flac";
 $cwd = cwd;
 
@@ -89,13 +88,16 @@ foreach $flacfile (@ARGV) {
 	$mp3file =~ s/\.\w+$//;
 	$mp3file .= ".mp3";
 	$opt_o and $mp3file =~ s|.*/|$opt_o/|;
+	$mp3file = $opt_O if defined $opt_O;
 
 	if(-e $mp3file) {
 		warn "$mp3file exists, skipping.\n";
 		next;
 	}
 
-	my @lamecmd = qw/lame -h -r -s 44.1 -m j --add-id3v2 --id3v2-only --pad-id3v2/;
+	my @lamecmd = qw/lame -r -s 44.1 --add-id3v2 --pad-id3v2/;
+	push @lamecmd, "--id3v2-only";
+	#push @lamecmd, "--ty", 1991;
 	if($bitrate =~ /^(\d+)/) {
 		push @lamecmd, "--abr", $bitrate;
 	} elsif($bitrate =~ /^(v\d+)/) {
