@@ -956,24 +956,32 @@ EOF
 			if($playmode == 0) {
 				warn "resuming random play\n";
 				$pid = 0;
-			} elsif($playmode == 1) {
+			} else {
 				my ($numq) = $dbh->selectrow_array("SELECT count(*) FROM queue");
 				if($numq) {
 					warn "detected queued song\n";
 					$pid = 0;
-				}
-			} elsif($playmode == 2) {
-				$song = get_song_random_recent();
-				if($song) {
-					warn "detected recent song\n";
-					$pid = 0;
-				}
-			} elsif($playmode == 3) {
-				my ($numq) = $dbh->selectrow_array("SELECT count(*) FROM song WHERE present AND " .
-					"filename LIKE '/%' AND unix_timestamp(last_played) = 0");
-				if($numq) {
-					warn "detected never-played song\n";
-					$pid = 0;
+				} elsif($playmode == 2) {
+					$song = get_song_random_recent();
+					if($song) {
+						warn "detected recent song\n";
+						$pid = 0;
+					}
+				} elsif($playmode == 3) {
+					my ($numq) = $dbh->selectrow_array("SELECT count(*) FROM song WHERE present AND" .
+						" filename LIKE '/%' AND" .
+						" (unix_timestamp(now()) - unix_timestamp(time_added) < ?" .
+						"  OR (last_played=0 AND unix_timestamp(now()) - unix_timestamp(time_added) < ?))" .
+						" AND unix_timestamp(now()) - unix_timestamp(last_played) > ? AND" .
+						" random_pref > 0",
+						undef,
+						$conf{recent_age} * 86400,
+						$conf{recent_age_never_played} * 86400,
+						$conf{min_random_time});
+					if($numq) {
+						warn "detected never-played song\n";
+						$pid = 0;
+					}
 				}
 			}
 		}
